@@ -23,6 +23,7 @@ internal/auth/      request -> principal, and the policy for each auth mode
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
 internal/wording/   every piece of agent-facing text, as embedded Markdown files
+internal/textfile/  the "## key" section format of the text files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
 internal/web/       HTML viewer: handlers, theme loading, safe markdown
 internal/tone/      name -> participant color, shared by the viewer and TUI

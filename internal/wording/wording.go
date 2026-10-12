@@ -9,7 +9,6 @@
 package wording
 
 import (
-	"bufio"
 	"bytes"
 	"embed"
 	"fmt"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+
+	"github.com/aahoughton/agora/internal/textfile"
 )
 
 //go:embed text/*.md
@@ -118,109 +119,39 @@ func Load(fsys fs.FS) (*Wording, error) {
 	if err != nil {
 		return nil, err
 	}
-	toolSections, err := sections("tools.md", raw)
+	toolSections, err := textfile.Sections(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("wording: tools.md: %w", err)
 	}
 	for _, s := range toolSections {
 		t, err := parseTool(s)
 		if err != nil {
 			return nil, err
 		}
-		w.tools[s.key] = t
+		w.tools[s.Key] = t
 	}
 
 	raw, err = read("phrases.md")
 	if err != nil {
 		return nil, err
 	}
-	phraseSections, err := sections("phrases.md", raw)
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range phraseSections {
-		if !slices.Contains(PhraseKeys, s.key) {
-			return nil, fmt.Errorf("wording: phrases.md: unknown key %q", s.key)
-		}
-		body := s.body
-		if first, rest, ok := strings.Cut(body, "\n"); ok && strings.HasPrefix(first, "fields:") {
-			body = rest
-		} else if strings.HasPrefix(body, "fields:") {
-			body = ""
-		}
-		body = strings.TrimSpace(body)
-		if body == "" {
-			return nil, fmt.Errorf("wording: phrases.md: %s is empty", s.key)
-		}
-		if w.phrases[s.key], err = parseTemplate("phrases.md "+s.key, body); err != nil {
-			return nil, err
-		}
-	}
-	for _, k := range PhraseKeys {
-		if _, ok := w.phrases[k]; !ok {
-			return nil, fmt.Errorf("wording: phrases.md: missing %s", k)
-		}
+	if w.phrases, err = textfile.Templates(raw, PhraseKeys); err != nil {
+		return nil, fmt.Errorf("wording: phrases.md: %w", err)
 	}
 	return w, nil
 }
 
-type section struct {
-	key  string
-	body string
-}
-
-var keyRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-
-// sections splits a file on "## key" headings. Text before the first heading
-// is a preamble for editors and is ignored.
-func sections(file, raw string) ([]section, error) {
-	var out []section
-	seen := map[string]bool{}
-	var cur *section
-	var body strings.Builder
-	flush := func() {
-		if cur != nil {
-			cur.body = strings.TrimSpace(body.String())
-			out = append(out, *cur)
-		}
-		body.Reset()
-	}
-	sc := bufio.NewScanner(strings.NewReader(raw))
-	for sc.Scan() {
-		line := sc.Text()
-		if key, ok := strings.CutPrefix(line, "## "); ok {
-			flush()
-			key = strings.TrimSpace(key)
-			if !keyRE.MatchString(key) {
-				return nil, fmt.Errorf("wording: %s: bad section key %q", file, key)
-			}
-			if seen[key] {
-				return nil, fmt.Errorf("wording: %s: duplicate section %q", file, key)
-			}
-			seen[key] = true
-			cur = &section{key: key}
-			continue
-		}
-		if cur != nil {
-			body.WriteString(line)
-			body.WriteByte('\n')
-		}
-	}
-	flush()
-	return out, sc.Err()
-}
-
 var paramRE = regexp.MustCompile(`^- ([a-z][a-z0-9_]*): (.+)$`)
 
-func parseTool(s section) (Tool, error) {
+func parseTool(s textfile.Section) (Tool, error) {
 	t := Tool{Params: map[string]string{}}
 	var desc []string
 	inParams := false
-	for line := range strings.SplitSeq(s.body, "\n") {
+	for line := range strings.SplitSeq(s.Body, "\n") {
 		if m := paramRE.FindStringSubmatch(line); m != nil {
 			inParams = true
 			if _, dup := t.Params[m[1]]; dup {
-				return Tool{}, fmt.Errorf("wording: tools.md %s: duplicate parameter %q", s.key, m[1])
+				return Tool{}, fmt.Errorf("wording: tools.md %s: duplicate parameter %q", s.Key, m[1])
 			}
 			t.Params[m[1]] = strings.TrimSpace(m[2])
 			continue
@@ -229,13 +160,13 @@ func parseTool(s section) (Tool, error) {
 			continue
 		}
 		if inParams {
-			return Tool{}, fmt.Errorf("wording: tools.md %s: text after the parameter list: %q", s.key, line)
+			return Tool{}, fmt.Errorf("wording: tools.md %s: text after the parameter list: %q", s.Key, line)
 		}
 		desc = append(desc, strings.TrimSpace(line))
 	}
 	t.Description = strings.Join(desc, " ")
 	if t.Description == "" {
-		return Tool{}, fmt.Errorf("wording: tools.md %s: no description", s.key)
+		return Tool{}, fmt.Errorf("wording: tools.md %s: no description", s.Key)
 	}
 	return t, nil
 }
