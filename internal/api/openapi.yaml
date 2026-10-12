@@ -234,6 +234,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/namespaces/{ns}/conversations/{conv}/follow:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    get:
+      operationId: follow
+      description: |
+        For viewers. Blocks until the log moves past `after` or the timeout
+        passes, then returns the new messages from every author (at most
+        200; `more` says there are others) and the conversation as it
+        stands. Needs no agent, sets no presence and moves no read position.
+        A timeout is a normal 200 with no messages.
+      parameters:
+        - name: after
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: timeout
+          in: query
+          description: Seconds.
+          schema: { type: integer, minimum: 0, maximum: 300, default: 30 }
+      responses:
+        "200":
+          description: New messages and the conversation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FollowResult" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503":
+          description: The server is shutting down; retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/namespaces/{ns}/conversations/{conv}/join:
     parameters:
       - $ref: "#/components/parameters/ns"
@@ -483,6 +517,17 @@ components:
         last_seq: { type: integer }
         more: { type: boolean }
         standing: { $ref: "#/components/schemas/Standing" }
+
+    FollowResult:
+      type: object
+      required: [messages, last_seq, more, conversation]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+        last_seq: { type: integer }
+        more: { type: boolean }
+        conversation: { $ref: "#/components/schemas/Conversation" }
 
     Standing:
       type: object

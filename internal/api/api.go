@@ -66,6 +66,7 @@ var routes = []route{
 	{"GET", convPath + "/messages", (*handler).read},
 	{"POST", convPath + "/messages", (*handler).say},
 	{"GET", convPath + "/wait", (*handler).wait},
+	{"GET", convPath + "/follow", (*handler).follow},
 	{"POST", convPath + "/join", (*handler).join},
 	{"POST", convPath + "/leave", (*handler).leave},
 	{"POST", convPath + "/conclude", (*handler).conclude},
@@ -125,7 +126,7 @@ func statusFor(code core.Code) int {
 		return http.StatusConflict
 	case core.CodeMessageTooLarge:
 		return http.StatusRequestEntityTooLarge
-	case core.CodeTooManyWaiters:
+	case core.CodeTooManyWaiters, core.CodeTooManyWatchers:
 		return http.StatusTooManyRequests
 	case codeRequestTimeout:
 		return http.StatusRequestTimeout
@@ -401,6 +402,46 @@ func (h *handler) wait(w http.ResponseWriter, r *http.Request, p core.Principal)
 		return err
 	}
 	writeJSON(w, http.StatusOK, d)
+	return nil
+}
+
+// FollowResult is the response of GET .../follow: new messages plus the
+// conversation as it stands after them.
+type FollowResult struct {
+	core.ReadResult
+	Conversation core.Conversation `json:"conversation"`
+}
+
+func (h *handler) follow(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	after, err := queryInt(r, "after")
+	if err != nil {
+		return err
+	}
+	timeout, err := queryInt(r, "timeout")
+	if err != nil {
+		return err
+	}
+	var from int64
+	if after != nil {
+		from = *after
+	}
+	secs := int64(DefaultWaitSeconds)
+	if timeout != nil {
+		if *timeout < 0 || *timeout > MaxWaitSeconds {
+			return invalid("timeout must be between 0 and %d seconds", MaxWaitSeconds)
+		}
+		secs = *timeout
+	}
+	ns, name := r.PathValue("ns"), r.PathValue("conv")
+	res, err := h.svc.Follow(r.Context(), p, ns, name, from, time.Duration(secs)*time.Second)
+	if err != nil {
+		return err
+	}
+	c, err := h.svc.GetConversation(r.Context(), p, ns, name)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, FollowResult{ReadResult: res, Conversation: c})
 	return nil
 }
 

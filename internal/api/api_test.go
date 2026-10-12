@@ -399,3 +399,85 @@ func TestConcludeNeedsABody(t *testing.T) {
 	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice"}, 201, nil)
 	c.wantError("POST", conv+"/conclude", map[string]any{"agent": "alice"}, 400, "invalid")
 }
+
+func TestFollow(t *testing.T) {
+	c := newServer(t, auth.None{}, core.Options{})
+	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice", "topic": "shape"}, 201, nil)
+	c.ok("POST", conv+"/messages", map[string]any{"agent": "alice", "body": "hello"}, 201, nil)
+
+	var got api.FollowResult
+	c.ok("GET", conv+"/follow?after=0&timeout=0", nil, 200, &got)
+	if len(got.Messages) != 3 || got.LastSeq != 3 || got.Conversation.Topic != "shape" || len(got.Conversation.Participants) != 1 {
+		t.Fatalf("follow = %+v", got)
+	}
+
+	// A timeout is an empty batch that still carries the conversation.
+	c.ok("GET", conv+"/follow?after=3&timeout=0", nil, 200, &got)
+	if len(got.Messages) != 0 || got.LastSeq != 3 || got.Conversation.Name != "design" {
+		t.Fatalf("timed-out follow = %+v", got)
+	}
+
+	// A pending follow wakes on a new message from anyone, including an
+	// observer.
+	done := make(chan api.FollowResult, 1)
+	go func() {
+		var res api.FollowResult
+		defer func() { done <- res }()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.url+conv+"/follow?after=3&timeout=10", nil)
+		if err != nil {
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		_ = json.NewDecoder(resp.Body).Decode(&res)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	c.ok("POST", conv+"/observe", map[string]any{"name": "carol", "body": "context"}, 201, nil)
+	select {
+	case res := <-done:
+		if len(res.Messages) != 1 || res.Messages[0].Kind != core.KindObserver {
+			t.Fatalf("woken follow = %+v", res)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("follow did not wake")
+	}
+
+	c.wantError("GET", conv+"/follow?timeout=301", nil, 400, "invalid")
+	c.wantError("GET", conv+"/follow?after=-1", nil, 400, "invalid")
+	c.wantError("GET", "/v1/namespaces/default/conversations/nope/follow", nil, 404, "conversation_not_found")
+}
+
+func TestTooManyWatchers(t *testing.T) {
+	c := newServer(t, auth.None{}, core.Options{MaxWatchers: 1})
+	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice"}, 201, nil)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.url+conv+"/follow?after=2&timeout=2", nil)
+		if err != nil {
+			return
+		}
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
+	}()
+	// The first follow holds the only slot until it times out; a second
+	// one is refused once it has started.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var out json.RawMessage
+		if status := c.do("GET", conv+"/follow?after=2&timeout=0", nil, &out); status == 429 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("second follow was never refused")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	<-done
+}
