@@ -1,0 +1,12 @@
+# Install the hooks once per clone: mise exec -- lefthook install
+pre-commit:
+  parallel: true
+  jobs:
+    - name: secrets
+      run: mise exec -- gitleaks git --pre-commit --staged --redact --no-banner
+    - name: fmt
+      glob: "*.go"
+      run: mise exec -- golangci-lint fmt --diff {staged_files}
+    - name: lint
+      glob: "*.go"
+      run: mise exec -- golangci-lint run
