@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Environment variable names.
@@ -22,7 +23,13 @@ const (
 	EnvAuth = "AGORA_AUTH"
 
 	EnvAllowedHosts = "AGORA_ALLOWED_HOSTS"
+
+	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
 )
+
+// DefaultMCPMaxWait keeps MCP waits under the 60s tool-call timeout several
+// clients use by default.
+const DefaultMCPMaxWait = 50 * time.Second
 
 // DefaultAddr listens on loopback only. Exposing the server to a network is a
 // deliberate choice made with --addr or AGORA_ADDR.
@@ -40,6 +47,9 @@ type Serve struct {
 	Addr string
 	Web  bool
 	Auth AuthMode
+	// MCPMaxWait caps the MCP wait tool. Raise it only if every MCP client
+	// in use has a longer tool-call timeout.
+	MCPMaxWait time.Duration
 	// AllowedHosts lists the Host names the server answers to. AnyHost
 	// disables the check. When neither is set, the server allows loopback
 	// names on a loopback address and any host otherwise.
@@ -60,6 +70,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
 	auth := fs.String("auth", "", "auth mode: none (env "+EnvAuth+", default none)")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
+	mcpMaxWait := fs.String("mcp-max-wait", "", "longest MCP wait, e.g. 50s; keep it under your MCP clients' tool timeout (env "+EnvMCPMaxWait+", default 50s)")
 	if err := fs.Parse(args); err != nil {
 		return Serve{}, err
 	}
@@ -96,6 +107,13 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 		return Serve{}, err
 	}
 	cfg.Auth = mode
+
+	waitStr := firstNonEmpty(*mcpMaxWait, getenv(EnvMCPMaxWait), DefaultMCPMaxWait.String())
+	d, err := time.ParseDuration(waitStr)
+	if err != nil || d < time.Second || d > 10*time.Minute {
+		return Serve{}, fmt.Errorf("serve: invalid mcp-max-wait %q: want a duration between 1s and 10m", waitStr)
+	}
+	cfg.MCPMaxWait = d
 
 	switch hosts := strings.TrimSpace(firstNonEmpty(*allowed, getenv(EnvAllowedHosts))); hosts {
 	case "":

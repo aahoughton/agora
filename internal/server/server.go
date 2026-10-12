@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aahoughton/agora/internal/api"
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/mcpserver"
 )
 
 // Deps are what the handler serves.
@@ -18,12 +20,15 @@ type Deps struct {
 	Service       *core.Service
 	Authenticator auth.Authenticator
 	Logger        *slog.Logger
+	MCPMaxWait    time.Duration
+	Version       string
 	// AllowedHosts, if non-empty, refuses requests whose Host is not one of
 	// these names or addresses (port ignored, case-insensitive).
 	AllowedHosts []string
 }
 
-// New returns the root handler: GET /healthz and the /v1 JSON API. Browser
+// New returns the root handler: GET /healthz, the /v1 JSON API, and MCP at
+// /mcp. Browser
 // cross-origin writes are refused everywhere, so a web page cannot post into
 // a local server; with AllowedHosts, so are requests that name another host,
 // which blocks DNS rebinding.
@@ -34,6 +39,9 @@ func New(d Deps) http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 	api.Register(mux, d.Service, d.Authenticator, api.Options{Logger: d.Logger})
+	mux.Handle("/mcp", mcpserver.Handler(d.Service, d.Authenticator, mcpserver.Options{
+		Logger: d.Logger, MaxWait: d.MCPMaxWait, Version: d.Version,
+	}))
 	h := http.NewCrossOriginProtection().Handler(mux)
 	if len(d.AllowedHosts) > 0 {
 		h = allowHosts(d.AllowedHosts, h)

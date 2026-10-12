@@ -108,7 +108,8 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	defer cancelBase()
 	srv := &http.Server{
 		Handler: server.New(server.Deps{
-			Service: svc, Authenticator: authn, Logger: logger, AllowedHosts: allowedHosts(cfg, ln.Addr()),
+			Service: svc, Authenticator: authn, Logger: logger, MCPMaxWait: cfg.MCPMaxWait, Version: version,
+			AllowedHosts: allowedHosts(cfg, ln.Addr()),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

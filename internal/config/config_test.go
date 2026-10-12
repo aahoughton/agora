@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func env(m map[string]string) Getenv {
@@ -18,10 +19,11 @@ func TestParseServeDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Serve{
-		DB:   "/home/u/.local/share/agora/agora.db",
-		Addr: DefaultAddr,
-		Web:  false,
-		Auth: AuthNone,
+		DB:         "/home/u/.local/share/agora/agora.db",
+		Addr:       DefaultAddr,
+		Web:        false,
+		Auth:       AuthNone,
+		MCPMaxWait: DefaultMCPMaxWait,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -64,16 +66,17 @@ func TestParseServeNoHomeButEnvDB(t *testing.T) {
 
 func TestParseServeEnvOverridesDefault(t *testing.T) {
 	cfg, err := ParseServe(nil, env(map[string]string{
-		"HOME":  "/home/u",
-		EnvDB:   "/env.db",
-		EnvAddr: ":9000",
-		EnvWeb:  "true",
-		EnvAuth: "none",
+		"HOME":        "/home/u",
+		EnvDB:         "/env.db",
+		EnvAddr:       ":9000",
+		EnvWeb:        "true",
+		EnvAuth:       "none",
+		EnvMCPMaxWait: "2m",
 	}), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Serve{DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone}
+	want := Serve{DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone, MCPMaxWait: 2 * time.Minute}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
@@ -105,6 +108,8 @@ func TestParseServeErrors(t *testing.T) {
 		{"unknown auth", []string{"--auth", "ldap"}, nil, `unknown auth mode "ldap"`},
 		{"token not yet", []string{"--auth", "token"}, nil, "not implemented yet"},
 		{"stray arg", []string{"extra"}, nil, "unexpected argument"},
+		{"bad mcp wait", []string{"--mcp-max-wait", "soon"}, nil, "invalid mcp-max-wait"},
+		{"mcp wait too short", []string{"--mcp-max-wait", "10ms"}, nil, "invalid mcp-max-wait"},
 		{"unknown flag", []string{"--nope"}, nil, "flag provided but not defined"},
 	}
 	for _, tt := range tests {
