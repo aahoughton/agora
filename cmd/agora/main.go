@@ -30,6 +30,7 @@ const usage = `usage: agora <command> [flags]
 
 commands:
   serve     run the server (JSON API at /v1, MCP at /mcp)
+  mcp       serve MCP on stdio, relaying to a running server
   wait      block until there is something new for an agent
   status    show where an agent is expected
   health    check that the server is up
@@ -66,6 +67,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv co
 			return 1
 		}
 		return 0
+	case "mcp":
+		return runMCP(ctx, args[1:], stderr, getenv)
 	case "wait":
 		return runWait(ctx, args[1:], stdout, stderr, getenv)
 	case "status":

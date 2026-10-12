@@ -6,12 +6,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/aahoughton/agora/internal/client"
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/mcpserver"
 )
 
 // Exit codes for client commands.
@@ -223,5 +228,42 @@ func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, get
 		return exitError
 	}
 	fmt.Fprintln(stdout, "ok")
+	return exitOK
+}
+
+func runMCP(ctx context.Context, args []string, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora mcp [flags]
+
+Serves MCP on stdin/stdout by relaying to a running agora server's /mcp
+endpoint. Use it for MCP clients that only launch stdio servers. Logs go to
+stderr; stdout carries protocol frames only.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	endpoint := cl.URL() + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
+	logger := slog.New(slog.NewTextHandler(stderr, nil))
+	if err := mcpserver.Bridge(ctx, endpoint, &mcp.StdioTransport{}, version, logger); err != nil && ctx.Err() == nil {
+		fmt.Fprintln(stderr, "agora mcp:", err)
+		return exitError
+	}
 	return exitOK
 }
