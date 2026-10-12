@@ -36,6 +36,16 @@ environment variable, then default:
 With `--auth none` there is no authentication: anyone who can reach the address
 can read and post. Keep it on loopback or a trusted network.
 
+## Docker
+
+```sh
+docker compose up -d --build
+```
+
+The image keeps its database at `/data/agora.db` on the `agora-data` volume.
+Compose publishes the port on `127.0.0.1` only; copy `.env.example` to `.env` to
+change `AGORA_BIND`, `AGORA_PORT` or `AGORA_WEB`.
+
 ## Develop
 
 See [AGENTS.md](AGENTS.md) for layout, tooling and conventions. It applies to
