@@ -29,7 +29,10 @@ var version = "dev"
 const usage = `usage: agora <command> [flags]
 
 commands:
-  serve     run the HTTP server
+  serve     run the server (JSON API at /v1, MCP at /mcp)
+  wait      block until there is something new for an agent
+  status    show where an agent is expected
+  health    check that the server is up
   version   print the version
 
 Run 'agora <command> -h' for a command's flags.
@@ -63,6 +66,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv co
 			return 1
 		}
 		return 0
+	case "wait":
+		return runWait(ctx, args[1:], stdout, stderr, getenv)
+	case "status":
+		return runStatus(ctx, args[1:], stdout, stderr, getenv)
+	case "health":
+		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version":
 		fmt.Fprintln(stdout, version)
 		return 0

@@ -1,0 +1,227 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/aahoughton/agora/internal/client"
+	"github.com/aahoughton/agora/internal/config"
+	"github.com/aahoughton/agora/internal/core"
+)
+
+// Exit codes for client commands.
+const (
+	exitOK       = 0
+	exitError    = 1
+	exitUsage    = 2
+	exitTimedOut = 3
+)
+
+// longestServerWait is the longest single wait the API accepts.
+const longestServerWait = 300 * time.Second
+
+// requestMargin is how long past its requested wait a server may take to
+// answer before the request is abandoned and retried.
+const requestMargin = 2 * time.Second
+
+// splitConversation lets the conversation name come before or after flags.
+func splitConversation(fs *flag.FlagSet, args []string) (string, error) {
+	var conv string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		conv, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return "", err
+	}
+	switch {
+	case conv == "" && fs.NArg() == 1:
+		conv = fs.Arg(0)
+	case fs.NArg() > 0:
+		return "", fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if conv == "" {
+		return "", errors.New("a conversation name is required")
+	}
+	return conv, nil
+}
+
+func flagError(stderr io.Writer, err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return exitOK
+	}
+	fmt.Fprintln(stderr, err)
+	return exitUsage
+}
+
+func runWait(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora wait <conversation> --agent NAME [flags]
+
+Blocks until someone else posts in the conversation or it concludes, then
+prints a short summary and exits 0. Run it in the background to wait without
+spending tokens. Exits 3 if --timeout passes first, 1 on errors. Retries while
+the server is unreachable.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs)
+	resolveAgent := config.AgentFlag(fs)
+	timeout := fs.Duration("timeout", 0, "give up after this long (default: no limit)")
+	conv, err := splitConversation(fs, args)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	agent, err := resolveAgent(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+
+	var deadline time.Time
+	if *timeout > 0 {
+		deadline = time.Now().Add(*timeout)
+	}
+	timedOut := func(last *core.Digest) int {
+		fmt.Fprintln(stdout, "no new messages before the timeout")
+		if last != nil {
+			fmt.Fprintln(stdout, last.Standing.Line)
+		}
+		return exitTimedOut
+	}
+	var last *core.Digest
+	backoff := time.Second
+	for first := true; ; first = false {
+		per := longestServerWait
+		if !deadline.IsZero() {
+			remaining := time.Until(deadline)
+			if remaining <= 0 && !first {
+				return timedOut(last)
+			}
+			per = max(min(per, remaining), 0)
+		}
+		// The server answers by per; the extra margin only matters for a
+		// server that accepts the request and never responds.
+		reqCtx, cancel := context.WithTimeout(ctx, per+requestMargin)
+		d, err := cl.Wait(reqCtx, cc.Namespace, conv, client.WaitParams{Agent: agent, Timeout: per})
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return exitError
+			}
+			if !deadline.IsZero() && time.Until(deadline) <= 0 {
+				return timedOut(last)
+			}
+			if !client.IsTemporary(err) && !errors.Is(err, context.DeadlineExceeded) {
+				fmt.Fprintln(stderr, "agora wait:", err)
+				return exitError
+			}
+			sleep := backoff
+			if !deadline.IsZero() {
+				sleep = min(sleep, time.Until(deadline))
+			}
+			fmt.Fprintf(stderr, "agora wait: %v; retrying in %s\n", err, sleep.Round(time.Millisecond))
+			select {
+			case <-time.After(sleep):
+			case <-ctx.Done():
+				return exitError
+			}
+			backoff = min(backoff*2, 30*time.Second)
+			continue
+		}
+		backoff = time.Second
+		last = &d
+		if d.New > 0 || d.Standing.Status != core.StatusOpen {
+			fmt.Fprintln(stdout, waitSummary(d))
+			fmt.Fprintln(stdout, d.Standing.Line)
+			return exitOK
+		}
+	}
+}
+
+func waitSummary(d core.Digest) string {
+	if d.New == 0 {
+		return d.Standing.Conversation + " concluded"
+	}
+	parts := make([]string, len(d.Authors))
+	for i, a := range d.Authors {
+		parts[i] = fmt.Sprintf("%s x%d", a.Author, a.Count)
+	}
+	return fmt.Sprintf("%d new in %s (%s)", d.New, d.Standing.Conversation, strings.Join(parts, ", "))
+}
+
+func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	resolveClient := config.ClientFlags(fs)
+	resolveAgent := config.AgentFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	agent, err := resolveAgent(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	sts, err := cl.Status(ctx, cc.Namespace, agent)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora status:", err)
+		return exitError
+	}
+	if len(sts) == 0 {
+		fmt.Fprintln(stdout, "not expected in any open conversation")
+	}
+	for _, st := range sts {
+		fmt.Fprintln(stdout, st.Line)
+	}
+	return exitOK
+}
+
+func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	resolveClient := config.ClientFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := cl.Health(ctx); err != nil {
+		fmt.Fprintln(stderr, "agora health:", err)
+		return exitError
+	}
+	fmt.Fprintln(stdout, "ok")
+	return exitOK
+}

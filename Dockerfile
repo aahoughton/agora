@@ -19,5 +19,7 @@ ENV AGORA_DB=/data/agora.db \
     AGORA_ALLOWED_HOSTS=localhost,127.0.0.1,::1
 VOLUME ["/data"]
 EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD ["agora", "health", "--url", "http://127.0.0.1:8787"]
 ENTRYPOINT ["agora"]
 CMD ["serve"]
