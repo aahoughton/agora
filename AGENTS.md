@@ -45,6 +45,14 @@ to start if `tools.md` and the registered tools disagree.
 sees; after a wording change, run `go test ./internal/mcpserver -update` and
 review the diff to that file alongside the change.
 
+To see how a real agent responds to the wording, run
+`scripts/live-pair.sh codex|claude [output-dir]`. A scripted host asks a
+question, pushes back once, and concludes after the agent does; the script
+reports whether the agent joined, answered, stayed through the pushback,
+concluded and stopped on its own, with its token use and the transcript. It
+calls a paid model and is not deterministic, so it is a development aid and
+not part of CI. Override `PROMPT` or `QUESTION` to try variations.
+
 More packages arrive as the API, MCP, HTML and TUI surfaces land; keep this list
 current when adding one.
 
