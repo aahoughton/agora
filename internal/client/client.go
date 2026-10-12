@@ -153,3 +153,55 @@ func (c *Client) Status(ctx context.Context, ns, agent string) ([]core.Standing,
 	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/status", url.Values{"agent": {agent}}, nil, &out)
 	return out.Standings, err
 }
+
+// ListNamespaces returns the namespaces the caller can read.
+func (c *Client) ListNamespaces(ctx context.Context) ([]core.Namespace, error) {
+	var out struct {
+		Namespaces []core.Namespace `json:"namespaces"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/namespaces", nil, nil, &out)
+	return out.Namespaces, err
+}
+
+// ListConversations returns the conversations in a namespace, archived ones
+// only if includeArchived is set.
+func (c *Client) ListConversations(ctx context.Context, ns string, includeArchived bool) ([]core.Conversation, error) {
+	var q url.Values
+	if includeArchived {
+		q = url.Values{"include_archived": {"true"}}
+	}
+	var out struct {
+		Conversations []core.Conversation `json:"conversations"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/conversations", q, nil, &out)
+	return out.Conversations, err
+}
+
+// GetConversation returns one conversation with its participants.
+func (c *Client) GetConversation(ctx context.Context, ns, conv string) (core.Conversation, error) {
+	var out core.Conversation
+	err := c.do(ctx, http.MethodGet, convPath(ns, conv), nil, nil, &out)
+	return out, err
+}
+
+// FollowResult is a batch of new messages and the conversation after them.
+type FollowResult struct {
+	core.ReadResult
+	Conversation core.Conversation `json:"conversation"`
+}
+
+// Follow blocks on the server until the log moves past after or timeout
+// passes. A timeout returns no messages and the current conversation.
+func (c *Client) Follow(ctx context.Context, ns, conv string, after int64, timeout time.Duration) (FollowResult, error) {
+	q := url.Values{"after": {strconv.FormatInt(after, 10)}, "timeout": {strconv.Itoa(int(timeout / time.Second))}}
+	var out FollowResult
+	err := c.do(ctx, http.MethodGet, convPath(ns, conv)+"/follow", q, nil, &out)
+	return out, err
+}
+
+// Observe posts an observer comment as name.
+func (c *Client) Observe(ctx context.Context, ns, conv, name, body string) (core.Message, error) {
+	var out core.Message
+	err := c.do(ctx, http.MethodPost, convPath(ns, conv)+"/observe", nil, map[string]string{"name": name, "body": body}, &out)
+	return out, err
+}
