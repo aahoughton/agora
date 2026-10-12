@@ -23,3 +23,11 @@ run = "golangci-lint fmt"
 [tasks.secrets]
 description = "Scan git history for secrets"
 run = "gitleaks git --redact --no-banner"
+
+[tasks.vuln]
+description = "Check dependencies for known vulnerabilities"
+run = "go tool govulncheck ./..."
+
+[tasks.check]
+description = "Everything CI runs: lint, test, vuln, secrets"
+depends = ["lint", "test", "vuln", "secrets"]
