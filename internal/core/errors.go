@@ -24,6 +24,7 @@ const (
 	CodeMessageTooLarge       Code = "message_too_large"
 	CodeNotCoordinator        Code = "not_coordinator"
 	CodeTooManyWaiters        Code = "too_many_waiters"
+	CodeTooManyWatchers       Code = "too_many_watchers"
 )
 
 // Error is a failure the caller can act on. Message is short, ASCII, and

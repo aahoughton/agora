@@ -718,6 +718,10 @@ func TestPolicyIsConsulted(t *testing.T) {
 		"Read":   func() error { _, err := f.svc.Read(ctx, p, "default", "c", core.ReadParams{}); return err },
 		"Wait":   func() error { _, err := f.svc.Wait(ctx, p, "default", "c", core.WaitParams{Agent: "a"}); return err },
 		"Status": func() error { _, err := f.svc.Status(ctx, p, "default", "a"); return err },
+		"Follow": func() error {
+			_, err := f.svc.Follow(ctx, p, "default", "c", 0, time.Millisecond)
+			return err
+		},
 		"StandingOf": func() error {
 			_, err := f.svc.StandingOf(ctx, p, "default", "c", "a")
 			return err
@@ -991,6 +995,75 @@ func TestWaitDoesNotInlineOverBudgetOrWithAfter(t *testing.T) {
 	}
 	if got := participant(t, f.get(t, "c"), "alice").ReadSeq; got != before {
 		t.Fatalf("read_seq moved to %d", got)
+	}
+}
+
+func TestFollow(t *testing.T) {
+	f := newFixture(t, core.Options{MaxWatchers: 1, MaxWaiters: 1})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice", "bob")
+	before := f.get(t, "c")
+
+	// Behind: returns at once, everything after `after`, all authors.
+	r := must[core.ReadResult](t)(f.svc.Follow(ctx, f.p, "default", "c", 0, time.Minute))
+	if int64(len(r.Messages)) != before.LastSeq {
+		t.Fatalf("follow from 0 = %+v", r)
+	}
+
+	// Caught up: times out empty.
+	r = must[core.ReadResult](t)(f.svc.Follow(ctx, f.p, "default", "c", before.LastSeq, 20*time.Millisecond))
+	if len(r.Messages) != 0 || r.LastSeq != before.LastSeq {
+		t.Fatalf("idle follow = %+v", r)
+	}
+
+	// Caught up: wakes on a post. A viewer does not use the agents' wait slot.
+	done := make(chan core.ReadResult, 1)
+	go func() {
+		r, _ := f.svc.Follow(context.Background(), f.p, "default", "c", before.LastSeq, 10*time.Second)
+		done <- r
+	}()
+	time.Sleep(50 * time.Millisecond)
+	_, err := f.svc.Follow(ctx, f.p, "default", "c", before.LastSeq, time.Millisecond)
+	wantCode(t, err, core.CodeTooManyWatchers)
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
+	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "alice"}))
+	f.say(t, "c", "bob", "hello")
+	select {
+	case r := <-done:
+		if len(r.Messages) != 1 || r.Messages[0].Body != "hello" {
+			t.Fatalf("woken follow = %+v", r)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("follow did not wake")
+	}
+
+	// Following changes nothing about participants.
+	after := f.get(t, "c")
+	for i, p := range after.Participants {
+		if p.ReadSeq != before.Participants[i].ReadSeq && p.Agent != "alice" {
+			t.Fatalf("follow moved %s's read position", p.Agent)
+		}
+	}
+}
+
+func TestFollowWakesAtTimeboxDeadline(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	ends := f.clock.Now().Add(300 * time.Millisecond)
+	must[core.Conversation](t)(f.svc.Start(ctx, f.p, "default", core.StartParams{Name: "c", Agent: "alice", Join: true, End: core.EndTimebox, EndsAt: &ends}))
+	last := f.get(t, "c").LastSeq
+	// Nothing else touches the conversation; only the deadline passes.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		f.clock.Advance(time.Second)
+	}()
+	start := time.Now()
+	r := must[core.ReadResult](t)(f.svc.Follow(ctx, f.p, "default", "c", last, 10*time.Second))
+	if time.Since(start) > 3*time.Second {
+		t.Fatalf("follow slept past the deadline: %s", time.Since(start))
+	}
+	if len(r.Messages) != 1 || !strings.Contains(r.Messages[0].Body, "timebox elapsed") {
+		t.Fatalf("follow at deadline = %+v", r)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 )
 
 func (s *Service) checkBody(body string, allowEmpty bool) error {
@@ -253,4 +254,67 @@ func (s *Service) messages(ctx context.Context, q querier, convID, after, upto i
 	}, `SELECT seq, kind, author, body, reply_to, created_at
 		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ? ORDER BY seq LIMIT ?`,
 		convID, after, upto, skipAuthor, limit)
+}
+
+// FollowLimit bounds the messages one Follow call returns.
+const FollowLimit = 200
+
+// Follow blocks until the conversation's log moves past after, or timeout
+// passes, then returns the new messages (all authors). It is for viewers:
+// it needs no participant, sets no presence, and moves no read position.
+func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, after int64, timeout time.Duration) (ReadResult, error) {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+		return ReadResult{}, err
+	}
+	if after < 0 || timeout < 0 {
+		return ReadResult{}, errorf(CodeInvalid, "after and timeout must not be negative")
+	}
+	c, err := s.loadConvRead(ctx, ns, name)
+	if err != nil {
+		return ReadResult{}, err
+	}
+	if !s.hub.watch(c.id, s.opts.MaxWatchers) {
+		return ReadResult{}, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+	}
+	defer s.hub.unwatch(c.id)
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	timedOut := false
+	for {
+		ch := s.hub.channel(c.id)
+		// loadConvRead records a due timebox expiry, which then shows up
+		// as a new message.
+		c, err = s.loadConvRead(ctx, ns, name)
+		if err != nil {
+			return ReadResult{}, err
+		}
+		if c.LastSeq > after {
+			out, _, err := s.page(ctx, s.db, c, after, FollowLimit, "")
+			return out, err
+		}
+		if timedOut {
+			return ReadResult{Messages: []Message{}, LastSeq: c.LastSeq}, nil
+		}
+		// Wake at a pending timebox deadline so its expiry is reported.
+		var expiry <-chan time.Time
+		var expiryTimer *time.Timer
+		if c.Status == StatusOpen && c.End == EndTimebox && c.EndsAt != nil {
+			expiryTimer = time.NewTimer(max(c.EndsAt.Sub(s.now()), 0))
+			expiry = expiryTimer.C
+		}
+		select {
+		case <-ch:
+		case <-expiry:
+		case <-deadline.C:
+			timedOut = true
+		case <-ctx.Done():
+		}
+		if expiryTimer != nil {
+			expiryTimer.Stop()
+		}
+		if ctx.Err() != nil {
+			return ReadResult{}, ctx.Err()
+		}
+	}
 }

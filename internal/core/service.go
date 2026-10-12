@@ -19,6 +19,7 @@ const (
 	DefaultArchiveAfter = 7 * 24 * time.Hour
 	DefaultStaleAfter   = 10 * time.Minute
 	DefaultMaxWaiters   = 64
+	DefaultMaxWatchers  = 256
 )
 
 // Options configure a Service. Zero values select the defaults.
@@ -34,6 +35,8 @@ type Options struct {
 	StaleAfter time.Duration
 	// MaxWaiters caps concurrent waits per conversation.
 	MaxWaiters int
+	// MaxWatchers caps concurrent Follow calls (viewers) per conversation.
+	MaxWatchers int
 	// Wording supplies the advice in standing lines.
 	Wording *wording.Wording
 }
@@ -68,7 +71,12 @@ func New(db *sql.DB, opts Options) *Service {
 	if opts.Wording == nil {
 		opts.Wording = wording.Default()
 	}
-	return &Service{db: db, opts: opts, hub: hub{subs: map[int64]chan struct{}{}, waiters: map[int64]int{}}}
+	if opts.MaxWatchers == 0 {
+		opts.MaxWatchers = DefaultMaxWatchers
+	}
+	return &Service{db: db, opts: opts, hub: hub{
+		subs: map[int64]chan struct{}{}, waiters: map[int64]int{}, watchers: map[int64]int{},
+	}}
 }
 
 func (s *Service) now() time.Time { return s.opts.Now().UTC() }
@@ -116,37 +124,58 @@ func (s *Service) write(ctx context.Context, fn func(tx *wtx) error) error {
 // repeatedly takes the current channel, re-checks the log, and blocks on the
 // channel; notify closes it and drops it, so no append is missed between the
 // check and the block. Entries exist only while a conversation has waiters.
+//
+// Agents waiting (Wait) and viewers following (Follow) are counted and capped
+// separately, so viewers cannot use up agents' wait slots.
 type hub struct {
-	mu      sync.Mutex
-	subs    map[int64]chan struct{}
-	waiters map[int64]int
+	mu       sync.Mutex
+	subs     map[int64]chan struct{}
+	waiters  map[int64]int
+	watchers map[int64]int
 }
 
 // enter registers a waiter, refusing when max are already waiting.
 func (h *hub) enter(convID int64, maxWaiters int) bool {
+	return h.join(h.waiters, convID, maxWaiters)
+}
+
+// leave unregisters a waiter.
+func (h *hub) leave(convID int64) { h.part(h.waiters, convID) }
+
+// watch registers a follower, refusing when max are already following.
+func (h *hub) watch(convID int64, maxWatchers int) bool {
+	return h.join(h.watchers, convID, maxWatchers)
+}
+
+// unwatch unregisters a follower.
+func (h *hub) unwatch(convID int64) { h.part(h.watchers, convID) }
+
+func (h *hub) join(counts map[int64]int, convID int64, limit int) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.waiters[convID] >= maxWaiters {
+	if counts[convID] >= limit {
 		return false
 	}
-	h.waiters[convID]++
+	counts[convID]++
 	return true
 }
 
-// leave unregisters a waiter and drops the conversation's entries when it
-// was the last.
-func (h *hub) leave(convID int64) {
+// part decrements a count and drops the conversation's channel once nobody
+// is waiting or following.
+func (h *hub) part(counts map[int64]int, convID int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.waiters[convID]--
-	if h.waiters[convID] <= 0 {
-		delete(h.waiters, convID)
+	counts[convID]--
+	if counts[convID] <= 0 {
+		delete(counts, convID)
+	}
+	if h.waiters[convID] == 0 && h.watchers[convID] == 0 {
 		delete(h.subs, convID)
 	}
 }
 
 // channel returns the channel the next append will close. Only call it
-// between enter and leave.
+// between enter and leave, or watch and unwatch.
 func (h *hub) channel(convID int64) <-chan struct{} {
 	h.mu.Lock()
 	defer h.mu.Unlock()

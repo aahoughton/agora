@@ -32,12 +32,15 @@ func TestWaitLeavesNoHubEntries(t *testing.T) {
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		_, _ = s.Wait(cctx, p, "default", name, WaitParams{Agent: "alice", Timeout: time.Minute})
 		cancel()
+		if _, err := s.Follow(ctx, p, "default", name, 1000, 10*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	s.hub.mu.Lock()
 	defer s.hub.mu.Unlock()
-	if len(s.hub.subs) != 0 || len(s.hub.waiters) != 0 {
-		t.Fatalf("hub retained entries: subs=%d waiters=%d", len(s.hub.subs), len(s.hub.waiters))
+	if len(s.hub.subs) != 0 || len(s.hub.waiters) != 0 || len(s.hub.watchers) != 0 {
+		t.Fatalf("hub retained entries: subs=%d waiters=%d watchers=%d", len(s.hub.subs), len(s.hub.waiters), len(s.hub.watchers))
 	}
 }
 
