@@ -66,7 +66,7 @@ func TestReadsStayWithinTheLoadedSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	page, err := s.page(ctx, db, snap, snap.LastSeq-1, 10)
+	page, _, err := s.page(ctx, db, snap, snap.LastSeq-1, 10, "")
 	if err != nil {
 		t.Fatal(err)
 	}

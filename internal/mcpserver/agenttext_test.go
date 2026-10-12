@@ -70,7 +70,11 @@ func TestAgentText(t *testing.T) {
 	}
 
 	b.WriteString("\n# Phrases (sample fields)\n")
-	sample := map[string]any{"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say"}
+	sample := map[string]any{
+		"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
+		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
+		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
+	}
 	for _, k := range wording.PhraseKeys {
 		fmt.Fprintf(&b, "\n## %s\n%s\n", k, w.Phrase(k, sample))
 	}
@@ -82,6 +86,9 @@ func TestAgentText(t *testing.T) {
 		raw, err := json.Marshal(args)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(raw) > 160 {
+			raw = append(raw[:150:150], fmt.Sprintf("... (%d bytes)", len(raw))...)
 		}
 		mark := ""
 		if isErr {
@@ -105,18 +112,18 @@ func TestAgentText(t *testing.T) {
 	step("bob", bob, "read", with("agent", "bob"))
 	step("alice", alice, "say", with("agent", "alice", "body", "LRU or LFU?\nReasoning to follow."))
 	step("bob", bob, "wait", with("agent", "bob", "timeout_seconds", 5))
-	step("bob", bob, "read", with("agent", "bob"))
 	if _, err := svc.Observe(t.Context(), core.Anonymous(), "default", "cache", core.ObserveParams{Name: "pat", Body: "remember the memory budget"}); err != nil {
 		t.Fatal(err)
 	}
 	step("bob", bob, "say", with("agent", "bob", "body", "LRU; LFU costs more memory.", "reply_to", 4))
 	step("alice", alice, "wait", with("agent", "alice", "timeout_seconds", 5))
-	step("alice", alice, "read", with("agent", "alice"))
+	step("alice", alice, "say", with("agent", "alice", "body", "Benchmark notes:\n"+strings.Repeat("results row\n", 400)))
+	step("bob", bob, "wait", with("agent", "bob", "timeout_seconds", 5))
+	step("bob", bob, "read", with("agent", "bob", "limit", 1))
 	step("alice", alice, "conclude", with("agent", "alice", "body", "AGREED: LRU"))
 	step("bob", bob, "say", with("agent", "zed", "body", "hi"))
 	step("bob", bob, "conclude", with("agent", "bob", "body", "AGREED: LRU"))
 	step("alice", alice, "wait", with("agent", "alice"))
-	step("alice", alice, "read", with("agent", "alice"))
 	step("alice", alice, "status", map[string]any{"agent": "alice"})
 	step("alice", alice, "list", map[string]any{})
 

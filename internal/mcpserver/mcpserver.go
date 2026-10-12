@@ -18,6 +18,10 @@ import (
 	"github.com/aahoughton/agora/internal/wording"
 )
 
+// InlineBytes is the most message text wait returns in full, sparing the
+// agent a read call for short replies.
+const InlineBytes = 4000
+
 // DefaultMaxWait keeps a wait under the 60s tool-call timeout that several
 // MCP clients use by default.
 const DefaultMaxWait = 50 * time.Second
@@ -91,7 +95,7 @@ type tools struct {
 }
 
 // NewServer returns an MCP server whose tools act as principal p in
-// namespace ns unless a call names another namespace. It panics if the
+// namespace ns. It panics if the
 // wording does not describe exactly the registered tools and parameters.
 func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mcp.Server {
 	if opts.MaxWait == 0 {
@@ -184,20 +188,12 @@ func failure(err error) (*mcp.CallToolResult, any, error) {
 	return r, nil, nil
 }
 
-func (t *tools) namespace(ns string) string {
-	if ns == "" {
-		return t.ns
-	}
-	return ns
-}
-
 type listIn struct {
-	Namespace       string `json:"namespace,omitempty"`
-	IncludeArchived bool   `json:"include_archived,omitempty"`
+	IncludeArchived bool `json:"include_archived,omitempty"`
 }
 
 func (t *tools) list(ctx context.Context, _ *mcp.CallToolRequest, in listIn) (*mcp.CallToolResult, any, error) {
-	cs, err := t.svc.ListConversations(ctx, t.p, t.namespace(in.Namespace), core.ListParams{IncludeArchived: in.IncludeArchived})
+	cs, err := t.svc.ListConversations(ctx, t.p, t.ns, core.ListParams{IncludeArchived: in.IncludeArchived})
 	if err != nil {
 		return failure(err)
 	}
@@ -210,11 +206,10 @@ type startIn struct {
 	Topic         string `json:"topic,omitempty"`
 	End           string `json:"end,omitempty"`
 	EndsInMinutes int    `json:"ends_in_minutes,omitempty"`
-	Namespace     string `json:"namespace,omitempty"`
 }
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, any, error) {
-	ns := t.namespace(in.Namespace)
+	ns := t.ns
 	sp := core.StartParams{Name: in.Conversation, Topic: in.Topic, End: core.EndCondition(in.End), Agent: in.Agent, Join: true}
 	switch {
 	case in.EndsInMinutes < 0:
@@ -231,18 +226,17 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 	if err != nil {
 		return failure(err)
 	}
-	return text("started " + renderConversation(t.w, c) + "\n" + renderStanding(st)), nil, nil
+	return text(fmt.Sprintf("started %s (end: %s)\n%s", c.Name, c.End, renderStanding(st))), nil, nil
 }
 
 type joinIn struct {
 	Conversation string `json:"conversation"`
 	Agent        string `json:"agent"`
 	Resume       bool   `json:"resume,omitempty"`
-	Namespace    string `json:"namespace,omitempty"`
 }
 
 func (t *tools) join(ctx context.Context, _ *mcp.CallToolRequest, in joinIn) (*mcp.CallToolResult, any, error) {
-	ns := t.namespace(in.Namespace)
+	ns := t.ns
 	st, err := t.svc.Join(ctx, t.p, ns, in.Conversation, core.JoinParams{Agent: in.Agent, Resume: in.Resume})
 	if err != nil {
 		return failure(err)
@@ -259,11 +253,10 @@ type readIn struct {
 	Agent        string `json:"agent"`
 	After        *int64 `json:"after,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
-	Namespace    string `json:"namespace,omitempty"`
 }
 
 func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*mcp.CallToolResult, any, error) {
-	r, err := t.svc.Read(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.ReadParams{Agent: in.Agent, After: in.After, Limit: in.Limit})
+	r, err := t.svc.Read(ctx, t.p, t.ns, in.Conversation, core.ReadParams{Agent: in.Agent, After: in.After, Limit: in.Limit})
 	if err != nil {
 		return failure(err)
 	}
@@ -276,11 +269,10 @@ type sayIn struct {
 	Body            string `json:"body"`
 	ReplyTo         *int64 `json:"reply_to,omitempty"`
 	ExpectedLastSeq *int64 `json:"expected_last_seq,omitempty"`
-	Namespace       string `json:"namespace,omitempty"`
 }
 
 func (t *tools) say(ctx context.Context, _ *mcp.CallToolRequest, in sayIn) (*mcp.CallToolResult, any, error) {
-	r, err := t.svc.Say(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.SayParams{
+	r, err := t.svc.Say(ctx, t.p, t.ns, in.Conversation, core.SayParams{
 		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq,
 	})
 	if err != nil {
@@ -293,7 +285,6 @@ type waitIn struct {
 	Conversation   string `json:"conversation"`
 	Agent          string `json:"agent"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
-	Namespace      string `json:"namespace,omitempty"`
 }
 
 func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, any, error) {
@@ -305,7 +296,7 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	if in.TimeoutSeconds > 0 {
 		timeout = time.Duration(in.TimeoutSeconds) * time.Second
 	}
-	d, err := t.svc.Wait(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.WaitParams{Agent: in.Agent, Timeout: timeout})
+	d, err := t.svc.Wait(ctx, t.p, t.ns, in.Conversation, core.WaitParams{Agent: in.Agent, Timeout: timeout, InlineBytes: InlineBytes})
 	if err != nil {
 		return failure(err)
 	}
@@ -313,12 +304,11 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 }
 
 type statusIn struct {
-	Agent     string `json:"agent"`
-	Namespace string `json:"namespace,omitempty"`
+	Agent string `json:"agent"`
 }
 
 func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, any, error) {
-	sts, err := t.svc.Status(ctx, t.p, t.namespace(in.Namespace), in.Agent)
+	sts, err := t.svc.Status(ctx, t.p, t.ns, in.Agent)
 	if err != nil {
 		return failure(err)
 	}
@@ -329,11 +319,10 @@ type concludeIn struct {
 	Conversation string `json:"conversation"`
 	Agent        string `json:"agent"`
 	Body         string `json:"body"`
-	Namespace    string `json:"namespace,omitempty"`
 }
 
 func (t *tools) conclude(ctx context.Context, _ *mcp.CallToolRequest, in concludeIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Conclude(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.ConcludeParams{Agent: in.Agent, Body: in.Body})
+	st, err := t.svc.Conclude(ctx, t.p, t.ns, in.Conversation, core.ConcludeParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(err)
 	}
@@ -344,11 +333,10 @@ type leaveIn struct {
 	Conversation string `json:"conversation"`
 	Agent        string `json:"agent"`
 	Body         string `json:"body,omitempty"`
-	Namespace    string `json:"namespace,omitempty"`
 }
 
 func (t *tools) leave(ctx context.Context, _ *mcp.CallToolRequest, in leaveIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Leave(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.LeaveParams{Agent: in.Agent, Body: in.Body})
+	st, err := t.svc.Leave(ctx, t.p, t.ns, in.Conversation, core.LeaveParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(err)
 	}
@@ -359,11 +347,10 @@ type closeIn struct {
 	Conversation string `json:"conversation"`
 	Agent        string `json:"agent"`
 	Body         string `json:"body,omitempty"`
-	Namespace    string `json:"namespace,omitempty"`
 }
 
 func (t *tools) closeConv(ctx context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Close(ctx, t.p, t.namespace(in.Namespace), in.Conversation, core.CloseParams{Agent: in.Agent, Body: in.Body})
+	st, err := t.svc.Close(ctx, t.p, t.ns, in.Conversation, core.CloseParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(err)
 	}
@@ -376,7 +363,6 @@ type presenceIn struct {
 	Presence           string `json:"presence"`
 	Note               string `json:"note,omitempty"`
 	CheckBackInMinutes int    `json:"check_back_in_minutes,omitempty"`
-	Namespace          string `json:"namespace,omitempty"`
 }
 
 func (t *tools) presence(ctx context.Context, _ *mcp.CallToolRequest, in presenceIn) (*mcp.CallToolResult, any, error) {
@@ -388,7 +374,7 @@ func (t *tools) presence(ctx context.Context, _ *mcp.CallToolRequest, in presenc
 		at := time.Now().Add(time.Duration(in.CheckBackInMinutes) * time.Minute)
 		pp.CheckBackBy = &at
 	}
-	ns := t.namespace(in.Namespace)
+	ns := t.ns
 	if _, err := t.svc.SetPresence(ctx, t.p, ns, in.Conversation, pp); err != nil {
 		return failure(err)
 	}

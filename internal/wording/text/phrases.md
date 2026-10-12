@@ -5,6 +5,10 @@ fields available to it are listed in a comment line starting with `fields:`
 where there are any. Keys are fixed by the code; the loader rejects missing
 or unknown ones.
 
+## standing_line
+fields: Conversation, Status, You, Expected, Unread, Replies, Next, Advice
+{{.Conversation}}: {{.Status}}; you: {{.You}}{{if .Expected}}, expected{{end}}; unread: {{.Unread}}{{if .Replies}} ({{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} to you){{end}}; next: {{.Next}} ({{.Advice}})
+
 ## advice_read_after_conclusion
 the conversation has concluded; read the remaining messages, then stop
 
@@ -30,10 +34,10 @@ read the new messages, then reply or wait
 you concluded; wait in case someone replies or withdraws
 
 ## advice_wait_expected
-wait for replies; do not end your turn while you are expected
+reply if needed, then wait; do not end your turn while you are expected
 
 ## advice_wait_free
-wait for replies, or leave when you are done
+reply if needed, then wait, or leave when you are done
 
 ## wait_timed_out
 no new messages yet (the wait timed out; this is normal)

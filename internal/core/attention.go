@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -97,12 +97,11 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 	default:
 		st.Next, advice = NextWait, wording.AdviceWaitFree
 	}
-	you := st.You
-	if st.Expected {
-		you += ", expected"
-	}
-	st.Line = fmt.Sprintf("%s: %s; you: %s; unread: %d (%d replies to you); next: %s (%s)",
-		c.Name, c.Status, you, st.Unread, st.RepliesToYou, st.Next, s.opts.Wording.Phrase(advice, nil))
+	w := s.opts.Wording
+	st.Line = w.Phrase(wording.StandingLine, map[string]any{
+		"Conversation": c.Name, "Status": c.Status, "You": st.You, "Expected": st.Expected,
+		"Unread": st.Unread, "Replies": st.RepliesToYou, "Next": st.Next, "Advice": w.Phrase(advice, nil),
+	})
 	return st, nil
 }
 
@@ -135,17 +134,23 @@ type AuthorCount struct {
 	Count  int    `json:"count"`
 }
 
-// Digest summarizes new activity without message bodies. Bodies come from
-// Read, which also advances the reader's position.
+// Digest summarizes new activity. Normally it carries one-line previews and
+// bodies come from Read. When the wait asked for inline delivery and the new
+// messages are short, Messages holds them in full, they are marked read, and
+// Previews is empty.
 type Digest struct {
 	After    int64         `json:"after"`
 	LastSeq  int64         `json:"last_seq"`
 	New      int           `json:"new"`
 	Authors  []AuthorCount `json:"authors"`
 	Previews []Preview     `json:"previews"`
+	Messages []Message     `json:"messages,omitempty"`
 	TimedOut bool          `json:"timed_out"`
 	Standing Standing      `json:"standing"`
 }
+
+// maxInlineMessages bounds inline delivery by count as well as size.
+const maxInlineMessages = 20
 
 // Digest limits.
 const (
@@ -159,6 +164,10 @@ type WaitParams struct {
 	// After defaults to the agent's read_seq.
 	After   *int64
 	Timeout time.Duration
+	// InlineBytes, if positive, asks for the new messages in full when their
+	// bodies total at most this many bytes, saving the agent a read. Applies
+	// only when After is unset.
+	InlineBytes int
 }
 
 // Wait blocks until another author appends past After, the conversation
@@ -241,10 +250,64 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 		break
 	}
 
+	if wp.InlineBytes > 0 && wp.After == nil && d.New > 0 {
+		inlined, ok, err := s.inline(ctx, ns, name, wp.Agent, wp.InlineBytes)
+		if err != nil {
+			return Digest{}, err
+		}
+		if ok {
+			inlined.TimedOut = false
+			return inlined, nil
+		}
+	}
 	if err := s.touch(ctx, s.db, c, wp.Agent, PresenceWorking); err != nil {
 		return Digest{}, err
 	}
 	return d, nil
+}
+
+// inline reads the agent's unread messages from others and returns them as a
+// digest if they fit the budget, marking them read. ok is false, with nothing
+// changed, when they do not fit.
+func (s *Service) inline(ctx context.Context, ns, name, agent string, budget int) (d Digest, ok bool, err error) {
+	err = s.write(ctx, func(tx *wtx) error {
+		c, err := s.loadConvTx(ctx, tx, ns, name)
+		if err != nil {
+			return err
+		}
+		pt, err := s.member(ctx, tx, c, agent)
+		if err != nil {
+			return err
+		}
+		res, covered, err := s.page(ctx, tx, c, pt.ReadSeq, maxInlineMessages, agent)
+		if err != nil {
+			return err
+		}
+		size := 0
+		for _, m := range res.Messages {
+			size += len(m.Body)
+		}
+		if res.More || size > budget || len(res.Messages) == 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?), presence = ?, last_seen_at = ?
+			WHERE conversation_id = ? AND agent = ?`, covered, PresenceWorking, ms(s.now()), c.id, agent); err != nil {
+			return err
+		}
+		d = Digest{After: pt.ReadSeq, LastSeq: c.LastSeq, New: len(res.Messages), Messages: res.Messages, Previews: []Preview{}}
+		for _, m := range res.Messages {
+			i := slices.IndexFunc(d.Authors, func(a AuthorCount) bool { return a.Author == m.Author })
+			if i < 0 {
+				d.Authors = append(d.Authors, AuthorCount{Author: m.Author})
+				i = len(d.Authors) - 1
+			}
+			d.Authors[i].Count++
+		}
+		d.Standing, err = s.standing(ctx, tx, c, agent)
+		ok = err == nil
+		return err
+	})
+	return d, ok, err
 }
 
 // digest summarizes messages in (after, last_seq] as of one load of the

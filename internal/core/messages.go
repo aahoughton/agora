@@ -133,8 +133,10 @@ const (
 // ReadParams select messages to read.
 type ReadParams struct {
 	// Agent, if set, must be a participant. The read starts after their
-	// read_seq unless After is set, and advances read_seq past what is
-	// returned.
+	// read_seq unless After is set, and advances read_seq past what it
+	// covers. Without After, the agent's own messages are skipped: it wrote
+	// them. With After (re-reading, or checking whether a post landed), they
+	// are included.
 	Agent string
 	After *int64
 	Limit int
@@ -178,7 +180,8 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		if rp.After != nil {
 			after = *rp.After
 		}
-		return s.page(ctx, s.db, c, after, rp.Limit)
+		out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
+		return out, err
 	}
 
 	var out ReadResult
@@ -194,19 +197,21 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		if err != nil {
 			return err
 		}
-		after := pt.ReadSeq
+		after, skip := pt.ReadSeq, rp.Agent
 		if rp.After != nil {
-			after = *rp.After
+			if *rp.After > c.LastSeq {
+				return errorf(CodeInvalid, "after %d is past the last message (#%d)", *rp.After, c.LastSeq)
+			}
+			after, skip = *rp.After, ""
 		}
-		out, err = s.page(ctx, tx, c, after, rp.Limit)
+		var covered int64
+		out, covered, err = s.page(ctx, tx, c, after, rp.Limit, skip)
 		if err != nil {
 			return err
 		}
-		if n := len(out.Messages); n > 0 {
-			if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?)
-				WHERE conversation_id = ? AND agent = ?`, out.Messages[n-1].Seq, c.id, rp.Agent); err != nil {
-				return err
-			}
+		if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?)
+			WHERE conversation_id = ? AND agent = ?`, covered, c.id, rp.Agent); err != nil {
+			return err
 		}
 		if err := s.touch(ctx, tx, c, rp.Agent, PresenceWorking); err != nil {
 			return err
@@ -218,23 +223,27 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 	return out, err
 }
 
-func (s *Service) page(ctx context.Context, q querier, c *conv, after int64, limit int) (ReadResult, error) {
-	msgs, err := s.messages(ctx, q, c.id, after, c.LastSeq, limit)
+// page returns up to limit messages in (after, c.LastSeq], skipping those
+// by skipAuthor if it is set. covered is the highest seq the page accounts
+// for: the last message returned when more follow, otherwise c.LastSeq.
+func (s *Service) page(ctx context.Context, q querier, c *conv, after int64, limit int, skipAuthor string) (ReadResult, int64, error) {
+	msgs, err := s.messages(ctx, q, c.id, after, c.LastSeq, limit+1, skipAuthor)
 	if err != nil {
-		return ReadResult{}, err
+		return ReadResult{}, 0, err
 	}
 	out := ReadResult{Messages: msgs, LastSeq: c.LastSeq}
-	if n := len(msgs); n > 0 {
-		out.More = msgs[n-1].Seq < c.LastSeq
-	} else {
-		out.More = after < c.LastSeq
+	covered := max(c.LastSeq, after)
+	if len(msgs) > limit {
+		out.Messages, out.More = msgs[:limit], true
+		covered = msgs[limit-1].Seq
 	}
-	return out, nil
+	return out, covered, nil
 }
 
-// messages returns up to limit messages with after < seq <= upto. Callers
-// pass the last_seq they loaded, so a page never mixes in later appends.
-func (s *Service) messages(ctx context.Context, q querier, convID, after, upto int64, limit int) ([]Message, error) {
+// messages returns up to limit messages with after < seq <= upto, skipping
+// those by skipAuthor if it is set. Callers pass the last_seq they loaded, so
+// a page never mixes in later appends.
+func (s *Service) messages(ctx context.Context, q querier, convID, after, upto int64, limit int, skipAuthor string) ([]Message, error) {
 	return collect(ctx, q, func(rows *sql.Rows) (Message, error) {
 		var m Message
 		var created int64
@@ -242,5 +251,6 @@ func (s *Service) messages(ctx context.Context, q querier, convID, after, upto i
 		m.CreatedAt = fromMS(created)
 		return m, err
 	}, `SELECT seq, kind, author, body, reply_to, created_at
-		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? ORDER BY seq LIMIT ?`, convID, after, upto, limit)
+		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ? ORDER BY seq LIMIT ?`,
+		convID, after, upto, skipAuthor, limit)
 }

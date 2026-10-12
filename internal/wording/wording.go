@@ -26,6 +26,8 @@ var embedded embed.FS
 
 // Phrase keys. Load requires exactly these sections in phrases.md.
 const (
+	StandingLine = "standing_line"
+
 	AdviceReadAfterConclusion = "advice_read_after_conclusion"
 	AdviceDone                = "advice_done"
 	AdviceClose               = "advice_close"
@@ -54,7 +56,7 @@ const (
 
 // PhraseKeys lists every phrase key.
 var PhraseKeys = []string{
-	AdviceReadAfterConclusion, AdviceDone, AdviceClose, AdviceCoordinatorAway, AdviceJoin,
+	StandingLine, AdviceReadAfterConclusion, AdviceDone, AdviceClose, AdviceCoordinatorAway, AdviceJoin,
 	AdviceRejoin, AdviceRead, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
 	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, StatusNone, ListNone,
 	WaitTimeoutRange, BridgeUnreachable, BridgeLostRead, BridgeLostWrite, BridgeLostOther,

@@ -214,9 +214,15 @@ paths:
           in: query
           description: Seconds.
           schema: { type: integer, minimum: 0, maximum: 300, default: 30 }
+        - name: inline
+          in: query
+          description: |
+            If the new messages' bodies total at most this many bytes, return
+            them in full in `messages` and mark them read. Ignored with `after`.
+          schema: { type: integer, minimum: 0, maximum: 1048576, default: 0 }
       responses:
         "200":
-          description: A digest of new activity, without message bodies.
+          description: A digest of new activity; with `inline`, short messages in full.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Digest" }
@@ -527,6 +533,10 @@ components:
               author: { type: string }
               reply_to: { type: integer }
               text: { type: string, description: First non-blank line, at most 120 characters. }
+        messages:
+          type: array
+          description: Set when inline delivery applied; previews is then empty.
+          items: { $ref: "#/components/schemas/Message" }
         timed_out: { type: boolean }
         standing: { $ref: "#/components/schemas/Standing" }
 

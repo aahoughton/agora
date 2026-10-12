@@ -385,9 +385,18 @@ func (h *handler) wait(w http.ResponseWriter, r *http.Request, p core.Principal)
 		}
 		secs = *timeout
 	}
-	d, err := h.svc.Wait(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.WaitParams{
-		Agent: r.URL.Query().Get("agent"), After: after, Timeout: time.Duration(secs) * time.Second,
-	})
+	inline, err := queryInt(r, "inline")
+	if err != nil {
+		return err
+	}
+	wp := core.WaitParams{Agent: r.URL.Query().Get("agent"), After: after, Timeout: time.Duration(secs) * time.Second}
+	if inline != nil {
+		if *inline < 0 || *inline > maxRequestBytes {
+			return invalid("inline must be between 0 and %d bytes", maxRequestBytes)
+		}
+		wp.InlineBytes = int(*inline)
+	}
+	d, err := h.svc.Wait(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), wp)
 	if err != nil {
 		return err
 	}

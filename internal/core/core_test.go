@@ -300,8 +300,13 @@ func TestReadAdvancesCursorAndPages(t *testing.T) {
 		t.Fatalf("page 1 = %+v", r1)
 	}
 	r2 := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "bob", Limit: core.MaxReadLimit}))
-	if len(r2.Messages) == 0 || r2.More || r2.Messages[0].Seq != r1.Messages[1].Seq+1 {
+	if len(r2.Messages) == 0 || r2.More || r2.Messages[0].Seq <= r1.Messages[1].Seq {
 		t.Fatalf("page 2 = %+v", r2)
+	}
+	for _, m := range append(r1.Messages, r2.Messages...) {
+		if m.Author == "bob" {
+			t.Fatalf("default read returned bob's own message: %+v", m)
+		}
 	}
 	if r2.Standing == nil || r2.Standing.Unread != 0 || r2.Standing.Next != core.NextWait {
 		t.Fatalf("standing = %+v", r2.Standing)
@@ -333,7 +338,7 @@ func TestRepliesToYou(t *testing.T) {
 	if len(sts) != 1 || sts[0].Unread != 2 || sts[0].RepliesToYou != 1 {
 		t.Fatalf("status = %+v", sts)
 	}
-	if !strings.Contains(sts[0].Line, "1 replies to you") || !strings.Contains(sts[0].Line, "next: read") {
+	if !strings.Contains(sts[0].Line, "1 reply to you") || !strings.Contains(sts[0].Line, "next: read") {
 		t.Fatalf("line = %q", sts[0].Line)
 	}
 }
@@ -901,5 +906,109 @@ func TestCoordinatorWhoNeverJoinedGetsCoordinatorAdvice(t *testing.T) {
 	sts := must[[]core.Standing](t)(f.svc.Status(ctx, f.p, "default", "coord"))
 	if len(sts) != 1 || sts[0].You != core.YouNotJoined || !strings.Contains(sts[0].Line, "you started this conversation") {
 		t.Fatalf("status = %+v", sts)
+	}
+}
+
+func TestReadSkipsOwnMessagesUnlessAfterIsGiven(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice", "bob")
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
+	mine := f.say(t, "c", "alice", "mine")
+	theirs := f.say(t, "c", "bob", "theirs")
+	f.say(t, "c", "alice", "mine again")
+
+	r := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice"}))
+	if len(r.Messages) != 1 || r.Messages[0].Seq != theirs.Message.Seq || r.More {
+		t.Fatalf("default read = %+v", r.Messages)
+	}
+	// The read position covers alice's own trailing message too.
+	if got := participant(t, f.get(t, "c"), "alice").ReadSeq; got != r.LastSeq {
+		t.Fatalf("read_seq = %d, want %d", got, r.LastSeq)
+	}
+
+	r = must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", After: ptr(mine.Message.Seq - 1)}))
+	if len(r.Messages) != 3 || r.Messages[0].Seq != mine.Message.Seq {
+		t.Fatalf("read with after = %+v", r.Messages)
+	}
+}
+
+func TestReadPagesWhenSkippingOwnMessages(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice", "bob")
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
+	for range 3 {
+		f.say(t, "c", "bob", "b")
+		f.say(t, "c", "alice", "a")
+	}
+	r1 := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: 2}))
+	if len(r1.Messages) != 2 || !r1.More {
+		t.Fatalf("page 1 = %+v", r1)
+	}
+	r2 := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: 2}))
+	if len(r2.Messages) != 1 || r2.More || r2.Standing.Unread != 0 {
+		t.Fatalf("page 2 = %+v", r2)
+	}
+}
+
+func TestWaitInlinesShortMessages(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice", "bob")
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
+	f.say(t, "c", "alice", "mine")
+	f.say(t, "c", "bob", "one")
+	f.say(t, "c", "bob", "two")
+
+	d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "alice", InlineBytes: 100}))
+	if len(d.Messages) != 2 || d.New != 2 || len(d.Previews) != 0 || d.Authors[0] != (core.AuthorCount{Author: "bob", Count: 2}) {
+		t.Fatalf("digest = %+v", d)
+	}
+	if d.Standing.Unread != 0 || d.Standing.Next != core.NextWait {
+		t.Fatalf("standing = %+v", d.Standing)
+	}
+	if got := participant(t, f.get(t, "c"), "alice"); got.ReadSeq != d.LastSeq || got.Presence != core.PresenceWorking {
+		t.Fatalf("participant = %+v", got)
+	}
+}
+
+func TestWaitDoesNotInlineOverBudgetOrWithAfter(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice", "bob")
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
+	before := participant(t, f.get(t, "c"), "alice").ReadSeq
+	f.say(t, "c", "bob", "a message that is longer than the budget")
+
+	d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "alice", InlineBytes: 10}))
+	if len(d.Messages) != 0 || len(d.Previews) != 1 || d.Standing.Next != core.NextRead {
+		t.Fatalf("over budget = %+v", d)
+	}
+	d = must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "alice", InlineBytes: 1000, After: &before}))
+	if len(d.Messages) != 0 || len(d.Previews) != 1 {
+		t.Fatalf("with after = %+v", d)
+	}
+	if got := participant(t, f.get(t, "c"), "alice").ReadSeq; got != before {
+		t.Fatalf("read_seq moved to %d", got)
+	}
+}
+
+// A cursor past the end of the log is refused instead of moving the read
+// position beyond messages that have not been written yet.
+func TestReadCursorCannotPassTheLog(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice", "bob")
+	_, err := f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "bob", After: ptr(int64(1) << 62)})
+	wantCode(t, err, core.CodeInvalid)
+	f.say(t, "c", "alice", "still delivered")
+	r := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "bob"}))
+	found := false
+	for _, m := range r.Messages {
+		found = found || m.Body == "still delivered"
+	}
+	if !found {
+		t.Fatalf("the next message was skipped: %+v", r.Messages)
 	}
 }

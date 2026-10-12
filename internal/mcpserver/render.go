@@ -28,7 +28,12 @@ func renderDigest(w *wording.Wording, d core.Digest) string {
 		for i, a := range d.Authors {
 			parts[i] = fmt.Sprintf("%s x%d", a.Author, a.Count)
 		}
-		fmt.Fprintf(&b, "%d new after #%d (%s)", d.New, d.After, strings.Join(parts, ", "))
+		fmt.Fprintf(&b, "%d new (%s)", d.New, strings.Join(parts, ", "))
+		if len(d.Messages) > 0 {
+			b.WriteString(":\n")
+			writeMessages(&b, w, d.Messages)
+			break
+		}
 		if len(d.Previews) < d.New {
 			fmt.Fprintf(&b, "; latest %d:", len(d.Previews))
 		}
@@ -46,9 +51,7 @@ func renderRead(w *wording.Wording, r core.ReadResult) string {
 	if len(r.Messages) == 0 {
 		b.WriteString(w.Phrase(wording.ReadEmpty, nil) + "\n")
 	}
-	for _, m := range r.Messages {
-		fmt.Fprintf(&b, "#%d %s%s%s:\n%s\n\n", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo), m.Body)
-	}
+	writeMessages(&b, w, r.Messages)
 	if r.More {
 		b.WriteString(w.Phrase(wording.ReadMore, map[string]any{"LastSeq": r.LastSeq}) + "\n")
 	}
@@ -58,6 +61,20 @@ func renderRead(w *wording.Wording, r core.ReadResult) string {
 		fmt.Fprintf(&b, "last_seq: %d", r.LastSeq)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeMessages writes one line per single-line message, and a header line
+// plus the body for multi-line ones.
+func writeMessages(b *strings.Builder, w *wording.Wording, msgs []core.Message) {
+	for _, m := range msgs {
+		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo))
+		body := strings.TrimSpace(m.Body)
+		if strings.Contains(body, "\n") {
+			fmt.Fprintf(b, "%s\n%s\n\n", head, body)
+		} else {
+			fmt.Fprintf(b, "%s %s\n", head, body)
+		}
+	}
 }
 
 func renderConversation(_ *wording.Wording, c core.Conversation) string {

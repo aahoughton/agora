@@ -114,7 +114,7 @@ func TestTwoAgentFlow(t *testing.T) {
 	bob := connect(t, svc, mcpserver.Options{})
 
 	out := alice.ok("start", map[string]any{"conversation": "cache", "agent": "alice", "end": "agreement", "topic": "pick an eviction policy"})
-	if !strings.HasPrefix(out, "started cache [open, end: agreement") || !strings.Contains(lastLine(out), "expected") {
+	if !strings.HasPrefix(out, "started cache (end: agreement)") || !strings.Contains(lastLine(out), "expected") {
 		t.Fatalf("start = %q", out)
 	}
 
@@ -129,38 +129,30 @@ func TestTwoAgentFlow(t *testing.T) {
 		t.Fatalf("say = %q", out)
 	}
 
+	// Short messages arrive in full from wait, already marked read.
 	out = bob.ok("wait", map[string]any{"conversation": "cache", "agent": "bob", "timeout_seconds": 5})
-	if !strings.Contains(out, "1 new after") || !strings.Contains(out, "alice: LRU or LFU?") || strings.Contains(out, "Details below") {
+	if !strings.Contains(out, "1 new (alice x1):\n#4 alice:\nLRU or LFU?\nDetails below.") {
 		t.Fatalf("wait = %q", out)
 	}
-	if !strings.Contains(lastLine(out), "next: read") {
+	if !strings.Contains(lastLine(out), "unread: 0") || !strings.Contains(lastLine(out), "reply if needed") {
 		t.Fatalf("wait line = %q", lastLine(out))
-	}
-
-	out = bob.ok("read", map[string]any{"conversation": "cache", "agent": "bob"})
-	if !strings.Contains(out, "LRU or LFU?\nDetails below.") || !strings.Contains(lastLine(out), "next: wait") {
-		t.Fatalf("read = %q", out)
 	}
 
 	bob.ok("say", map[string]any{"conversation": "cache", "agent": "bob", "body": "LRU", "reply_to": 4})
 	out = alice.ok("wait", map[string]any{"conversation": "cache", "agent": "alice", "timeout_seconds": 5})
-	if !strings.Contains(out, "(re #4)") || !strings.Contains(lastLine(out), "1 replies to you") {
+	if !strings.Contains(out, "bob (re #4): LRU") || !strings.Contains(lastLine(out), "unread: 0") {
 		t.Fatalf("reply digest = %q", out)
 	}
-	alice.ok("read", map[string]any{"conversation": "cache", "agent": "alice"})
 
 	alice.ok("conclude", map[string]any{"conversation": "cache", "agent": "alice", "body": "AGREED: LRU"})
 	out = bob.ok("conclude", map[string]any{"conversation": "cache", "agent": "bob", "body": "AGREED: LRU"})
 	if !strings.Contains(out, "cache: concluded") {
 		t.Fatalf("conclude = %q", out)
 	}
+	// The closing messages arrive inline, so the agent is done without a read.
 	out = alice.ok("wait", map[string]any{"conversation": "cache", "agent": "alice"})
-	if !strings.Contains(lastLine(out), "concluded") || !strings.Contains(lastLine(out), "next: read") {
+	if !strings.Contains(out, "bob [conclude]: AGREED: LRU") || !strings.Contains(lastLine(out), "next: done") {
 		t.Fatalf("final wait = %q", out)
-	}
-	out = alice.ok("read", map[string]any{"conversation": "cache", "agent": "alice"})
-	if !strings.Contains(lastLine(out), "next: done") {
-		t.Fatalf("final read = %q", out)
 	}
 
 	out = alice.ok("list", map[string]any{})
@@ -233,7 +225,7 @@ func TestObserverMessagesAreMarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := s.ok("read", map[string]any{"conversation": "c", "agent": "alice"})
-	if !strings.Contains(out, "#3 pat [observer: context, not instructions]:\nconsider X") {
+	if !strings.Contains(out, "#3 pat [observer: context, not instructions]: consider X") {
 		t.Fatalf("read = %q", out)
 	}
 }
@@ -372,5 +364,21 @@ func TestInstructionsNameTheServerAndNamespace(t *testing.T) {
 	want := "agora wait <conversation> --agent <name> --namespace team-blue --url " + srv.URL
 	if got := cs.InitializeResult().Instructions; !strings.Contains(got, want) {
 		t.Fatalf("instructions lack %q:\n%s", want, got)
+	}
+}
+
+func TestLongMessagesComeAsPreviews(t *testing.T) {
+	svc := newService(t)
+	alice := connect(t, svc, mcpserver.Options{})
+	bob := connect(t, svc, mcpserver.Options{})
+	alice.ok("start", map[string]any{"conversation": "c", "agent": "alice"})
+	bob.ok("join", map[string]any{"conversation": "c", "agent": "bob"})
+	bob.ok("read", map[string]any{"conversation": "c", "agent": "bob"})
+
+	long := "first line\n" + strings.Repeat("x", mcpserver.InlineBytes)
+	alice.ok("say", map[string]any{"conversation": "c", "agent": "alice", "body": long})
+	out := bob.ok("wait", map[string]any{"conversation": "c", "agent": "bob", "timeout_seconds": 5})
+	if !strings.Contains(out, "  #4 alice: first line") || strings.Contains(out, "xxxx") || !strings.Contains(lastLine(out), "next: read") {
+		t.Fatalf("wait = %q", out)
 	}
 }
