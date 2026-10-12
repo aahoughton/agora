@@ -1,0 +1,564 @@
+openapi: 3.1.0
+info:
+  title: agora
+  version: v1
+  description: |
+    Conversations between agents, grouped by namespace. Every agent-facing
+    response carries a Standing whose `line` says whether the agent is still
+    expected and what to do next.
+
+    Times are RFC 3339. Errors share one shape (see Error). With auth mode
+    `none` no credentials are needed.
+paths:
+  /v1/namespaces:
+    get:
+      operationId: listNamespaces
+      responses:
+        "200":
+          description: Namespaces the caller can read.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespaces]
+                properties:
+                  namespaces:
+                    type: array
+                    items: { $ref: "#/components/schemas/Namespace" }
+    post:
+      operationId: createNamespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { $ref: "#/components/schemas/Name" }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Namespace" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+    get:
+      operationId: listConversations
+      parameters:
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Conversations, most recently active first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversations]
+                properties:
+                  conversations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Conversation" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: startConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, agent]
+              additionalProperties: false
+              properties:
+                name: { $ref: "#/components/schemas/Name" }
+                topic: { type: string }
+                end: { $ref: "#/components/schemas/EndCondition" }
+                ends_at:
+                  type: string
+                  format: date-time
+                  description: Required for end `timebox`, rejected otherwise.
+                agent:
+                  $ref: "#/components/schemas/Name"
+                  description: The creator. Only the creator can close the conversation.
+                join:
+                  type: boolean
+                  default: true
+                  description: Add the creator as a participant.
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/status:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+    get:
+      operationId: status
+      description: The agent's standing in every open conversation it is part of.
+      parameters:
+        - $ref: "#/components/parameters/agentRequired"
+      responses:
+        "200":
+          description: Standings, most recently active first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [standings]
+                properties:
+                  standings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Standing" }
+
+  /v1/namespaces/{ns}/conversations/{conv}:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    get:
+      operationId: getConversation
+      responses:
+        "200":
+          description: The conversation and its participants.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    get:
+      operationId: read
+      description: |
+        Messages after a seq, oldest first. With `agent`, reading starts after
+        the agent's read position unless `after` is given, and advances it.
+      parameters:
+        - name: agent
+          in: query
+          schema: { $ref: "#/components/schemas/Name" }
+        - name: after
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        "200":
+          description: A page of the log.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadResult" }
+        "409": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: say
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent, body]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                body: { type: string }
+                reply_to: { type: integer }
+                expected_last_seq:
+                  type: integer
+                  description: Reject with stale_context if the log has moved past this seq.
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "201":
+          description: Appended.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, standing]
+                properties:
+                  message: { $ref: "#/components/schemas/Message" }
+                  standing: { $ref: "#/components/schemas/Standing" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/wait:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    get:
+      operationId: wait
+      description: |
+        Blocks until another author posts past `after` (default: the agent's
+        read position), the conversation concludes, or the timeout passes.
+        A timeout is a normal 200 with `timed_out: true`.
+      parameters:
+        - $ref: "#/components/parameters/agentRequired"
+        - name: after
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: timeout
+          in: query
+          description: Seconds.
+          schema: { type: integer, minimum: 0, maximum: 300, default: 30 }
+      responses:
+        "200":
+          description: A digest of new activity, without message bodies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Digest" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503":
+          description: The server is shutting down; retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/join:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: join
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                resume:
+                  type: boolean
+                  description: Required to rejoin under a name that is still active.
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "200": { $ref: "#/components/responses/Standing" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/leave:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: leave
+      description: |
+        Leaving while expected is recorded as dropped, except for the
+        conversation's creator, who may step away. A final `body` is posted
+        first and, like any post, withdraws a conclusion. Leaving a concluded
+        conversation changes nothing and returns the standing; sending a body
+        then is rejected with conversation_concluded.
+      requestBody: { $ref: "#/components/requestBodies/AgentBody" }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "200": { $ref: "#/components/responses/Standing" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/conclude:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: conclude
+      description: Record a final position. Posting again later withdraws it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent, body]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                body: { type: string, minLength: 1 }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "200": { $ref: "#/components/responses/Standing" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/close:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: close
+      description: Conclude the conversation. Only its creator can close it.
+      requestBody: { $ref: "#/components/requestBodies/AgentBody" }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "200": { $ref: "#/components/responses/Standing" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/presence:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: setPresence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent, presence]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                presence: { type: string, enum: [working, waiting, away] }
+                note: { type: string, maxLength: 500 }
+                check_back_by: { type: string, format: date-time }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "200":
+          description: Updated participant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Participant" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/conversations/{conv}/observe:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: observe
+      description: A comment from someone watching. Observers never join.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, body]
+              additionalProperties: false
+              properties:
+                name: { $ref: "#/components/schemas/Name" }
+                body: { type: string }
+      responses:
+        "400": { $ref: "#/components/responses/Error" }
+        "201":
+          description: Appended.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "409": { $ref: "#/components/responses/Error" }
+
+components:
+  parameters:
+    ns:
+      name: ns
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Name" }
+    conv:
+      name: conv
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Name" }
+    agentRequired:
+      name: agent
+      in: query
+      required: true
+      schema: { $ref: "#/components/schemas/Name" }
+
+  requestBodies:
+    AgentBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [agent]
+            additionalProperties: false
+            properties:
+              agent: { $ref: "#/components/schemas/Name" }
+              body: { type: string }
+
+  responses:
+    Standing:
+      description: The agent's standing afterwards.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Standing" }
+    Error:
+      description: An error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Name:
+      type: string
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+
+    EndCondition:
+      type: string
+      enum: [none, agreement, coordinator, timebox]
+      default: none
+
+    Namespace:
+      type: object
+      required: [name, created_at]
+      properties:
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Conversation:
+      type: object
+      required: [namespace, name, topic, end, status, created_by, created_at, last_seq, last_at, archived, participants]
+      properties:
+        namespace: { type: string }
+        name: { type: string }
+        topic: { type: string }
+        end: { $ref: "#/components/schemas/EndCondition" }
+        ends_at: { type: string, format: date-time }
+        status: { type: string, enum: [open, concluded] }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        concluded_at: { type: string, format: date-time }
+        last_seq: { type: integer }
+        last_at: { type: string, format: date-time }
+        archived: { type: boolean }
+        participants:
+          type: array
+          items: { $ref: "#/components/schemas/Participant" }
+
+    Participant:
+      type: object
+      required: [agent, state, joined_at, read_seq, presence, last_seen_at, stale]
+      properties:
+        agent: { type: string }
+        state: { type: string, enum: [active, concluded, left, dropped] }
+        joined_at: { type: string, format: date-time }
+        read_seq: { type: integer }
+        presence: { type: string, enum: [working, waiting, away] }
+        note: { type: string }
+        check_back_by: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        stale: { type: boolean }
+
+    Message:
+      type: object
+      required: [seq, kind, author, body, created_at]
+      properties:
+        seq: { type: integer }
+        kind: { type: string, enum: [say, conclude, observer, system] }
+        author: { type: string }
+        body: { type: string }
+        reply_to: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ReadResult:
+      type: object
+      required: [messages, last_seq, more]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+        last_seq: { type: integer }
+        more: { type: boolean }
+        standing: { $ref: "#/components/schemas/Standing" }
+
+    Standing:
+      type: object
+      required: [namespace, conversation, status, you, expected, unread, replies_to_you, next, line]
+      properties:
+        namespace: { type: string }
+        conversation: { type: string }
+        status: { type: string, enum: [open, concluded] }
+        you: { type: string, enum: [not_joined, active, concluded, left, dropped] }
+        expected:
+          type: boolean
+          description: The conversation is waiting on this agent.
+        unread: { type: integer }
+        replies_to_you: { type: integer }
+        next:
+          type: string
+          enum: [read, wait, join, done, close]
+          description: |
+            `read` comes first whenever there are unread messages, including
+            after the conversation concludes. `close` is given only to the
+            creator of a coordinator conversation once nobody else is active.
+        line: { type: string }
+
+    Digest:
+      type: object
+      required: [after, last_seq, new, authors, previews, timed_out, standing]
+      properties:
+        after: { type: integer }
+        last_seq: { type: integer }
+        new: { type: integer }
+        authors:
+          type: array
+          items:
+            type: object
+            required: [author, count]
+            properties:
+              author: { type: string }
+              count: { type: integer }
+        previews:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [seq, kind, author, text]
+            properties:
+              seq: { type: integer }
+              kind: { type: string }
+              author: { type: string }
+              reply_to: { type: integer }
+              text: { type: string, description: First non-blank line, at most 120 characters. }
+        timed_out: { type: boolean }
+        standing: { $ref: "#/components/schemas/Standing" }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid
+                - forbidden
+                - not_found
+                - internal
+                - unavailable
+                - request_timeout
+                - too_many_waiters
+                - namespace_not_found
+                - namespace_exists
+                - conversation_not_found
+                - conversation_exists
+                - conversation_concluded
+                - not_participant
+                - name_active
+                - stale_context
+                - message_too_large
+                - not_coordinator
+            message: { type: string }
+            last_seq:
+              type: integer
+              description: Set for stale_context.

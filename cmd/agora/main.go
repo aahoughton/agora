@@ -16,8 +16,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/config"
+	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/server"
+	"github.com/aahoughton/agora/internal/store"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -75,6 +78,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv co
 // serve runs the HTTP server until ctx is done. If ready is non-nil it
 // receives the bound address once the listener is open.
 func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready chan<- string) error {
+	authn, policy, err := auth.ForMode(cfg.Auth)
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, cfg.DB)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	svc := core.New(db, core.Options{Policy: policy})
+
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", cfg.Addr)
 	if err != nil {
@@ -88,9 +102,17 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		ready <- ln.Addr().String()
 	}
 
+	// Request contexts derive from base, which is cancelled at shutdown so
+	// long-poll waits return instead of holding Shutdown open.
+	base, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
 	srv := &http.Server{
-		Handler:           server.New(),
+		Handler: server.New(server.Deps{
+			Service: svc, Authenticator: authn, Logger: logger, AllowedHosts: allowedHosts(cfg, ln.Addr()),
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		BaseContext:       func(net.Listener) context.Context { return base },
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
@@ -100,11 +122,28 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		return err
 	case <-ctx.Done():
 	}
+	cancelBase()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
 	}
 	logger.Info("stopped")
+	return nil
+}
+
+// allowedHosts resolves the Host allowlist: explicit configuration wins;
+// otherwise a loopback listener answers only loopback names and any other
+// listener answers any host.
+func allowedHosts(cfg config.Serve, addr net.Addr) []string {
+	switch {
+	case cfg.AnyHost:
+		return nil
+	case len(cfg.AllowedHosts) > 0:
+		return cfg.AllowedHosts
+	}
+	if tcp, ok := addr.(*net.TCPAddr); ok && tcp.IP.IsLoopback() {
+		return server.LoopbackHosts
+	}
 	return nil
 }

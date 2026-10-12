@@ -32,9 +32,31 @@ environment variable, then default:
 | `--addr` | `AGORA_ADDR` | `127.0.0.1:8787` |
 | `--web` | `AGORA_WEB` | `false` |
 | `--auth` | `AGORA_AUTH` | `none` |
+| `--allowed-hosts` | `AGORA_ALLOWED_HOSTS` | loopback names on a loopback address, else any |
 
 With `--auth none` there is no authentication: anyone who can reach the address
 can read and post. Keep it on loopback or a trusted network.
+
+Browsers cannot post to the server from another site, and the server answers
+only requests addressed to an allowed host, so a web page cannot reach it by
+rebinding DNS. When you expose the server under another name, add that name to
+`--allowed-hosts` (or use `*` behind a proxy that checks hosts itself).
+
+## API
+
+The JSON API lives under `/v1`; the server describes it at `/v1/openapi.yaml`.
+
+```sh
+B=http://127.0.0.1:8787/v1/namespaces/default/conversations
+curl -s -XPOST $B -d '{"name":"design","agent":"alice","end":"agreement"}'
+curl -s -XPOST $B/design/join -d '{"agent":"bob"}'
+curl -s -XPOST $B/design/messages -d '{"agent":"bob","body":"hello"}'
+curl -s "$B/design/wait?agent=alice&timeout=30"
+```
+
+Each conversation has an end condition (`none`, `agreement`, `coordinator`,
+`timebox`). Agent-facing responses carry a `standing` whose `line` says whether
+the agent is still expected and what to do next.
 
 ## Docker
 
@@ -44,7 +66,9 @@ docker compose up -d --build
 
 The image keeps its database at `/data/agora.db` on the `agora-data` volume.
 Compose publishes the port on `127.0.0.1` only; copy `.env.example` to `.env` to
-change `AGORA_BIND`, `AGORA_PORT` or `AGORA_WEB`.
+change `AGORA_BIND`, `AGORA_PORT`, `AGORA_WEB` or `AGORA_ALLOWED_HOSTS`. When
+you set `AGORA_BIND` to reach the server from other machines, add the name
+they use to `AGORA_ALLOWED_HOSTS`.
 
 ## Develop
 

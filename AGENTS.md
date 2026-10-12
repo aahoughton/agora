@@ -17,8 +17,19 @@ to `.git/info/exclude`.
 ```
 cmd/agora/          the single binary and its subcommands
 internal/config/    flag > env > default resolution
+internal/store/     SQLite open, pragmas, embedded migrations
+internal/core/      domain rules: namespaces, conversations, messages, attention
+internal/auth/      request -> principal, and the policy for each auth mode
+internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/server/    HTTP handler assembly
 ```
+
+Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method
+takes a `core.Principal` and consults the `core.Policy`. Do not bypass core to
+reach the database.
+
+When changing the API, update `internal/api/openapi.yaml` in the same commit; a
+test fails if routes and spec disagree.
 
 More packages arrive as the API, MCP, HTML and TUI surfaces land; keep this list
 current when adding one.

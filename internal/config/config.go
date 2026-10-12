@@ -11,6 +11,7 @@ import (
 	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Environment variable names.
@@ -19,6 +20,8 @@ const (
 	EnvAddr = "AGORA_ADDR"
 	EnvWeb  = "AGORA_WEB"
 	EnvAuth = "AGORA_AUTH"
+
+	EnvAllowedHosts = "AGORA_ALLOWED_HOSTS"
 )
 
 // DefaultAddr listens on loopback only. Exposing the server to a network is a
@@ -37,6 +40,11 @@ type Serve struct {
 	Addr string
 	Web  bool
 	Auth AuthMode
+	// AllowedHosts lists the Host names the server answers to. AnyHost
+	// disables the check. When neither is set, the server allows loopback
+	// names on a loopback address and any host otherwise.
+	AllowedHosts []string
+	AnyHost      bool
 }
 
 // Getenv looks up an environment variable; os.Getenv satisfies it.
@@ -51,6 +59,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
 	auth := fs.String("auth", "", "auth mode: none (env "+EnvAuth+", default none)")
+	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
 	if err := fs.Parse(args); err != nil {
 		return Serve{}, err
 	}
@@ -88,6 +97,18 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	}
 	cfg.Auth = mode
 
+	switch hosts := strings.TrimSpace(firstNonEmpty(*allowed, getenv(EnvAllowedHosts))); hosts {
+	case "":
+	case "*":
+		cfg.AnyHost = true
+	default:
+		for h := range strings.SplitSeq(hosts, ",") {
+			if h = strings.TrimSpace(h); h == "" || h == "*" {
+				return Serve{}, fmt.Errorf("serve: invalid allowed-hosts %q: want names separated by commas, or * alone", hosts)
+			}
+			cfg.AllowedHosts = append(cfg.AllowedHosts, h)
+		}
+	}
 	return cfg, nil
 }
 

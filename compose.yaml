@@ -9,6 +9,8 @@ services:
       - "${AGORA_BIND:-127.0.0.1}:${AGORA_PORT:-8787}:8787"
     environment:
       AGORA_WEB: "${AGORA_WEB:-false}"
+      # Host names the server answers to; add yours (or *) with AGORA_BIND.
+      AGORA_ALLOWED_HOSTS: "${AGORA_ALLOWED_HOSTS:-localhost,127.0.0.1,::1}"
     volumes:
       - agora-data:/data
     restart: unless-stopped

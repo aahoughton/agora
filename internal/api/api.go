@@ -1,0 +1,492 @@
+// Package api serves the versioned JSON API under /v1. It is a thin layer:
+// decode, authenticate, call core, encode.
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/aahoughton/agora/internal/auth"
+	"github.com/aahoughton/agora/internal/core"
+)
+
+// Wait timeout bounds, in seconds.
+const (
+	DefaultWaitSeconds = 30
+	MaxWaitSeconds     = 300
+)
+
+// maxRequestBytes bounds request bodies. Message bodies are limited further
+// by core.
+const maxRequestBytes = 1 << 20
+
+// DefaultBodyReadTimeout bounds how long a client may take to send a request
+// body. It applies only while a body is read, so long-poll waits (which have
+// no body) are unaffected.
+const DefaultBodyReadTimeout = 30 * time.Second
+
+// Options configure the API. Zero values select the defaults.
+type Options struct {
+	Logger          *slog.Logger
+	BodyReadTimeout time.Duration
+}
+
+type handler struct {
+	svc         *core.Service
+	authn       auth.Authenticator
+	logger      *slog.Logger
+	bodyTimeout time.Duration
+}
+
+type route struct {
+	method  string
+	pattern string
+	fn      func(*handler, http.ResponseWriter, *http.Request, core.Principal) error
+}
+
+const convPath = "/v1/namespaces/{ns}/conversations/{conv}"
+
+// routes is the full API surface. The OpenAPI test checks it against
+// openapi.yaml.
+var routes = []route{
+	{"GET", "/v1/namespaces", (*handler).listNamespaces},
+	{"POST", "/v1/namespaces", (*handler).createNamespace},
+	{"GET", "/v1/namespaces/{ns}/conversations", (*handler).listConversations},
+	{"POST", "/v1/namespaces/{ns}/conversations", (*handler).start},
+	{"GET", "/v1/namespaces/{ns}/status", (*handler).status},
+	{"GET", convPath, (*handler).getConversation},
+	{"GET", convPath + "/messages", (*handler).read},
+	{"POST", convPath + "/messages", (*handler).say},
+	{"GET", convPath + "/wait", (*handler).wait},
+	{"POST", convPath + "/join", (*handler).join},
+	{"POST", convPath + "/leave", (*handler).leave},
+	{"POST", convPath + "/conclude", (*handler).conclude},
+	{"POST", convPath + "/close", (*handler).closeConv},
+	{"POST", convPath + "/presence", (*handler).presence},
+	{"POST", convPath + "/observe", (*handler).observe},
+}
+
+// Register adds the API routes and GET /v1/openapi.yaml to mux.
+func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, opts Options) {
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
+	}
+	if opts.BodyReadTimeout == 0 {
+		opts.BodyReadTimeout = DefaultBodyReadTimeout
+	}
+	h := &handler{svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout}
+	for _, rt := range routes {
+		mux.HandleFunc(rt.method+" "+rt.pattern, func(w http.ResponseWriter, r *http.Request) {
+			p, err := h.authn.Authenticate(r)
+			if err == nil {
+				err = rt.fn(h, w, r, p)
+			}
+			if err != nil {
+				h.writeError(w, r, err)
+			}
+		})
+	}
+	mux.HandleFunc("GET /v1/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(openapiSpec)
+	})
+	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
+		h.writeError(w, r, &core.Error{Code: "not_found", Message: "no such endpoint; see /v1/openapi.yaml"})
+	})
+}
+
+// errorBody is the JSON shape of every error response.
+type errorBody struct {
+	Error struct {
+		Code    core.Code `json:"code"`
+		Message string    `json:"message"`
+		LastSeq *int64    `json:"last_seq,omitempty"`
+	} `json:"error"`
+}
+
+func statusFor(code core.Code) int {
+	switch code {
+	case core.CodeInvalid:
+		return http.StatusBadRequest
+	case core.CodeForbidden, core.CodeNotCoordinator:
+		return http.StatusForbidden
+	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, "not_found":
+		return http.StatusNotFound
+	case core.CodeNamespaceExists, core.CodeConversationExists, core.CodeConversationConcluded,
+		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext:
+		return http.StatusConflict
+	case core.CodeMessageTooLarge:
+		return http.StatusRequestEntityTooLarge
+	case core.CodeTooManyWaiters:
+		return http.StatusTooManyRequests
+	case codeRequestTimeout:
+		return http.StatusRequestTimeout
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func (h *handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	var body errorBody
+	if errors.Is(err, context.Canceled) {
+		body.Error.Code = "unavailable"
+		body.Error.Message = "request canceled; the server may be shutting down, retry"
+		writeJSON(w, http.StatusServiceUnavailable, body)
+		return
+	}
+	ce, ok := errors.AsType[*core.Error](err)
+	if !ok {
+		h.logger.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+		body.Error.Code = "internal"
+		body.Error.Message = "internal error"
+		writeJSON(w, http.StatusInternalServerError, body)
+		return
+	}
+	body.Error.Code = ce.Code
+	body.Error.Message = ce.Message
+	if ce.Code == core.CodeStaleContext {
+		body.Error.LastSeq = &ce.LastSeq
+	}
+	writeJSON(w, statusFor(ce.Code), body)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func invalid(format string, args ...any) error {
+	return &core.Error{Code: core.CodeInvalid, Message: fmt.Sprintf(format, args...)}
+}
+
+const codeRequestTimeout core.Code = "request_timeout"
+
+// decode reads exactly one JSON object from the request body into v. It
+// rejects unknown fields, trailing data, bodies over maxRequestBytes, and
+// bodies not received within the body read timeout.
+//
+// On failure the connection is marked for closing: otherwise the server
+// would try to drain the rest of an unread body before replying, which for a
+// stalled client never finishes.
+func (h *handler) decode(w http.ResponseWriter, r *http.Request, v any) error {
+	rc := http.NewResponseController(w)
+	if err := rc.SetReadDeadline(time.Now().Add(h.bodyTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return err
+	}
+	err := h.decodeBody(w, r, v)
+	if err != nil {
+		w.Header().Set("Connection", "close")
+		return err
+	}
+	_ = rc.SetReadDeadline(time.Time{})
+	return nil
+}
+
+func (h *handler) decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return invalid("request body is empty; send a JSON object")
+		}
+		return bodyError(err)
+	}
+	switch err := dec.Decode(&struct{}{}); {
+	case errors.Is(err, io.EOF):
+		return nil
+	case err == nil:
+		return invalid("request body has data after the JSON object")
+	default:
+		if be := bodyError(err); core.CodeOf(be) != core.CodeInvalid {
+			return be
+		}
+		return invalid("request body has data after the JSON object")
+	}
+}
+
+func bodyError(err error) error {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return &core.Error{Code: core.CodeMessageTooLarge, Message: fmt.Sprintf("request body is over %d bytes", maxRequestBytes)}
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return &core.Error{Code: codeRequestTimeout, Message: "request body was not received in time"}
+	}
+	return invalid("invalid JSON body: %v", err)
+}
+
+func queryInt(r *http.Request, name string) (*int64, error) {
+	s := r.URL.Query().Get(name)
+	if s == "" {
+		return nil, nil
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return nil, invalid("query parameter %s must be an integer", name)
+	}
+	return &v, nil
+}
+
+func queryBool(r *http.Request, name string) (bool, error) {
+	s := r.URL.Query().Get(name)
+	if s == "" {
+		return false, nil
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return false, invalid("query parameter %s must be true or false", name)
+	}
+	return v, nil
+}
+
+func (h *handler) listNamespaces(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	ns, err := h.svc.ListNamespaces(r.Context(), p)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"namespaces": ns})
+	return nil
+}
+
+func (h *handler) createNamespace(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	ns, err := h.svc.CreateNamespace(r.Context(), p, req.Name)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusCreated, ns)
+	return nil
+}
+
+func (h *handler) listConversations(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	archived, err := queryBool(r, "include_archived")
+	if err != nil {
+		return err
+	}
+	cs, err := h.svc.ListConversations(r.Context(), p, r.PathValue("ns"), core.ListParams{IncludeArchived: archived})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
+	return nil
+}
+
+func (h *handler) start(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Name   string            `json:"name"`
+		Topic  string            `json:"topic"`
+		End    core.EndCondition `json:"end"`
+		EndsAt *time.Time        `json:"ends_at"`
+		Agent  string            `json:"agent"`
+		Join   *bool             `json:"join"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	join := req.Join == nil || *req.Join
+	c, err := h.svc.Start(r.Context(), p, r.PathValue("ns"), core.StartParams{
+		Name: req.Name, Topic: req.Topic, End: req.End, EndsAt: req.EndsAt, Agent: req.Agent, Join: join,
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusCreated, c)
+	return nil
+}
+
+func (h *handler) status(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	sts, err := h.svc.Status(r.Context(), p, r.PathValue("ns"), r.URL.Query().Get("agent"))
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"standings": sts})
+	return nil
+}
+
+func (h *handler) getConversation(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	c, err := h.svc.GetConversation(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"))
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, c)
+	return nil
+}
+
+func (h *handler) read(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	after, err := queryInt(r, "after")
+	if err != nil {
+		return err
+	}
+	limit, err := queryInt(r, "limit")
+	if err != nil {
+		return err
+	}
+	rp := core.ReadParams{Agent: r.URL.Query().Get("agent"), After: after}
+	if limit != nil {
+		rp.Limit = int(*limit)
+		if rp.Limit == 0 {
+			return invalid("limit must be between 1 and %d", core.MaxReadLimit)
+		}
+	}
+	res, err := h.svc.Read(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), rp)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *handler) say(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Agent           string `json:"agent"`
+		Body            string `json:"body"`
+		ReplyTo         *int64 `json:"reply_to"`
+		ExpectedLastSeq *int64 `json:"expected_last_seq"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	res, err := h.svc.Say(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.SayParams{
+		Agent: req.Agent, Body: req.Body, ReplyTo: req.ReplyTo, ExpectedLastSeq: req.ExpectedLastSeq,
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusCreated, res)
+	return nil
+}
+
+func (h *handler) wait(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	after, err := queryInt(r, "after")
+	if err != nil {
+		return err
+	}
+	timeout, err := queryInt(r, "timeout")
+	if err != nil {
+		return err
+	}
+	secs := int64(DefaultWaitSeconds)
+	if timeout != nil {
+		if *timeout < 0 || *timeout > MaxWaitSeconds {
+			return invalid("timeout must be between 0 and %d seconds", MaxWaitSeconds)
+		}
+		secs = *timeout
+	}
+	d, err := h.svc.Wait(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.WaitParams{
+		Agent: r.URL.Query().Get("agent"), After: after, Timeout: time.Duration(secs) * time.Second,
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, d)
+	return nil
+}
+
+type agentBody struct {
+	Agent string `json:"agent"`
+	Body  string `json:"body"`
+}
+
+func (h *handler) join(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Agent  string `json:"agent"`
+		Resume bool   `json:"resume"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	st, err := h.svc.Join(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.JoinParams{Agent: req.Agent, Resume: req.Resume})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, st)
+	return nil
+}
+
+func (h *handler) leave(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req agentBody
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	st, err := h.svc.Leave(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.LeaveParams{Agent: req.Agent, Body: req.Body})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, st)
+	return nil
+}
+
+func (h *handler) conclude(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req agentBody
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	st, err := h.svc.Conclude(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.ConcludeParams{Agent: req.Agent, Body: req.Body})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, st)
+	return nil
+}
+
+func (h *handler) closeConv(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req agentBody
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	st, err := h.svc.Close(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.CloseParams{Agent: req.Agent, Body: req.Body})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, st)
+	return nil
+}
+
+func (h *handler) presence(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Agent       string     `json:"agent"`
+		Presence    string     `json:"presence"`
+		Note        string     `json:"note"`
+		CheckBackBy *time.Time `json:"check_back_by"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	pt, err := h.svc.SetPresence(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.PresenceParams{
+		Agent: req.Agent, Presence: req.Presence, Note: req.Note, CheckBackBy: req.CheckBackBy,
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, pt)
+	return nil
+}
+
+func (h *handler) observe(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Name string `json:"name"`
+		Body string `json:"body"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	m, err := h.svc.Observe(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.ObserveParams{Name: req.Name, Body: req.Body})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusCreated, m)
+	return nil
+}

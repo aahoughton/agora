@@ -2,6 +2,8 @@ package config
 
 import (
 	"io"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -21,7 +23,7 @@ func TestParseServeDefaults(t *testing.T) {
 		Web:  false,
 		Auth: AuthNone,
 	}
-	if cfg != want {
+	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
 }
@@ -72,7 +74,7 @@ func TestParseServeEnvOverridesDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Serve{DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone}
-	if cfg != want {
+	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
 }
@@ -116,6 +118,35 @@ func TestParseServeErrors(t *testing.T) {
 				t.Fatalf("err = %v, want containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseServeAllowedHosts(t *testing.T) {
+	tests := []struct {
+		args    []string
+		env     string
+		hosts   []string
+		any     bool
+		wantErr bool
+	}{
+		{nil, "", nil, false, false},
+		{[]string{"--allowed-hosts", "*"}, "", nil, true, false},
+		{nil, "agora.lan, localhost", []string{"agora.lan", "localhost"}, false, false},
+		{[]string{"--allowed-hosts", "a.example"}, "b.example", []string{"a.example"}, false, false},
+		{[]string{"--allowed-hosts", "a,*"}, "", nil, false, true},
+		{[]string{"--allowed-hosts", "a,,b"}, "", nil, false, true},
+	}
+	for _, tt := range tests {
+		cfg, err := ParseServe(tt.args, env(map[string]string{"HOME": "/h", EnvAllowedHosts: tt.env}), io.Discard)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("%v %q: no error", tt.args, tt.env)
+			}
+			continue
+		}
+		if err != nil || cfg.AnyHost != tt.any || !slices.Equal(cfg.AllowedHosts, tt.hosts) {
+			t.Errorf("%v %q: got %v %v, %v", tt.args, tt.env, cfg.AllowedHosts, cfg.AnyHost, err)
+		}
 	}
 }
 

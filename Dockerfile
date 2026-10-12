@@ -12,8 +12,11 @@ RUN mkdir -p /out/data
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/agora /usr/local/bin/agora
 COPY --from=build --chown=nonroot:nonroot /out/data /data
+# Published ports are reached as localhost; set AGORA_ALLOWED_HOSTS to the
+# names clients use (or *) when exposing the server beyond this machine.
 ENV AGORA_DB=/data/agora.db \
-    AGORA_ADDR=:8787
+    AGORA_ADDR=:8787 \
+    AGORA_ALLOWED_HOSTS=localhost,127.0.0.1,::1
 VOLUME ["/data"]
 EXPOSE 8787
 ENTRYPOINT ["agora"]
