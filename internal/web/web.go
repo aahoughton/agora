@@ -13,7 +13,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"text/template/parse"
@@ -100,19 +99,9 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) (http.Ha
 	if opts.Location == nil {
 		opts.Location = time.Local
 	}
-	base, err := fs.Sub(themes.Default, "default")
+	theme, err := themes.Open(opts.ThemeDir)
 	if err != nil {
-		return nil, err
-	}
-	theme := base
-	if opts.ThemeDir != "" {
-		// os.Root confines reads to the directory: symlinks that point
-		// outside it are refused, so a theme cannot serve other files.
-		root, err := os.OpenRoot(opts.ThemeDir)
-		if err != nil {
-			return nil, fmt.Errorf("web: theme dir %q: %w", opts.ThemeDir, err)
-		}
-		theme = overlay{top: root.FS(), base: base}
+		return nil, fmt.Errorf("web: %w", err)
 	}
 	v := &viewer{svc: svc, authn: authn, opts: opts, pages: map[string]*template.Template{}}
 	if err := v.load(theme); err != nil {
@@ -304,20 +293,6 @@ func walkBranch(walk func(parse.Node) error, b *parse.BranchNode) error {
 		return walk(b.ElseList)
 	}
 	return nil
-}
-
-// overlay serves files from top, falling back to base.
-type overlay struct{ top, base fs.FS }
-
-func (o overlay) Open(name string) (fs.File, error) {
-	f, err := o.top.Open(name)
-	if err == nil {
-		return f, nil
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
-	}
-	return o.base.Open(name)
 }
 
 func (v *viewer) render(w http.ResponseWriter, status int, page string, data Page) {
