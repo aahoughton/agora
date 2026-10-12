@@ -24,7 +24,9 @@ internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
 internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
+internal/web/       HTML viewer: handlers, theme loading, safe markdown
 internal/server/    HTTP handler assembly
+themes/default/     the built-in viewer theme (templates and static files)
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method
@@ -36,6 +38,12 @@ test fails if routes and spec disagree.
 
 MCP tool results are plain text that ends with the standing line. Keep them
 short: agents pay for every token, and the last line is what they act on.
+
+The viewer contains no markup in Go: pages, partials and UI text live in
+`themes/default/`, and `themes/README.md` documents the data contract
+(`web.TemplateAPI`). After a template change, run
+`go test ./internal/web -update` and review the diff to
+`internal/web/testdata/*.golden.html`.
 
 Agent-facing wording (server instructions, tool and parameter descriptions,
 status-line advice, result phrases) lives in `internal/wording/text/`, not in

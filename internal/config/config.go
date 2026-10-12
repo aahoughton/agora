@@ -23,6 +23,7 @@ const (
 	EnvAuth = "AGORA_AUTH"
 
 	EnvAllowedHosts = "AGORA_ALLOWED_HOSTS"
+	EnvThemeDir     = "AGORA_THEME_DIR"
 
 	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
 )
@@ -55,6 +56,8 @@ type Serve struct {
 	// names on a loopback address and any host otherwise.
 	AllowedHosts []string
 	AnyHost      bool
+	// ThemeDir holds HTML theme files that replace the default theme's.
+	ThemeDir string
 }
 
 // Getenv looks up an environment variable; os.Getenv satisfies it.
@@ -69,6 +72,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
 	auth := fs.String("auth", "", "auth mode: none (env "+EnvAuth+", default none)")
+	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
 	mcpMaxWait := fs.String("mcp-max-wait", "", "longest MCP wait, e.g. 50s; keep it under your MCP clients' tool timeout (env "+EnvMCPMaxWait+", default 50s)")
 	if err := fs.Parse(args); err != nil {
@@ -90,6 +94,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	}
 
 	cfg.Addr = firstNonEmpty(cfg.Addr, getenv(EnvAddr), DefaultAddr)
+	cfg.ThemeDir = firstNonEmpty(cfg.ThemeDir, getenv(EnvThemeDir))
 
 	cfg.Web = *web
 	if !flagSet(fs, "web") {

@@ -1,0 +1,38 @@
+{{define "bar" -}}
+{{- with .Conversation}}
+<div class="bar-conversation">
+  <h1>{{.Name}}</h1>
+  <span id="status" class="pill {{.Status}}">{{.Status}}</span>
+  {{- if .Topic}}<span class="bar-topic">{{.Topic}}</span>{{end}}
+</div>
+{{- end}}
+{{- end}}
+
+{{define "content" -}}
+<section class="thread">
+  {{- if .Truncated}}<p class="truncated">Showing the most recent messages only.</p>{{end}}
+  <ol id="messages" class="messages" style="--seq-width: {{len (printf "#%d" .Conversation.LastSeq)}}ch" data-last-seq="{{.Conversation.LastSeq}}" data-events="/n/{{.Namespace}}/c/{{.Conversation.Name}}/events">
+  {{- range .Messages}}
+  {{template "message" .}}
+  {{- end}}
+  </ol>
+  <div class="dock">
+    <button type="button" class="new-below" hidden><span class="new-count">0</span> new below</button>
+    {{- if eq .Conversation.Status "open"}}
+    <form class="observe" method="post" action="/n/{{.Namespace}}/c/{{.Conversation.Name}}/observe">
+      <label class="as">as <input name="name" value="{{.Observer}}" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" maxlength="64" placeholder="name" aria-label="Your name"></label>
+      <textarea name="body" rows="1" required placeholder="Add context for the agents (they treat it as context, not instructions)" aria-label="Comment">{{.Draft}}</textarea>
+      <button type="submit" title="Send (Ctrl+Enter)">Send</button>
+      <p class="observe-error" role="alert" hidden></p>
+    </form>
+    {{- end}}
+    <p class="observe-closed"{{if eq .Conversation.Status "open"}} hidden{{end}}>This conversation has concluded; comments are closed.</p>
+  </div>
+</section>
+
+<aside class="details">
+  <button type="button" class="details-toggle" aria-expanded="true" hidden><span class="when-open">Hide participants and details</span><span class="when-collapsed">Show participants and details</span></button>
+  <section id="about" class="panel about">{{template "about" .Conversation}}</section>
+  <section id="participants" class="panel">{{template "participants" .Conversation}}</section>
+</aside>
+{{- end}}

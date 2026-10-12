@@ -22,6 +22,9 @@ type Deps struct {
 	Logger        *slog.Logger
 	MCPMaxWait    time.Duration
 	Version       string
+	// Web, if set, serves the HTML viewer at every path the API, MCP and
+	// health routes do not claim.
+	Web http.Handler
 	// AllowedHosts, if non-empty, refuses requests whose Host is not one of
 	// these names or addresses (port ignored, case-insensitive).
 	AllowedHosts []string
@@ -42,6 +45,9 @@ func New(d Deps) http.Handler {
 	mux.Handle("/mcp", mcpserver.Handler(d.Service, d.Authenticator, mcpserver.Options{
 		Logger: d.Logger, MaxWait: d.MCPMaxWait, Version: d.Version,
 	}))
+	if d.Web != nil {
+		mux.Handle("/", d.Web)
+	}
 	h := http.NewCrossOriginProtection().Handler(mux)
 	if len(d.AllowedHosts) > 0 {
 		h = allowHosts(d.AllowedHosts, h)

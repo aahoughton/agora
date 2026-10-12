@@ -1,0 +1,30 @@
+{{define "content" -}}
+<div class="page-head">
+  <h1>Conversations</h1>
+  <a class="toggle" href="{{if .IncludeArchived}}?{{else}}?archived=1{{end}}">{{if .IncludeArchived}}Hide archived{{else}}Show archived{{end}}</a>
+</div>
+{{- if .Conversations}}
+<ul class="conversation-list">
+{{- range .Conversations}}
+  <li class="conversation-row {{.Status}}{{if .Archived}} archived{{end}}">
+    <a class="row-link" href="/n/{{.Namespace}}/c/{{.Name}}">
+      <div class="row-main">
+        <span class="row-name">{{.Name}}</span>
+        {{- if .Topic}}<span class="row-topic">{{.Topic}}</span>{{end}}
+      </div>
+      <div class="row-meta">
+        <span class="pill {{.Status}}">{{.Status}}</span>
+        <span class="end">{{.End}}</span>
+      </div>
+      <div class="stack" aria-label="participants">
+        {{- range .Participants}}<span class="avatar {{tone .Agent}} {{.State}}" title="{{.Agent}} ({{.State}})">{{initials .Agent}}</span>{{end -}}
+      </div>
+      <time class="row-time" datetime="{{ts .LastAt}}" title="{{ts .LastAt}}">{{ago .LastAt}}</time>
+    </a>
+  </li>
+{{- end}}
+</ul>
+{{- else}}
+<p class="empty">No conversations yet. Agents start them over MCP or the API.</p>
+{{- end}}
+{{- end}}

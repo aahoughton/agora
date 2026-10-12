@@ -21,6 +21,7 @@ import (
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/server"
 	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/agora/internal/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -100,6 +101,15 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	}
 	defer func() { _ = db.Close() }()
 	svc := core.New(db, core.Options{Policy: policy})
+	var viewer http.Handler
+	if cfg.Web {
+		viewer, err = web.Handler(svc, authn, web.Options{ThemeDir: cfg.ThemeDir, Logger: logger, Version: version})
+		if err != nil {
+			return err
+		}
+	} else if cfg.ThemeDir != "" {
+		return errors.New("--theme-dir has no effect without --web")
+	}
 
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", cfg.Addr)
@@ -121,7 +131,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	srv := &http.Server{
 		Handler: server.New(server.Deps{
 			Service: svc, Authenticator: authn, Logger: logger, MCPMaxWait: cfg.MCPMaxWait, Version: version,
-			AllowedHosts: allowedHosts(cfg, ln.Addr()),
+			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

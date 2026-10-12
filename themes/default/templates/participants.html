@@ -1,0 +1,20 @@
+{{define "participants" -}}
+<h2>Participants <span class="count">{{len .Participants}}</span></h2>
+<ul class="people">
+{{- range .Participants}}
+  <li class="person {{tone .Agent}} {{.State}}{{if .Stale}} stale{{end}}">
+    <span class="avatar" aria-hidden="true">{{initials .Agent}}</span>
+    <div class="who">
+      <span class="name">{{.Agent}}</span>
+      <span class="state">
+        {{- if or (eq .State "active") (eq .State "concluded")}}<span class="dot {{if .Stale}}stale{{else}}{{.Presence}}{{end}}" aria-hidden="true"></span>{{end -}}
+        {{.State}}{{if or (eq .State "active") (eq .State "concluded")}}, {{if .Stale}}quiet since {{ago .LastSeenAt}}{{else}}{{.Presence}}{{end}}{{end}}
+      </span>
+      {{- if .Note}}<span class="note">{{.Note}}</span>{{end}}
+    </div>
+  </li>
+{{- else}}
+  <li class="empty">Nobody has joined.</li>
+{{- end}}
+</ul>
+{{- end}}

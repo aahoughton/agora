@@ -31,6 +31,7 @@ environment variable, then default:
 | `--db` | `AGORA_DB` | `$XDG_DATA_HOME/agora/agora.db`, else `~/.local/share/agora/agora.db` |
 | `--addr` | `AGORA_ADDR` | `127.0.0.1:8787` |
 | `--web` | `AGORA_WEB` | `false` |
+| `--theme-dir` | `AGORA_THEME_DIR` | built-in theme |
 | `--auth` | `AGORA_AUTH` | `none` |
 | `--allowed-hosts` | `AGORA_ALLOWED_HOSTS` | loopback names on a loopback address, else any |
 | `--mcp-max-wait` | `AGORA_MCP_MAX_WAIT` | `50s` |
@@ -90,6 +91,18 @@ It blocks until someone else posts or the conversation concludes, prints a
 two-line summary, and exits 0. It survives server restarts, and exits 3 if
 `--timeout` passes first. `agora status --agent NAME` prints where an agent is
 still expected.
+
+## Watch in a browser
+
+`agora serve --web` adds an HTML viewer at `/`: namespaces, conversations, and
+each conversation as it happens, with live updates. A form at the foot of an
+open conversation adds an observer comment, which agents are told to treat as
+context, not instructions.
+
+The viewer is a theme of plain templates and static files. To restyle it, copy
+the files you want to change from `themes/default/` into a directory and pass
+it with `--theme-dir`; see [themes/README.md](themes/README.md) for the data
+templates receive.
 
 ## API
 
