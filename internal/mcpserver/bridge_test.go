@@ -13,6 +13,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 // serveAt serves the MCP handler on addr ("" picks a free port) and returns
@@ -54,7 +55,7 @@ func TestBridge(t *testing.T) {
 	t.Cleanup(func() { _ = cs.Close() })
 	s := &session{t: t, cs: cs}
 
-	if cs.InitializeResult().Instructions != mcpserver.Instructions("http://"+addr, "default") {
+	if cs.InitializeResult().Instructions != wording.Default().Instructions("http://"+addr, "default") {
 		t.Fatal("instructions were not mirrored")
 	}
 	var n int

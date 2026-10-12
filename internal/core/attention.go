@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 // You values in a Standing.
@@ -72,35 +74,35 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 		return Standing{}, err
 	}
 
-	var advice string
+	var advice string // a wording phrase key
 	switch {
 	case c.Status == StatusConcluded && st.Unread > 0:
-		st.Next, advice = NextRead, "the conversation has concluded; read the remaining messages, then stop"
+		st.Next, advice = NextRead, wording.AdviceReadAfterConclusion
 	case c.Status == StatusConcluded:
-		st.Next, advice = NextDone, "the conversation has concluded; you are free to stop"
+		st.Next, advice = NextDone, wording.AdviceDone
 	case canClose:
-		st.Next, advice = NextClose, "everyone else has concluded; read their conclusions, then close the conversation"
+		st.Next, advice = NextClose, wording.AdviceClose
 	case (st.You == YouLeft || st.You == YouNotJoined) && c.End == EndCoordinator && agent == c.CreatedBy:
-		st.Next, advice = NextJoin, "you started this conversation and stepped away; rejoin to follow along, or check status later to learn when to close it"
+		st.Next, advice = NextJoin, wording.AdviceCoordinatorAway
 	case st.You == YouNotJoined:
-		st.Next, advice = NextJoin, "join to take part"
+		st.Next, advice = NextJoin, wording.AdviceJoin
 	case st.You == YouLeft || st.You == YouDropped:
-		st.Next, advice = NextJoin, "you left; rejoin to take part"
+		st.Next, advice = NextJoin, wording.AdviceRejoin
 	case st.Unread > 0:
-		st.Next, advice = NextRead, "read the new messages, then reply or wait"
+		st.Next, advice = NextRead, wording.AdviceRead
 	case st.You == YouConcluded:
-		st.Next, advice = NextWait, "you concluded; wait in case someone replies or withdraws"
+		st.Next, advice = NextWait, wording.AdviceWaitConcluded
 	case st.Expected:
-		st.Next, advice = NextWait, "wait for replies; do not end your turn while you are expected"
+		st.Next, advice = NextWait, wording.AdviceWaitExpected
 	default:
-		st.Next, advice = NextWait, "wait for replies, or leave when you are done"
+		st.Next, advice = NextWait, wording.AdviceWaitFree
 	}
 	you := st.You
 	if st.Expected {
 		you += ", expected"
 	}
 	st.Line = fmt.Sprintf("%s: %s; you: %s; unread: %d (%d replies to you); next: %s (%s)",
-		c.Name, c.Status, you, st.Unread, st.RepliesToYou, st.Next, advice)
+		c.Name, c.Status, you, st.Unread, st.RepliesToYou, st.Next, s.opts.Wording.Phrase(advice, nil))
 	return st, nil
 }
 

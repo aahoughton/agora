@@ -9,6 +9,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 // Defaults for Options fields left zero.
@@ -32,6 +34,8 @@ type Options struct {
 	StaleAfter time.Duration
 	// MaxWaiters caps concurrent waits per conversation.
 	MaxWaiters int
+	// Wording supplies the advice in standing lines.
+	Wording *wording.Wording
 }
 
 // Service is the domain layer. It is safe for concurrent use.
@@ -60,6 +64,9 @@ func New(db *sql.DB, opts Options) *Service {
 	}
 	if opts.MaxWaiters == 0 {
 		opts.MaxWaiters = DefaultMaxWaiters
+	}
+	if opts.Wording == nil {
+		opts.Wording = wording.Default()
 	}
 	return &Service{db: db, opts: opts, hub: hub{subs: map[int64]chan struct{}{}, waiters: map[int64]int{}}}
 }

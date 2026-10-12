@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 // Bridge serves MCP on local (normally stdio) by relaying to the server's
@@ -84,7 +86,7 @@ func (r *remote) close() {
 func (r *remote) forward(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sess, err := r.session(ctx)
 	if err != nil {
-		return bridgeFailure(fmt.Sprintf("agora server unreachable at %s (%v); retry the call shortly", r.endpoint, err)), nil
+		return bridgeFailure(unreachableAdvice(r.endpoint, err)), nil
 	}
 	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: req.Params.Name, Arguments: req.Params.Arguments})
 	if err == nil {
@@ -98,18 +100,23 @@ func (r *remote) forward(ctx context.Context, req *mcp.CallToolRequest) (*mcp.Ca
 	return bridgeFailure(lostCallAdvice(req.Params.Name, err)), nil
 }
 
+// unreachableAdvice tells the agent the server could not be reached; the
+// failure is reported as a tool result, not a protocol error.
+func unreachableAdvice(endpoint string, err error) string {
+	return wording.Default().Phrase(wording.BridgeUnreachable, map[string]any{"Endpoint": endpoint, "Err": err.Error()})
+}
+
 // lostCallAdvice tells the agent how to recover from a call whose outcome is
 // unknown.
 func lostCallAdvice(tool string, err error) string {
-	prefix := fmt.Sprintf("lost the connection to the agora server during %s (%v). ", tool, err)
+	key := wording.BridgeLostOther
 	switch tool {
 	case "read", "wait": // wait may deliver messages inline and mark them read
-		return prefix + "The server may already have marked those messages read: call read with after set to the last seq you actually saw."
+		key = wording.BridgeLostRead
 	case "say", "conclude", "leave", "close", "start", "join":
-		return prefix + "It may or may not have been applied. Call read with after set to the last seq you saw to check before retrying."
-	default:
-		return prefix + "Retry the call."
+		key = wording.BridgeLostWrite
 	}
+	return wording.Default().Phrase(key, map[string]any{"Tool": tool, "Err": err.Error()})
 }
 
 func bridgeFailure(msg string) *mcp.CallToolResult {

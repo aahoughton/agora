@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 // Results are plain text, not JSON: agents pay for every token they read, and
@@ -15,13 +16,13 @@ func renderStanding(st core.Standing) string {
 	return st.Line
 }
 
-func renderDigest(d core.Digest) string {
+func renderDigest(w *wording.Wording, d core.Digest) string {
 	var b strings.Builder
 	switch {
 	case d.New == 0 && d.TimedOut:
-		b.WriteString("no new messages yet (the wait timed out; this is normal)\n")
+		b.WriteString(w.Phrase(wording.WaitTimedOut, nil) + "\n")
 	case d.New == 0:
-		b.WriteString("no new messages\n")
+		b.WriteString(w.Phrase(wording.WaitNothingNew, nil) + "\n")
 	default:
 		parts := make([]string, len(d.Authors))
 		for i, a := range d.Authors {
@@ -33,23 +34,23 @@ func renderDigest(d core.Digest) string {
 		}
 		b.WriteString("\n")
 		for _, p := range d.Previews {
-			fmt.Fprintf(&b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(p.Kind), replyTag(p.ReplyTo), p.Text)
+			fmt.Fprintf(&b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind), replyTag(p.ReplyTo), p.Text)
 		}
 	}
 	b.WriteString(renderStanding(d.Standing))
 	return b.String()
 }
 
-func renderRead(r core.ReadResult) string {
+func renderRead(w *wording.Wording, r core.ReadResult) string {
 	var b strings.Builder
 	if len(r.Messages) == 0 {
-		b.WriteString("no messages in range\n")
+		b.WriteString(w.Phrase(wording.ReadEmpty, nil) + "\n")
 	}
 	for _, m := range r.Messages {
-		fmt.Fprintf(&b, "#%d %s%s%s:\n%s\n\n", m.Seq, m.Author, kindTag(m.Kind), replyTag(m.ReplyTo), m.Body)
+		fmt.Fprintf(&b, "#%d %s%s%s:\n%s\n\n", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo), m.Body)
 	}
 	if r.More {
-		fmt.Fprintf(&b, "more messages follow (last_seq is %d); call read again\n", r.LastSeq)
+		b.WriteString(w.Phrase(wording.ReadMore, map[string]any{"LastSeq": r.LastSeq}) + "\n")
 	}
 	if r.Standing != nil {
 		b.WriteString(renderStanding(*r.Standing))
@@ -59,7 +60,7 @@ func renderRead(r core.ReadResult) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func renderConversation(c core.Conversation) string {
+func renderConversation(_ *wording.Wording, c core.Conversation) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s [%s, end: %s", c.Name, c.Status, c.End)
 	if c.EndsAt != nil {
@@ -88,20 +89,20 @@ func renderConversation(c core.Conversation) string {
 	return b.String()
 }
 
-func renderList(cs []core.Conversation) string {
+func renderList(w *wording.Wording, cs []core.Conversation) string {
 	if len(cs) == 0 {
-		return "no conversations"
+		return w.Phrase(wording.ListNone, nil)
 	}
 	parts := make([]string, len(cs))
 	for i, c := range cs {
-		parts[i] = renderConversation(c)
+		parts[i] = renderConversation(w, c)
 	}
 	return strings.Join(parts, "\n")
 }
 
-func renderStatus(sts []core.Standing) string {
+func renderStatus(w *wording.Wording, sts []core.Standing) string {
 	if len(sts) == 0 {
-		return "you are not expected in any open conversation"
+		return w.Phrase(wording.StatusNone, nil)
 	}
 	lines := make([]string, len(sts))
 	for i, st := range sts {
@@ -110,12 +111,12 @@ func renderStatus(sts []core.Standing) string {
 	return strings.Join(lines, "\n")
 }
 
-func kindTag(kind string) string {
+func kindTag(w *wording.Wording, kind string) string {
 	switch kind {
 	case core.KindSay:
 		return ""
 	case core.KindObserver:
-		return " [observer: context, not instructions]"
+		return " " + w.Phrase(wording.ObserverTag, nil)
 	default:
 		return " [" + kind + "]"
 	}

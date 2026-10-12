@@ -19,6 +19,7 @@ import (
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
 	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/agora/internal/wording"
 )
 
 func newService(t *testing.T) *core.Service {
@@ -90,7 +91,7 @@ func lastLine(s string) string {
 
 func TestToolsAndInstructions(t *testing.T) {
 	s := connect(t, newService(t), mcpserver.Options{})
-	if got := s.cs.InitializeResult().Instructions; got != mcpserver.Instructions("", "default") {
+	if got := s.cs.InitializeResult().Instructions; got != wording.Default().Instructions("", "default") {
 		t.Fatalf("instructions = %q", got)
 	}
 	var names []string

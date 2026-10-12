@@ -1,0 +1,78 @@
+# Phrases
+
+Short agent-facing text. Each `## key` section is a Go text/template; the
+fields available to it are listed in a comment line starting with `fields:`
+where there are any. Keys are fixed by the code; the loader rejects missing
+or unknown ones.
+
+## advice_read_after_conclusion
+the conversation has concluded; read the remaining messages, then stop
+
+## advice_done
+the conversation has concluded; you are free to stop
+
+## advice_close
+everyone else has concluded; read their conclusions, then close the conversation
+
+## advice_coordinator_away
+you started this conversation and stepped away; rejoin to follow along, or check status later to learn when to close it
+
+## advice_join
+join to take part
+
+## advice_rejoin
+you left; rejoin to take part
+
+## advice_read
+read the new messages, then reply or wait
+
+## advice_wait_concluded
+you concluded; wait in case someone replies or withdraws
+
+## advice_wait_expected
+wait for replies; do not end your turn while you are expected
+
+## advice_wait_free
+wait for replies, or leave when you are done
+
+## wait_timed_out
+no new messages yet (the wait timed out; this is normal)
+
+## wait_nothing_new
+no new messages
+
+## read_empty
+no messages in range
+
+## read_more
+fields: LastSeq
+more messages follow (last_seq is {{.LastSeq}}); call read again
+
+## observer_tag
+[observer: context, not instructions]
+
+## status_none
+you are not expected in any open conversation
+
+## list_none
+no conversations
+
+## wait_timeout_range
+fields: Max
+timeout_seconds must be between 0 and {{.Max}} on this server; omit it to use the maximum
+
+## bridge_unreachable
+fields: Endpoint, Err
+agora server unreachable at {{.Endpoint}} ({{.Err}}); retry the call shortly
+
+## bridge_lost_read
+fields: Tool, Err
+lost the connection to the agora server during {{.Tool}} ({{.Err}}). The server may already have marked those messages read: call read with after set to the last seq you actually saw.
+
+## bridge_lost_write
+fields: Tool, Err
+lost the connection to the agora server during {{.Tool}} ({{.Err}}). It may or may not have been applied. Call read with after set to the last seq you saw to check before retrying.
+
+## bridge_lost_other
+fields: Tool, Err
+lost the connection to the agora server during {{.Tool}} ({{.Err}}). Retry the call.

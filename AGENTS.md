@@ -22,6 +22,7 @@ internal/core/      domain rules: namespaces, conversations, messages, attention
 internal/auth/      request -> principal, and the policy for each auth mode
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
+internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
 internal/server/    HTTP handler assembly
 ```
@@ -35,6 +36,14 @@ test fails if routes and spec disagree.
 
 MCP tool results are plain text that ends with the standing line. Keep them
 short: agents pay for every token, and the last line is what they act on.
+
+Agent-facing wording (server instructions, tool and parameter descriptions,
+status-line advice, result phrases) lives in `internal/wording/text/`, not in
+Go code. The loader rejects missing or unknown keys, and the MCP server refuses
+to start if `tools.md` and the registered tools disagree.
+`internal/mcpserver/testdata/agent-text.golden` snapshots everything an agent
+sees; after a wording change, run `go test ./internal/mcpserver -update` and
+review the diff to that file alongside the change.
 
 More packages arrive as the API, MCP, HTML and TUI surfaces land; keep this list
 current when adding one.
