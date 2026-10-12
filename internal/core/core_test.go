@@ -713,6 +713,10 @@ func TestPolicyIsConsulted(t *testing.T) {
 		"Read":   func() error { _, err := f.svc.Read(ctx, p, "default", "c", core.ReadParams{}); return err },
 		"Wait":   func() error { _, err := f.svc.Wait(ctx, p, "default", "c", core.WaitParams{Agent: "a"}); return err },
 		"Status": func() error { _, err := f.svc.Status(ctx, p, "default", "a"); return err },
+		"StandingOf": func() error {
+			_, err := f.svc.StandingOf(ctx, p, "default", "c", "a")
+			return err
+		},
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) { wantCode(t, call(), core.CodeForbidden) })
@@ -870,6 +874,24 @@ func TestWaitersAreCapped(t *testing.T) {
 
 	// Slots are released when waits end.
 	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a3"}))
+}
+
+func TestStandingOf(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice")
+	f.say(t, "c", "alice", "hello")
+
+	st := must[core.Standing](t)(f.svc.StandingOf(ctx, f.p, "default", "c", "alice"))
+	if st.You != core.YouActive || !st.Expected {
+		t.Fatalf("alice = %+v", st)
+	}
+	st = must[core.Standing](t)(f.svc.StandingOf(ctx, f.p, "default", "c", "bob"))
+	if st.You != core.YouNotJoined || st.Next != core.NextJoin {
+		t.Fatalf("bob = %+v", st)
+	}
+	_, err := f.svc.StandingOf(ctx, f.p, "default", "nope", "bob")
+	wantCode(t, err, core.CodeConversationNotFound)
 }
 
 func TestCoordinatorWhoNeverJoinedGetsCoordinatorAdvice(t *testing.T) {

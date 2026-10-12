@@ -347,3 +347,19 @@ func (s *Service) Status(ctx context.Context, p Principal, ns, agent string) ([]
 	}
 	return out, nil
 }
+
+// StandingOf returns the agent's standing in one conversation, whether or
+// not the agent has joined it.
+func (s *Service) StandingOf(ctx context.Context, p Principal, ns, name, agent string) (Standing, error) {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+		return Standing{}, err
+	}
+	if err := checkName("agent", agent); err != nil {
+		return Standing{}, err
+	}
+	c, err := s.loadConvRead(ctx, ns, name)
+	if err != nil {
+		return Standing{}, err
+	}
+	return s.standing(ctx, s.db, c, agent)
+}
