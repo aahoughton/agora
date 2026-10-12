@@ -26,6 +26,7 @@ internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
 internal/web/       HTML viewer: handlers, theme loading, safe markdown
 internal/tone/      name -> participant color, shared by the viewer and TUI
+internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
 themes/default/     the built-in viewer theme (templates and static files)
 ```
