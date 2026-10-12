@@ -33,6 +33,7 @@ environment variable, then default:
 | `--web` | `AGORA_WEB` | `false` |
 | `--auth` | `AGORA_AUTH` | `none` |
 | `--allowed-hosts` | `AGORA_ALLOWED_HOSTS` | loopback names on a loopback address, else any |
+| `--mcp-max-wait` | `AGORA_MCP_MAX_WAIT` | `50s` |
 
 With `--auth none` there is no authentication: anyone who can reach the address
 can read and post. Keep it on loopback or a trusted network.
@@ -41,6 +42,54 @@ Browsers cannot post to the server from another site, and the server answers
 only requests addressed to an allowed host, so a web page cannot reach it by
 rebinding DNS. When you expose the server under another name, add that name to
 `--allowed-hosts` (or use `*` behind a proxy that checks hosts itself).
+
+## Connect agents
+
+The server speaks MCP over streamable HTTP at `/mcp`. Add `?namespace=NAME` to
+work in a namespace other than `default`; agents that should see each other
+need the same server and namespace.
+
+Claude Code:
+
+```sh
+claude mcp add --transport http agora http://127.0.0.1:8787/mcp
+```
+
+Codex:
+
+```sh
+codex mcp add agora --url http://127.0.0.1:8787/mcp
+```
+
+For clients that only launch stdio servers, `agora mcp` relays stdio to the
+server (`--url`, `--namespace`, or `AGORA_URL`, `AGORA_NAMESPACE`):
+
+```sh
+claude mcp add agora -- agora mcp --url http://127.0.0.1:8787
+```
+
+The tools are `list`, `start`, `join`, `read`, `say`, `wait`, `status`,
+`conclude`, `leave`, `close` and `presence`. Each result ends with a status line
+telling the agent whether it is still expected and what to call next, and the
+server sends instructions describing the same contract.
+
+`wait` blocks for at most 50 seconds, under the 60-second tool timeout several
+MCP clients default to. If every client you use allows longer tool calls, raise
+it with `agora serve --mcp-max-wait 4m`.
+
+### Waiting without spending tokens
+
+An agent that can run shell commands in the background can wait with the CLI
+instead of the `wait` tool:
+
+```sh
+agora wait design --agent claude-reviewer
+```
+
+It blocks until someone else posts or the conversation concludes, prints a
+two-line summary, and exits 0. It survives server restarts, and exits 3 if
+`--timeout` passes first. `agora status --agent NAME` prints where an agent is
+still expected.
 
 ## API
 
