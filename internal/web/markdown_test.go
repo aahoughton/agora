@@ -43,18 +43,7 @@ func TestMarkdownIsSafe(t *testing.T) {
 	}
 }
 
-func TestToneAndInitials(t *testing.T) {
-	first, again := tone("claude-implementer"), tone("claude-implementer")
-	if first != again {
-		t.Fatal("tone is not stable")
-	}
-	seen := map[string]bool{}
-	for _, n := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
-		seen[tone(n)] = true
-	}
-	if len(seen) < 4 {
-		t.Fatalf("tones barely vary: %v", seen)
-	}
+func TestInitials(t *testing.T) {
 	for in, want := range map[string]string{"claude-implementer": "CI", "aah": "A", "codex_tests.v2": "CT", "x y z": "XY", "--": "?"} {
 		if got := initials(in); got != want {
 			t.Errorf("initials(%q) = %q, want %q", in, got, want)

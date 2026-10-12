@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"html/template"
 	"io"
 	"io/fs"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/tone"
 	"github.com/aahoughton/agora/themes"
 )
 
@@ -141,7 +141,7 @@ func (v *viewer) funcs() template.FuncMap {
 		"clock":    func(t any) string { return timeOf(t).In(v.opts.Location).Format("15:04") },
 		"ago":      func(t any) string { return ago(v.opts.Now().Sub(timeOf(t))) },
 		"until":    func(t any) string { return until(timeOf(t).Sub(v.opts.Now())) },
-		"tone":     tone,
+		"tone":     toneClass,
 		"initials": initials,
 		"datetime": func(t any) string { return timeOf(t).In(v.opts.Location).Format("Jan 2 15:04") },
 	}
@@ -172,15 +172,10 @@ func ago(d time.Duration) string {
 	}
 }
 
-// Tones is how many participant colors a theme defines (tone-0 ...).
-const Tones = 8
-
-// tone returns a stable color class for a name, so the same participant has
-// the same color on every page.
-func tone(name string) string {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(name))
-	return "tone-" + strconv.Itoa(int(h.Sum32()%Tones))
+// toneClass returns a stable color class for a name, so the same participant has
+// the same color on every page and in the TUI.
+func toneClass(name string) string {
+	return "tone-" + strconv.Itoa(tone.Of(name))
 }
 
 // initials returns up to two letters for an avatar: the first letter of the
