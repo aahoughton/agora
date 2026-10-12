@@ -1,0 +1,28 @@
+# Build output
+/bin/
+/dist/
+/agora
+
+# Local data: databases, WAL/SHM sidecars, mounted data dirs
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/data/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test output
+coverage.out
+*.test
