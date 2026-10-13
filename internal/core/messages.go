@@ -426,6 +426,8 @@ func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, afte
 
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
+	recheck := time.NewTicker(s.opts.RecheckEvery)
+	defer recheck.Stop()
 	timedOut := false
 	for {
 		ch := s.hub.channel(c.id)
@@ -436,10 +438,17 @@ func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, afte
 			return ReadResult{}, err
 		}
 		if c.LastSeq > after {
+			// The caller may have lost access while blocked.
+			if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+				return ReadResult{}, err
+			}
 			out, _, err := s.page(ctx, s.db, c, after, FollowLimit, "")
 			return out, err
 		}
 		if timedOut {
+			if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+				return ReadResult{}, err
+			}
 			return ReadResult{Messages: []Message{}, LastSeq: c.LastSeq}, nil
 		}
 		// Wake at a pending timebox deadline so its expiry is reported.
@@ -452,6 +461,10 @@ func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, afte
 		select {
 		case <-ch:
 		case <-expiry:
+		case <-recheck.C:
+			if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+				return ReadResult{}, err
+			}
 		case <-deadline.C:
 			timedOut = true
 		case <-ctx.Done():

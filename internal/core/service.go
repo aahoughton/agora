@@ -20,6 +20,7 @@ const (
 	DefaultStaleAfter   = 10 * time.Minute
 	DefaultMaxWaiters   = 64
 	DefaultMaxWatchers  = 256
+	DefaultRecheckEvery = time.Minute
 )
 
 // Options configure a Service. Zero values select the defaults.
@@ -39,6 +40,10 @@ type Options struct {
 	MaxWatchers int
 	// Wording supplies the advice in standing lines.
 	Wording *wording.Wording
+	// RecheckEvery is how often a blocked Wait or Follow re-checks that
+	// its caller is still allowed, so revoking a credential or a
+	// membership cuts it off. Both also re-check before returning.
+	RecheckEvery time.Duration
 }
 
 // Service is the domain layer. It is safe for concurrent use.
@@ -73,6 +78,9 @@ func New(db *sql.DB, opts Options) *Service {
 	}
 	if opts.MaxWatchers == 0 {
 		opts.MaxWatchers = DefaultMaxWatchers
+	}
+	if opts.RecheckEvery == 0 {
+		opts.RecheckEvery = DefaultRecheckEvery
 	}
 	s := &Service{db: db, opts: opts, hub: hub{
 		subs: map[int64]chan struct{}{}, waiters: map[int64]int{}, watchers: map[int64]int{},

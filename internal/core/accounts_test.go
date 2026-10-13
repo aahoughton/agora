@@ -17,7 +17,13 @@ type tokenFixture struct {
 
 func newTokenFixture(t *testing.T) *tokenFixture {
 	t.Helper()
-	f := newFixture(t, core.Options{Policy: core.RolePolicy()})
+	return newTokenFixtureWith(t, core.Options{})
+}
+
+func newTokenFixtureWith(t *testing.T, opts core.Options) *tokenFixture {
+	t.Helper()
+	opts.Policy = core.RolePolicy()
+	f := newFixture(t, opts)
 	tok := must[core.IssuedToken](t)(f.svc.Bootstrap(t.Context(), "root"))
 	return &tokenFixture{fixture: f, admin: f.login(t, tok.Secret)}
 }

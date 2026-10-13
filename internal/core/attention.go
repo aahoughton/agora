@@ -231,6 +231,8 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
+	recheck := time.NewTicker(s.opts.RecheckEvery)
+	defer recheck.Stop()
 
 	var d Digest
 	for {
@@ -245,6 +247,11 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 		select {
 		case <-ch:
 			continue
+		case <-recheck.C:
+			if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
+				return Digest{}, err
+			}
+			continue
 		case <-timer.C:
 			d, err = s.digest(ctx, ns, name, wp.Agent, after)
 			if err != nil {
@@ -255,6 +262,10 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 			return Digest{}, ctx.Err()
 		}
 		break
+	}
+	// The caller may have lost access while blocked.
+	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
+		return Digest{}, err
 	}
 
 	if wp.InlineBytes > 0 && wp.After == nil && d.New > 0 {
