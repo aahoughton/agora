@@ -240,6 +240,23 @@ func TestFailedLoginsAreLimited(t *testing.T) {
 	}
 }
 
+func TestSignInsAndFailuresAreRecorded(t *testing.T) {
+	act := auth.NewActivity(nil, nil)
+	e := newTokenEnv(t, web.Options{Activity: act})
+	e.postRaw("/login", url.Values{"token": {"agora_wrong"}})
+	e.postRaw("/login", url.Values{"token": {e.token}})
+	if code, _ := e.get("/n/default/c/c"); code != http.StatusOK {
+		t.Fatalf("page = %d", code)
+	}
+	callers, failures := act.Snapshot()
+	if len(callers) != 1 || callers[0].Surface != auth.SurfaceWeb || callers[0].AccountID == 0 {
+		t.Fatalf("callers = %v", callers)
+	}
+	if len(failures) != 1 || failures[0].Count != 1 {
+		t.Fatalf("failures = %v", failures)
+	}
+}
+
 func TestRateLimitedCommentsSayWhenToRetry(t *testing.T) {
 	// The fixture's setup takes four of root's writes; pat has its own four.
 	e := newTokenEnvWith(t, web.Options{}, core.Options{WriteLimit: 4})

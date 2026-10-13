@@ -16,7 +16,7 @@ import (
 // A request with no credentials at all is not a failure.
 type Failures struct {
 	lim     *ratelimit.Limiter
-	trusted []netip.Prefix
+	proxies Proxies
 }
 
 // NewFailures allows perMinute failures per client address. The client
@@ -27,7 +27,7 @@ func NewFailures(perMinute int, trusted []netip.Prefix, now func() time.Time) *F
 	if perMinute <= 0 {
 		return nil
 	}
-	return &Failures{lim: ratelimit.New(perMinute, time.Minute, 0, now), trusted: trusted}
+	return &Failures{lim: ratelimit.New(perMinute, time.Minute, 0, now), proxies: trusted}
 }
 
 // Check refuses a client that has used up its failures.
@@ -35,7 +35,7 @@ func (f *Failures) Check(r *http.Request) error {
 	if f == nil {
 		return nil
 	}
-	if ok, wait := f.lim.Check(f.ClientIP(r)); !ok {
+	if ok, wait := f.lim.Check(f.proxies.ClientIP(r)); !ok {
 		return core.RateLimited("failed sign-ins from this address", wait)
 	}
 	return nil
@@ -44,18 +44,22 @@ func (f *Failures) Check(r *http.Request) error {
 // Fail records a failed authentication.
 func (f *Failures) Fail(r *http.Request) {
 	if f != nil {
-		f.lim.Allow(f.ClientIP(r))
+		f.lim.Allow(f.proxies.ClientIP(r))
 	}
 }
 
-// ClientIP is the address a request came from.
-func (f *Failures) ClientIP(r *http.Request) string {
+// Proxies are the addresses of trusted reverse proxies.
+type Proxies []netip.Prefix
+
+// ClientIP is the address a request came from: the connection's, unless
+// that is a trusted proxy, in which case it comes from X-Forwarded-For.
+func (ps Proxies) ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
 	addr, err := netip.ParseAddr(host)
-	if err != nil || !f.isTrusted(addr) {
+	if err != nil || !ps.trust(addr) {
 		return host
 	}
 	// Walk X-Forwarded-For from the right: the first address that is not
@@ -66,15 +70,15 @@ func (f *Failures) ClientIP(r *http.Request) string {
 		if err != nil || hop.Zone() != "" { // a zone is free text
 			break
 		}
-		if !f.isTrusted(hop) {
+		if !ps.trust(hop) {
 			return hop.String()
 		}
 	}
 	return host
 }
 
-func (f *Failures) isTrusted(a netip.Addr) bool {
-	for _, p := range f.trusted {
+func (ps Proxies) trust(a netip.Addr) bool {
+	for _, p := range ps {
 		if p.Contains(a.Unmap()) {
 			return true
 		}
@@ -86,10 +90,12 @@ func (f *Failures) isTrusted(a netip.Addr) bool {
 // client address has had too many, further rejected credentials from it
 // get rate_limited instead of unauthorized. A valid credential always gets
 // through, so one client failing cannot lock out others behind the same
-// address.
+// address. Failures may be nil, which limits nothing. Every rejected
+// credential is also recorded in Activity, if set.
 type Limited struct {
 	Next     Authenticator
 	Failures *Failures
+	Activity *Activity
 }
 
 // Authenticate implements Authenticator.
@@ -98,6 +104,7 @@ func (l Limited) Authenticate(r *http.Request) (core.Principal, error) {
 	if core.CodeOf(err) != core.CodeUnauthorized || !presented(r) {
 		return p, err
 	}
+	l.Activity.Failed(r)
 	if cerr := l.Failures.Check(r); cerr != nil {
 		return core.Principal{}, cerr
 	}

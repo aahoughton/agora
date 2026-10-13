@@ -34,6 +34,8 @@ type Deps struct {
 	// BodyReadTimeout bounds how long a client may take to send a request
 	// body, on every route; default api.DefaultBodyReadTimeout.
 	BodyReadTimeout time.Duration
+	// Activity, if set, records the callers of the API and MCP.
+	Activity *auth.Activity
 }
 
 // New returns the root handler: GET /healthz, the /v1 JSON API, and MCP at
@@ -47,9 +49,9 @@ func New(d Deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	api.Register(mux, d.Service, d.Authenticator, api.Options{Logger: d.Logger, AuthMode: d.AuthMode, Version: d.Version})
+	api.Register(mux, d.Service, d.Authenticator, api.Options{Logger: d.Logger, AuthMode: d.AuthMode, Version: d.Version, Activity: d.Activity})
 	mux.Handle("/mcp", mcpserver.Handler(d.Service, d.Authenticator, mcpserver.Options{
-		Logger: d.Logger, MaxWait: d.MCPMaxWait, Version: d.Version,
+		Logger: d.Logger, MaxWait: d.MCPMaxWait, Version: d.Version, Activity: d.Activity,
 	}))
 	if d.Web != nil {
 		mux.Handle("/", d.Web)

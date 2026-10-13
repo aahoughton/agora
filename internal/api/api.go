@@ -40,6 +40,8 @@ type Options struct {
 	// AuthMode and Version are reported by GET /v1/whoami.
 	AuthMode string
 	Version  string
+	// Activity, if set, records each authenticated caller.
+	Activity *auth.Activity
 }
 
 type handler struct {
@@ -49,6 +51,7 @@ type handler struct {
 	bodyTimeout time.Duration
 	authMode    string
 	version     string
+	activity    *auth.Activity
 }
 
 type route struct {
@@ -104,12 +107,13 @@ func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, o
 	}
 	h := &handler{
 		svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout,
-		authMode: opts.AuthMode, version: opts.Version,
+		authMode: opts.AuthMode, version: opts.Version, activity: opts.Activity,
 	}
 	for _, rt := range routes {
 		mux.HandleFunc(rt.method+" "+rt.pattern, func(w http.ResponseWriter, r *http.Request) {
 			p, err := h.authn.Authenticate(r)
 			if err == nil {
+				h.activity.Seen(r, p, auth.SurfaceAPI)
 				err = rt.fn(h, w, r, p)
 			}
 			if err != nil {

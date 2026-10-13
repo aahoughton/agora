@@ -21,7 +21,7 @@ cmd/agora/          the single binary and its subcommands
 internal/config/    flag > env > default resolution
 internal/store/     SQLite open, pragmas, embedded migrations
 internal/core/      domain rules: namespaces, conversations, messages, attention
-internal/auth/      request -> principal (bearer tokens, session cookies), the policy for each auth mode, failed-auth limits
+internal/auth/      request -> principal (bearer tokens, session cookies), the policy for each auth mode, failed-auth limits, recent callers (in memory)
 internal/ratelimit/ token buckets per key, bounded
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge

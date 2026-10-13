@@ -200,3 +200,30 @@ func TestSlowBodiesAreCutOff(t *testing.T) {
 		t.Fatal("the stalled body was not cut off")
 	}
 }
+
+func TestCallersAreRecorded(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	act := auth.NewActivity(nil, nil)
+	srv := httptest.NewServer(New(Deps{
+		Service: core.New(db, core.Options{}), Authenticator: auth.None{},
+		Logger: slog.New(slog.DiscardHandler), Activity: act,
+	}))
+	t.Cleanup(srv.Close)
+
+	send(t, http.MethodGet, srv.URL+"/v1/namespaces", "", map[string]string{"User-Agent": "test-api"})
+	send(t, http.MethodPost, srv.URL+"/mcp", "{}", map[string]string{"User-Agent": "test-mcp", "Content-Type": "application/json"})
+	send(t, http.MethodGet, srv.URL+"/healthz", "", map[string]string{"User-Agent": "test-health"})
+
+	callers, _ := act.Snapshot()
+	got := map[string]string{}
+	for _, c := range callers {
+		got[c.Client] = c.Surface
+	}
+	if len(got) != 2 || got["test-api"] != auth.SurfaceAPI || got["test-mcp"] != auth.SurfaceMCP {
+		t.Fatalf("callers = %v", callers)
+	}
+}

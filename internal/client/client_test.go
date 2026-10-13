@@ -51,6 +51,29 @@ func TestErrorDecoding(t *testing.T) {
 	}
 }
 
+func TestUserAgent(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.UserAgent())
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	c, err := New(srv.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Health(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	c.SetUserAgent("agora-tui")
+	if err := c.Health(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != DefaultUserAgent || got[1] != "agora-tui" {
+		t.Fatalf("user agents = %q", got)
+	}
+}
+
 func TestRedirectsStayOnTheServer(t *testing.T) {
 	leaked := false
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

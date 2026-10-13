@@ -28,6 +28,7 @@ type guard struct {
 	ttl        time.Duration
 	perAccount int
 	total      int
+	activity   *auth.Activity
 
 	mu     sync.Mutex
 	owners map[string]owner
@@ -60,6 +61,7 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
+	g.activity.Seen(r, p, auth.SurfaceMCP)
 	if sid := r.Header.Get(sessionHeader); sid != "" {
 		switch g.check(sid, p) {
 		case sessionUnknown:

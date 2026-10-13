@@ -21,10 +21,15 @@ import (
 
 // Client talks to one agora server.
 type Client struct {
-	base  *url.URL
-	http  *http.Client
-	token string
+	base      *url.URL
+	http      *http.Client
+	token     string
+	userAgent string
 }
+
+// DefaultUserAgent identifies the agora CLI to the server, which shows it
+// in agora admin status.
+const DefaultUserAgent = "agora-cli"
 
 // New returns a client for the server at baseURL (for example
 // http://127.0.0.1:8787). token, if set, is sent as a bearer token.
@@ -42,8 +47,11 @@ func New(baseURL, token string) (*Client, error) {
 		}
 		return nil
 	}}
-	return &Client{base: u, http: hc, token: token}, nil
+	return &Client{base: u, http: hc, token: token, userAgent: DefaultUserAgent}, nil
 }
+
+// SetUserAgent replaces the User-Agent the client sends.
+func (c *Client) SetUserAgent(ua string) { c.userAgent = ua }
 
 // URL returns the server base URL.
 func (c *Client) URL() string { return c.base.String() }
@@ -97,6 +105,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("User-Agent", c.userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
@@ -347,6 +356,7 @@ func (c *Client) stream(ctx context.Context, path string, query url.Values) (*ht
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", c.userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}

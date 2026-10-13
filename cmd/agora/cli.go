@@ -326,6 +326,7 @@ argument it opens the conversations of --namespace.
 	if opts.Client, err = client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
 	}
+	opts.Client.SetUserAgent("agora-tui")
 	if cc.Token != "" {
 		// With a token the server posts comments under its account, so
 		// show that name, and fail now if the token does not work.

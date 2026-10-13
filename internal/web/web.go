@@ -109,6 +109,8 @@ type Options struct {
 	StreamHeartbeat time.Duration
 	// Failures, if set, limits failed logins per client address.
 	Failures *auth.Failures
+	// Activity, if set, records signed-in callers and failed logins.
+	Activity *auth.Activity
 }
 
 type viewer struct {
@@ -406,6 +408,7 @@ func (v *viewer) principal(w http.ResponseWriter, r *http.Request) (core.Princip
 		}
 		return core.Principal{}, "", false
 	}
+	v.opts.Activity.Seen(r, p, auth.SurfaceWeb)
 	var account string
 	if !p.IsAnonymous() {
 		id, err := v.svc.Whoami(r.Context(), p)
@@ -758,6 +761,7 @@ func (v *viewer) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// A valid token always signs in; only failures are limited.
+		v.opts.Activity.Failed(r)
 		if cerr := v.opts.Failures.Check(r); cerr != nil {
 			notice := "Too many failed sign-ins; try again later."
 			if ce, ok := errors.AsType[*core.Error](cerr); ok {

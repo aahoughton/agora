@@ -52,6 +52,8 @@ type Options struct {
 	// headers, so a call uses the credential it carries rather than the
 	// one that opened the session. Handler sets it.
 	Authenticator auth.Authenticator
+	// Activity, if set, records each authenticated MCP request.
+	Activity *auth.Activity
 }
 
 // Handler serves MCP over streamable HTTP. Every request is authenticated;
@@ -99,7 +101,7 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Han
 		SessionTimeout: SessionTimeout,
 	})
 	return &guard{
-		authn: authn, next: sdk, ttl: SessionTimeout, owners: map[string]owner{},
+		authn: authn, next: sdk, ttl: SessionTimeout, owners: map[string]owner{}, activity: opts.Activity,
 		perAccount: opts.MaxSessionsPerAccount, total: opts.MaxSessions,
 	}
 }

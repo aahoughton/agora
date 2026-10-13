@@ -142,8 +142,9 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	if err != nil {
 		return err
 	}
-	if failures != nil {
-		authn = auth.Limited{Next: authn, Failures: failures}
+	activity := auth.NewActivity(cfg.TrustedProxies, nil)
+	if cfg.Auth == config.AuthToken {
+		authn = auth.Limited{Next: authn, Failures: failures, Activity: activity}
 	}
 	var viewer http.Handler
 	if cfg.Web {
@@ -151,12 +152,12 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		// bearer tokens only.
 		viewerAuth := authn
 		if cfg.Auth == config.AuthToken {
-			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Failures: failures}
+			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Failures: failures, Activity: activity}
 		}
 		viewer, err = web.Handler(svc, viewerAuth, web.Options{
 			ThemeDir: cfg.ThemeDir, Logger: logger, Version: version,
 			Login: cfg.Auth == config.AuthToken, SecureCookies: strings.HasPrefix(cfg.PublicURL, "https://"),
-			Failures: failures,
+			Failures: failures, Activity: activity,
 		})
 		if err != nil {
 			return err
@@ -185,7 +186,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	srv := &http.Server{
 		Handler: server.New(server.Deps{
 			Service: svc, Authenticator: authn, Logger: logger, MCPMaxWait: cfg.MCPMaxWait, Version: version, AuthMode: string(cfg.Auth),
-			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer,
+			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer, Activity: activity,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

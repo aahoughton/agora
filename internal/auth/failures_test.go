@@ -49,7 +49,7 @@ func TestFailedAuthenticationsAreLimited(t *testing.T) {
 
 func TestClientIP(t *testing.T) {
 	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
-	f := NewFailures(1, trusted, nil)
+	f := Proxies(trusted)
 	tests := []struct {
 		remote, xff, want string
 	}{
