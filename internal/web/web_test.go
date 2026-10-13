@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aahoughton/agora/internal/api"
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/markdown"
@@ -511,7 +512,7 @@ func TestStreamRefusesOverTheViewerCap(t *testing.T) {
 	first := openStream(t, e, "/n/default/c/cache/events?after=7", nil)
 	readEvents(t, first.Body, func(evs []sse) bool { return len(evs) >= 2 })
 	second := openStream(t, e, "/n/default/c/cache/events?after=7", nil)
-	if second.StatusCode != http.StatusConflict {
+	if second.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("second viewer = %d", second.StatusCode)
 	}
 }
@@ -690,5 +691,14 @@ func TestEarlierMessages(t *testing.T) {
 	}
 	if status, _ := e.get("/n/default/c/long?before=x"); status != http.StatusBadRequest {
 		t.Fatalf("bad before = %d", status)
+	}
+}
+
+// The viewer answers errors with the same status as the JSON API.
+func TestViewerStatusesMatchTheAPI(t *testing.T) {
+	for _, code := range []core.Code{core.CodeNotCoordinator, core.CodeAccountNotFound, core.CodeLastAdmin, core.CodeUnauthorized, core.CodeNameActive} {
+		if got, want := web.StatusOf(&core.Error{Code: code}), api.StatusFor(code); got != want || got == http.StatusInternalServerError {
+			t.Errorf("%s: viewer %d, API %d", code, got, want)
+		}
 	}
 }

@@ -134,7 +134,9 @@ type errorBody struct {
 	} `json:"error"`
 }
 
-func statusFor(code core.Code) int {
+// StatusFor is the HTTP status for an error code, shared by every HTTP
+// surface.
+func StatusFor(code core.Code) int {
 	switch code {
 	case core.CodeInvalid:
 		return http.StatusBadRequest
@@ -185,7 +187,7 @@ func (h *handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	if ce.Code == core.CodeStaleContext {
 		body.Error.LastSeq = &ce.LastSeq
 	}
-	writeJSON(w, statusFor(ce.Code), body)
+	writeJSON(w, StatusFor(ce.Code), body)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

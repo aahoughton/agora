@@ -19,6 +19,7 @@ import (
 	"text/template/parse"
 	"time"
 
+	"github.com/aahoughton/agora/internal/api"
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/markdown"
@@ -361,26 +362,18 @@ func (v *viewer) render(w http.ResponseWriter, status int, page string, data Pag
 	_, _ = w.Write(b.Bytes())
 }
 
-func statusOf(err error) int {
-	switch core.CodeOf(err) {
-	case core.CodeNamespaceNotFound, core.CodeConversationNotFound:
-		return http.StatusNotFound
-	case core.CodeInvalid, core.CodeMessageTooLarge:
-		return http.StatusBadRequest
-	case core.CodeForbidden:
-		return http.StatusForbidden
-	case core.CodeConversationConcluded, core.CodeTooManyWatchers:
-		return http.StatusConflict
-	case core.CodeRateLimited:
-		return http.StatusTooManyRequests
-	default:
+// StatusOf is the HTTP status for err: the JSON API's, so both surfaces
+// agree.
+func StatusOf(err error) int {
+	if core.CodeOf(err) == "" {
 		return http.StatusInternalServerError
 	}
+	return api.StatusFor(core.CodeOf(err))
 }
 
 // fail renders the error page for err.
 func (v *viewer) fail(w http.ResponseWriter, err error, data Page) {
-	status := statusOf(err)
+	status := StatusOf(err)
 	retryAfter(w, err)
 	if core.CodeOf(err) == "" {
 		v.opts.Logger.Error("viewer request failed", "err", err)
@@ -591,19 +584,19 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 	// an empty stream it would reconnect to forever.
 	c, err := v.svc.GetConversation(r.Context(), p, ns, name)
 	if err != nil {
-		http.Error(w, err.Error(), statusOf(err))
+		http.Error(w, err.Error(), StatusOf(err))
 		return
 	}
 	// The stream holds one viewer slot for as long as it is connected.
 	viewer, err := v.svc.OpenViewer(r.Context(), p, ns, name)
 	if err != nil {
-		http.Error(w, err.Error(), statusOf(err))
+		http.Error(w, err.Error(), StatusOf(err))
 		return
 	}
 	defer viewer.Close()
 	batch, err := viewer.Follow(r.Context(), after, 0)
 	if err != nil {
-		http.Error(w, err.Error(), statusOf(err))
+		http.Error(w, err.Error(), StatusOf(err))
 		return
 	}
 
