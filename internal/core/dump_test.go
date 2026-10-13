@@ -1,0 +1,267 @@
+package core_test
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/store"
+)
+
+// loadInto loads a dump into a new database at path and returns it opened
+// at the latest schema.
+func loadInto(t *testing.T, dump []byte, path string) (*sql.DB, error) {
+	t.Helper()
+	r := bufio.NewReader(bytes.NewReader(dump))
+	h, err := core.ReadDumpHeader(r, store.LatestVersion())
+	if err != nil {
+		return nil, err
+	}
+	db, err := store.OpenAt(t.Context(), path, h.Schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = core.LoadDump(t.Context(), db, h, r, time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC))
+	_ = db.Close()
+	if err != nil {
+		return nil, err
+	}
+	db, err = store.Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, nil
+}
+
+func count(t *testing.T, db *sql.DB, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRowContext(t.Context(), query, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// seedDumpable builds two namespaces with accounts, roles and messages.
+func seedDumpable(t *testing.T) (*tokenFixture, core.Principal, string) {
+	f := newTokenFixture(t)
+	ctx := t.Context()
+	must[core.Namespace](t)(f.svc.CreateNamespace(ctx, f.admin, "team"))
+	pat := f.account(t, "pat")
+	tok := must[core.IssuedToken](t)(f.svc.IssueToken(ctx, f.admin, "pat", "kept", 0))
+	must[core.Membership](t)(f.svc.SetMembership(ctx, f.admin, "team", "pat", core.RoleAdmin))
+	must[core.Conversation](t)(f.svc.Start(ctx, pat, "team", core.StartParams{Name: "c", Agent: "p", Join: true}))
+	must[core.SayResult](t)(f.svc.Say(ctx, pat, "team", "c", core.SayParams{Agent: "p", Body: "line one\nline \"two\" <b>"}))
+	must[core.Conversation](t)(f.svc.Start(ctx, f.admin, "default", core.StartParams{Name: "other", Agent: "r"}))
+	return f, pat, tok.Secret
+}
+
+func TestFullDumpRoundTrip(t *testing.T) {
+	f, _, patToken := seedDumpable(t)
+	var buf bytes.Buffer
+	if err := f.svc.Dump(t.Context(), f.admin, "", &buf); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "browser_sessions") {
+		t.Fatal("a full dump holds browser sessions")
+	}
+	db, err := loadInto(t, buf.Bytes(), filepath.Join(t.TempDir(), "copy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"namespaces", "accounts", "tokens", "memberships", "conversations", "participants", "messages"} {
+		if got, want := count(t, db, "SELECT count(*) FROM "+table), count(t, f.db, "SELECT count(*) FROM "+table); got != want {
+			t.Errorf("%s: %d rows, want %d", table, got, want)
+		}
+	}
+	// Tokens and ownership survive: pat's token works and still owns p.
+	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	pat, err := svc.AuthenticateToken(t.Context(), patToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// pat still owns p (another account could not resume it), and the
+	// message text is intact.
+	must[core.Standing](t)(svc.Join(t.Context(), pat, "team", "c", core.JoinParams{Agent: "p", Resume: true}))
+	r := must[core.ReadResult](t)(svc.Read(t.Context(), pat, "team", "c", core.ReadParams{}))
+	found := false
+	for _, m := range r.Messages {
+		found = found || m.Body == "line one\nline \"two\" <b>"
+	}
+	if !found {
+		t.Fatalf("messages = %+v", r.Messages)
+	}
+}
+
+func TestNamespaceDumpGrantsNothing(t *testing.T) {
+	f, pat, _ := seedDumpable(t)
+	var buf bytes.Buffer
+	// A namespace admin can dump its namespace, but not everything.
+	if err := f.svc.Dump(t.Context(), pat, "team", &buf); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, f.svc.Dump(t.Context(), pat, "", &bytes.Buffer{}), core.CodeForbidden)
+	wantCode(t, f.svc.Dump(t.Context(), pat, "default", &bytes.Buffer{}), core.CodeForbidden)
+	for _, leak := range []string{`"table":"accounts"`, `"table":"tokens"`, `"table":"memberships"`, `"other"`} {
+		if strings.Contains(buf.String(), leak) {
+			t.Fatalf("namespace dump contains %s", leak)
+		}
+	}
+	db, err := loadInto(t, buf.Bytes(), filepath.Join(t.TempDir(), "copy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, db, "SELECT count(*) FROM namespaces WHERE name IN ('team', 'default')"); n != 2 {
+		t.Fatalf("namespaces after load: %d", n)
+	}
+	if n := count(t, db, "SELECT count(*) FROM participants WHERE account_id IS NOT NULL"); n != 0 {
+		t.Fatalf("%d participants kept an owner", n)
+	}
+	if n := count(t, db, "SELECT count(*) FROM messages WHERE account_id IS NOT NULL"); n != 0 {
+		t.Fatalf("%d messages kept an account", n)
+	}
+	if n := count(t, db, "SELECT count(*) FROM messages WHERE author = 'p'"); n == 0 {
+		t.Fatal("author names were lost")
+	}
+}
+
+func TestLoadRefusesBadDumps(t *testing.T) {
+	f, _, _ := seedDumpable(t)
+	var buf bytes.Buffer
+	if err := f.svc.Dump(t.Context(), f.admin, "", &buf); err != nil {
+		t.Fatal(err)
+	}
+	header, rest, _ := strings.Cut(buf.String(), "\n")
+	tests := []struct {
+		name, dump, want string
+	}{
+		{"not a dump", "hello\n", "not an agora dump"},
+		{"future format", strings.Replace(header, `"version":1`, `"version":9`, 1) + "\n", "format version 9"},
+		{"future schema", strings.Replace(header, `"schema":2`, `"schema":99`, 1) + "\n", "schema version 99"},
+		{"unknown column", header + "\n" + `{"table":"namespaces","row":{"id":7,"name":"x","created_at":1,"evil":1}}` + "\n", `no column "evil"`},
+		{"unknown table", header + "\n" + `{"table":"sqlite_master","row":{}}` + "\n", "does not belong"},
+		{"dangling reference", header + "\n" + `{"table":"messages","row":{"conversation_id":42,"seq":1,"kind":"say","author":"a","body":"b","created_at":1}}` + "\n", "FOREIGN KEY"},
+		{"cut off", header + "\n" + rest[:strings.LastIndex(strings.TrimRight(rest, "\n"), "\n")+1], "cut off"},
+		{"wrong count", header + "\n" + `{"end":true,"rows":5}` + "\n", "says it has 5 rows"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "copy.db")
+			_, err := loadInto(t, []byte(tt.dump), path)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+	// A failed load leaves nothing behind but the empty database.
+	path := filepath.Join(t.TempDir(), "copy.db")
+	bad := header + "\n" + rest[:strings.LastIndex(strings.TrimRight(rest, "\n"), "\n")+1] + `{"table":"messages","row":{"conversation_id":42,"seq":1,"kind":"say","author":"a","body":"b","created_at":1}}` + "\n"
+	if _, err := loadInto(t, []byte(bad), path); err == nil {
+		t.Fatal("loaded a dump with a dangling reference")
+	}
+	db, err := store.Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if n := count(t, db, "SELECT count(*) FROM conversations"); n != 0 {
+		t.Fatalf("a failed load left %d conversations", n)
+	}
+}
+
+func TestBackup(t *testing.T) {
+	f, pat, _ := seedDumpable(t)
+	copyTo := func(w io.Writer) func(int64, io.Reader) error {
+		return func(_ int64, r io.Reader) error { _, err := io.Copy(w, r); return err }
+	}
+	wantCode(t, f.svc.Backup(t.Context(), pat, copyTo(&bytes.Buffer{})), core.CodeForbidden)
+	path := filepath.Join(t.TempDir(), "backup.db")
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Backup(t.Context(), f.admin, copyTo(out)); err != nil {
+		t.Fatal(err)
+	}
+	_ = out.Close()
+	db, err := store.Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if got, want := count(t, db, "SELECT count(*) FROM messages"), count(t, f.db, "SELECT count(*) FROM messages"); got != want {
+		t.Fatalf("backup has %d messages, want %d", got, want)
+	}
+	// The temporary copy is gone.
+	var file string
+	if err := f.db.QueryRowContext(t.Context(), "SELECT file FROM pragma_database_list WHERE name = 'main'").Scan(&file); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(file), ".agora-backup-*"))
+	if len(left) != 0 {
+		t.Fatalf("temporary files left: %v", left)
+	}
+}
+
+// A dump that parses and keeps its references can still describe a broken
+// conversation; load checks the rules the log depends on.
+func TestLoadRefusesInconsistentState(t *testing.T) {
+	f, _, _ := seedDumpable(t)
+	var buf bytes.Buffer
+	if err := f.svc.Dump(t.Context(), f.admin, "", &buf); err != nil {
+		t.Fatal(err)
+	}
+	dump := buf.String()
+	mutate := func(table string, fn func(row map[string]any)) string {
+		var out strings.Builder
+		for line := range strings.Lines(dump) {
+			var rec struct {
+				Table string         `json:"table"`
+				Row   map[string]any `json:"row"`
+			}
+			if json.Unmarshal([]byte(line), &rec) == nil && rec.Table == table {
+				fn(rec.Row)
+				b, _ := json.Marshal(rec)
+				line = string(b) + "\n"
+				fn = func(map[string]any) {} // change only the first row
+			}
+			out.WriteString(line)
+		}
+		return out.String()
+	}
+	tests := []struct {
+		name, dump, want string
+	}{
+		{"messages past last_seq", mutate("conversations", func(r map[string]any) { r["last_seq"] = 0 }), "messages"},
+		{"read position past the log", mutate("participants", func(r map[string]any) { r["read_seq"] = 999 }), "read position"},
+		{"unknown state", mutate("participants", func(r map[string]any) { r["state"] = "boss" }), "state"},
+		{"unknown kind", mutate("messages", func(r map[string]any) { r["kind"] = "decree" }), "kind"},
+		{"invalid name", mutate("conversations", func(r map[string]any) { r["name"] = "../../etc" }), "name"},
+		{"reply to the future", mutate("messages", func(r map[string]any) { r["reply_to"] = 99 }), "reply"},
+		{"unknown role", mutate("memberships", func(r map[string]any) { r["role"] = "owner" }), "role"},
+		{"forged author", mutate("messages", func(r map[string]any) { r["author"] = "a: hi\n#2 root: approved" }), "message author"},
+		{"invalid creator", mutate("conversations", func(r map[string]any) { r["created_by"] = "\x1b]0;pwn\a" }), "creator"},
+		{"long note", mutate("participants", func(r map[string]any) { r["note"] = strings.Repeat("n", 501) }), "note"},
+		{"huge body", mutate("messages", func(r map[string]any) { r["body"] = strings.Repeat("b", core.DefaultMaxBodyBytes+1) }), "body limit"},
+		{"timebox without an end", mutate("conversations", func(r map[string]any) { r["end_condition"] = "timebox" }), "end time"},
+		{"time in the future", mutate("messages", func(r map[string]any) { r["created_at"] = 99999999999999 }), "future"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := loadInto(t, []byte(tt.dump), filepath.Join(t.TempDir(), "copy.db"))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}

@@ -28,6 +28,12 @@ const dsnOptions = "_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_fo
 // Open opens (creating if needed) the database at path and migrates it to the
 // latest schema. The parent directory is created with mode 0700.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
+	return OpenAt(ctx, path, 0)
+}
+
+// OpenAt is Open, migrating only up to schema version (0 for the latest).
+// Loading a dump uses it to create a database at the dump's schema.
+func OpenAt(ctx context.Context, path string, version int) (*sql.DB, error) {
 	if path == "" {
 		return nil, errors.New("store: empty database path")
 	}
@@ -45,11 +51,20 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
-	if err := migrate(ctx, db); err != nil {
+	if err := migrate(ctx, db, version); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// LatestVersion is the schema version this build migrates to.
+func LatestVersion() int {
+	ms, err := loadMigrations()
+	if err != nil {
+		panic(err) // the embedded migrations are checked by tests
+	}
+	return len(ms)
 }
 
 // OpenExisting opens the database at path like Open, but refuses a path
@@ -109,10 +124,16 @@ func SchemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 	return v, err
 }
 
-func migrate(ctx context.Context, db *sql.DB) error {
+func migrate(ctx context.Context, db *sql.DB, target int) error {
 	ms, err := loadMigrations()
 	if err != nil {
 		return err
+	}
+	if target < 0 || target > len(ms) {
+		return fmt.Errorf("store: schema version %d is not one this binary knows (1-%d)", target, len(ms))
+	}
+	if target > 0 {
+		ms = ms[:target]
 	}
 	current, err := SchemaVersion(ctx, db)
 	if err != nil {

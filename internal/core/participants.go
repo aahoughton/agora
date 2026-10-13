@@ -37,6 +37,9 @@ type Participant struct {
 	Stale bool `json:"stale"`
 }
 
+// maxNoteBytes bounds a presence note.
+const maxNoteBytes = 500
+
 const participantColumns = `agent, state, joined_at, read_seq, presence, note, check_back_by, last_seen_at`
 
 func (s *Service) scanParticipant(row interface{ Scan(...any) error }) (Participant, error) {
@@ -383,8 +386,8 @@ func (s *Service) SetPresence(ctx context.Context, p Principal, ns, name string,
 	default:
 		return Participant{}, errorf(CodeInvalid, "invalid presence %q: want working, waiting or away", pp.Presence)
 	}
-	if len(pp.Note) > 500 {
-		return Participant{}, errorf(CodeInvalid, "note is longer than 500 bytes")
+	if len(pp.Note) > maxNoteBytes {
+		return Participant{}, errorf(CodeInvalid, "note is longer than %d bytes", maxNoteBytes)
 	}
 	var out Participant
 	if err := s.settle(ctx, ns, name); err != nil {
