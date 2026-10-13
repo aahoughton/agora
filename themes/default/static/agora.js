@@ -144,3 +144,28 @@
     });
   });
 })();
+
+// The conversation list reloads itself every data-refresh seconds while the
+// tab is visible, so new conversations and activity show up. A page of
+// older conversations (?before=) stays as it is.
+(function () {
+  "use strict";
+  var box = document.getElementById("conversations");
+  if (!box || !window.fetch || !window.DOMParser) return;
+  var every = Number(box.getAttribute("data-refresh"));
+  if (!(every > 0) || new URLSearchParams(location.search).has("before")) return;
+  var busy = false;
+  var refresh = function () {
+    if (busy || document.hidden) return;
+    busy = true;
+    fetch(location.href, { credentials: "same-origin" }).then(function (res) {
+      if (!res.ok) return;
+      return res.text().then(function (html) {
+        var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("conversations");
+        if (fresh && fresh.innerHTML !== box.innerHTML) box.innerHTML = fresh.innerHTML;
+      });
+    }).catch(function () {}).finally(function () { busy = false; });
+  };
+  setInterval(refresh, every * 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+})();

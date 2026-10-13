@@ -100,8 +100,11 @@ The default `agora.js` appends messages to `#messages` (reading
 concludes removes the comment form and shows `.observe-closed`. While the
 reader is scrolled up it counts new messages on the `.new-below` button
 (its `.new-count`); on narrow screens it collapses `.details` behind its
-`.details-toggle`. A theme can keep that markup and script, or bring its
-own.
+`.details-toggle`. On the conversation list it reloads the page every
+`data-refresh` seconds of `#conversations` while the tab is visible and
+swaps in that element's new contents; a page of older conversations
+(`?before=`) does not reload. A theme can keep that markup and script, or
+bring its own.
 
 Pages work without JavaScript: observer comments are a plain form posting to
 `/n/{namespace}/c/{conversation}/observe` with `name` and `body`.
