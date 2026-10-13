@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aahoughton/agora/internal/auth"
+	"github.com/aahoughton/agora/internal/client"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/server"
 	"github.com/aahoughton/agora/internal/store"
@@ -462,7 +463,7 @@ func tokenServer(t *testing.T) (string, string, *core.Service) {
 	}
 	srv := httptest.NewServer(server.New(server.Deps{
 		Service: svc, Authenticator: auth.Bearer{Service: svc}, Logger: slog.New(slog.DiscardHandler),
-		AuthMode: "token", Version: "test",
+		AuthMode: "token", Version: "test", Activity: auth.NewActivity(nil, nil),
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL, tok.Secret, svc
@@ -692,6 +693,53 @@ func TestMigrate(t *testing.T) {
 
 // Only serve and migrate change a database's schema; admin commands refuse
 // an out-of-date database instead of migrating it unseen.
+func TestAdminStatus(t *testing.T) {
+	url, token, svc := tokenServer(t)
+	env := map[string]string{"AGORA_TOKEN": token}
+	root, err := svc.AuthenticateToken(t.Context(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(t.Context(), root, "default", core.StartParams{Name: "c", Agent: "alice", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	r := runCLIInput(t.Context(), url, "", env, "admin", "status")
+	if r.code != exitOK {
+		t.Fatalf("status = %+v", r)
+	}
+	for _, want := range []string{
+		"(version test, auth token)",
+		"last message now: default/c #",
+		"default/c     open    now   1       0        0",
+		"No open MCP sessions.",
+		"root     api      127.0.0.1  agora-cli",
+	} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("status lacks %q:\n%s", want, r.stdout)
+		}
+	}
+
+	r = runCLIInput(t.Context(), url, "", env, "admin", "status", "--json")
+	var st client.ServerStatus
+	if err := json.Unmarshal([]byte(r.stdout), &st); err != nil || st.AuthMode != "token" || len(st.Callers) != 1 {
+		t.Fatalf("status --json = %+v (%v)", r, err)
+	}
+}
+
+func TestAge(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		0:                            "now",
+		42 * time.Second:             "42s ago",
+		5*time.Minute + time.Second:  "5m ago",
+		2*time.Hour + 13*time.Minute: "2h13m ago",
+		50 * time.Hour:               "2d2h ago",
+	} {
+		if got := age(d); got != want {
+			t.Errorf("age(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
+
 func TestAdminRefusesAnOldDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agora.db")
 	db, err := store.OpenAt(t.Context(), path, 1)

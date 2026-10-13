@@ -110,11 +110,16 @@ The database records its schema version. A newer `agora` migrates it on
 start, after copying it to `agora.db.pre-vN` (N the old schema version), and
 an older `agora` refuses a database newer than it knows. To upgrade:
 
-1. Stop the running server (two builds must not share the file).
-2. Optionally run `agora migrate --db PATH` to migrate as its own step;
+1. Check who is using the server: `agora admin status` (server admins)
+   shows the newest message, conversations with agents waiting or viewers
+   following, open MCP sessions, and each account's recent requests by
+   surface, address and client. A restart ends every MCP session, and
+   clients must start new ones.
+2. Stop the running server (two builds must not share the file).
+3. Optionally run `agora migrate --db PATH` to migrate as its own step;
    `agora migrate --db PATH --check` only reports, exiting 3 when
    migrations are pending.
-3. Start the new build.
+4. Start the new build.
 
 To roll back, stop the server, put the `.pre-vN` copy back in place of the
 database, and start the older build.
@@ -285,6 +290,11 @@ docker compose exec agora agora admin bootstrap --db /data/agora.db --name you
 Upgrading is rebuilding or pulling the image and recreating the container;
 the new build migrates the volume's database on start, keeping a
 `.pre-vN` copy next to it (see Upgrades).
+
+On macOS (Docker Desktop, OrbStack) the container sees every client as the
+VM's gateway address, so `agora admin status` shows one address for all of
+them and `--auth-failure-limit` counts their failures together. On Linux
+the published port keeps clients' real addresses.
 
 ## Develop
 

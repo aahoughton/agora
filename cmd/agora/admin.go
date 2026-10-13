@@ -1,7 +1,9 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,7 +27,10 @@ auth mode token (they work while the server runs):
   bootstrap --db PATH --name NAME   create the first server admin and its token
   recover   --db PATH --name NAME   re-enable an account as server admin, with a new token
 
-Through a running server, with a token (--token or AGORA_TOKEN):
+Through a running server (--url or AGORA_URL), with a token (--token or
+AGORA_TOKEN):
+  status [--json]                   who is using the server: recent callers,
+                                    open MCP sessions, waiting agents, viewers
   accounts list
   accounts add NAME [--server-admin]
   accounts disable|enable|promote|demote NAME
@@ -53,6 +58,8 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 		return runAdminLocal(ctx, args[0], args[1:], stdout, stderr)
 	case "accounts", "tokens", "members", "namespaces":
 		return runAdminRemote(ctx, args, stdout, stderr, getenv)
+	case "status":
+		return runAdminStatus(ctx, args[1:], stdout, stderr, getenv)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, adminUsage)
 		return exitOK
@@ -294,4 +301,124 @@ func dateOr(t *time.Time, none string) string {
 		return none
 	}
 	return t.Format(time.DateOnly)
+}
+
+func runAdminStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("admin status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	resolveClient := config.ClientFlags(fs)
+	asJSON := fs.Bool("json", false, "print the server's JSON response")
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL, cc.Token)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	st, err := cl.ServerStatus(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora admin:", err)
+		return exitError
+	}
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(st)
+		return exitOK
+	}
+	printStatus(stdout, cl.URL(), st)
+	return exitOK
+}
+
+// printStatus writes a server status for a person deciding whether to
+// restart. Ages are measured on the server's clock.
+func printStatus(out io.Writer, url string, st client.ServerStatus) {
+	ago := func(t time.Time) string { return age(st.Now.Sub(t)) }
+	fmt.Fprintf(out, "server: %s (version %s, auth %s)\n", url, st.Version, st.AuthMode)
+	fmt.Fprintf(out, "up %s, since %s\n", span(st.Now.Sub(st.StartedAt)), st.StartedAt.Local().Format("2006-01-02 15:04 MST"))
+	if m := st.LastMessage; m != nil {
+		fmt.Fprintf(out, "last message %s: %s/%s #%d by %s (%s)\n", ago(m.At), m.Namespace, m.Conversation, m.Seq, shown(m.Author), shown(m.Kind))
+	} else {
+		fmt.Fprintln(out, "no messages yet")
+	}
+
+	fmt.Fprintln(out)
+	if len(st.Conversations) == 0 {
+		fmt.Fprintln(out, "No conversations active in the last 24h, waited on or viewed.")
+	} else {
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "CONVERSATION\tSTATUS\tLAST\tACTIVE\tWAITING\tVIEWING")
+		for _, c := range st.Conversations {
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s\t%d\t%d\t%d\n", c.Namespace, c.Name, c.Status, ago(c.LastAt), c.Active, c.Waiting, c.Viewing)
+		}
+		_ = tw.Flush()
+	}
+
+	fmt.Fprintln(out)
+	if len(st.MCPSessions) == 0 {
+		fmt.Fprintln(out, "No open MCP sessions.")
+	} else {
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "MCP SESSIONS\tACCOUNT\tLAST USED")
+		for _, m := range st.MCPSessions {
+			fmt.Fprintf(tw, "%d\t%s\t%s\n", m.Sessions, accountOr(m.Account), ago(m.LastUsed))
+		}
+		_ = tw.Flush()
+	}
+
+	fmt.Fprintln(out)
+	if len(st.Callers) == 0 {
+		fmt.Fprintln(out, "No callers since the server started.")
+	} else {
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "LAST SEEN\tACCOUNT\tSURFACE\tADDRESS\tCLIENT\tREQUESTS\tFIRST SEEN")
+		for _, c := range st.Callers {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", ago(c.LastSeen), accountOr(c.Account), c.Surface, shown(c.Address),
+				shown(cmp.Or(c.Client, "-")), c.Requests, ago(c.FirstSeen))
+		}
+		_ = tw.Flush()
+	}
+
+	if len(st.FailedSignIns) > 0 {
+		fmt.Fprintln(out)
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "FAILED SIGN-INS\tADDRESS\tLAST")
+		for _, f := range st.FailedSignIns {
+			fmt.Fprintf(tw, "%d\t%s\t%s\n", f.Count, shown(f.Address), ago(f.LastAt))
+		}
+		_ = tw.Flush()
+	}
+}
+
+func accountOr(name string) string { return shown(cmp.Or(name, "(anonymous)")) }
+
+// age is a duration in the past, such as "5m ago".
+func age(d time.Duration) string {
+	if d < time.Second {
+		return "now"
+	}
+	return span(d) + " ago"
+}
+
+// span is a duration in its two largest units, such as "2h13m".
+func span(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(d/time.Second)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh%dm", int(d/time.Hour), int(d%time.Hour/time.Minute))
+	default:
+		return fmt.Sprintf("%dd%dh", int(d/(24*time.Hour)), int(d%(24*time.Hour)/time.Hour))
+	}
 }

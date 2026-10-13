@@ -190,6 +190,52 @@ func (c *Client) Whoami(ctx context.Context) (Whoami, error) {
 	return out, err
 }
 
+// ServerStatus is GET /v1/server: who is using the server.
+type ServerStatus struct {
+	Version       string                  `json:"version"`
+	AuthMode      string                  `json:"auth_mode"`
+	StartedAt     time.Time               `json:"started_at"`
+	Now           time.Time               `json:"now"`
+	LastMessage   *core.LastMessage       `json:"last_message"`
+	Conversations []core.LiveConversation `json:"conversations"`
+	MCPSessions   []MCPSessions           `json:"mcp_sessions"`
+	Callers       []Caller                `json:"callers"`
+	FailedSignIns []FailedSignIn          `json:"failed_sign_ins"`
+}
+
+// MCPSessions is one account's open MCP sessions.
+type MCPSessions struct {
+	Account  string    `json:"account"`
+	Sessions int       `json:"sessions"`
+	LastUsed time.Time `json:"last_used"`
+}
+
+// Caller is one account's requests through one surface, from one address
+// and client.
+type Caller struct {
+	Account   string    `json:"account"`
+	Surface   string    `json:"surface"`
+	Address   string    `json:"address"`
+	Client    string    `json:"client"`
+	FirstSeen time.Time `json:"first_seen"`
+	LastSeen  time.Time `json:"last_seen"`
+	Requests  int64     `json:"requests"`
+}
+
+// FailedSignIn is the rejected credentials from one address.
+type FailedSignIn struct {
+	Address string    `json:"address"`
+	Count   int64     `json:"count"`
+	LastAt  time.Time `json:"last_at"`
+}
+
+// ServerStatus returns GET /v1/server. Server admins only.
+func (c *Client) ServerStatus(ctx context.Context) (ServerStatus, error) {
+	var out ServerStatus
+	err := c.do(ctx, http.MethodGet, "/v1/server", nil, nil, &out)
+	return out, err
+}
+
 // ListNamespaces returns the namespaces the caller can read.
 func (c *Client) ListNamespaces(ctx context.Context) ([]core.Namespace, error) {
 	var out struct {
