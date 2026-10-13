@@ -127,7 +127,7 @@ func (s *Service) missed(ctx context.Context, tx *wtx, c *conv, after int64, age
 		err := rows.Scan(&ac.Author, &ac.Count)
 		return ac, err
 	}, `SELECT author, count(*) FROM messages
-		WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?
+		WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer')
 		GROUP BY author ORDER BY min(seq)`, c.id, after, c.LastSeq, agent)
 	if err != nil || len(authors) == 0 {
 		return nil, err
@@ -350,7 +350,7 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 func (s *Service) tailStart(ctx context.Context, q querier, c *conv, n int, skipAuthor string) (int64, error) {
 	var first sql.NullInt64
 	err := q.QueryRowContext(ctx, `SELECT min(seq) FROM (SELECT seq FROM messages
-		WHERE conversation_id = ? AND seq <= ? AND author != ? ORDER BY seq DESC LIMIT ?)`,
+		WHERE conversation_id = ? AND seq <= ? AND (author != ? OR kind = 'observer') ORDER BY seq DESC LIMIT ?)`,
 		c.id, c.LastSeq, skipAuthor, n).Scan(&first)
 	if err != nil || !first.Valid {
 		return 0, err
@@ -404,7 +404,7 @@ func (s *Service) messages(ctx context.Context, q querier, convID, after, upto i
 		m.CreatedAt = fromMS(created)
 		return m, err
 	}, `SELECT seq, kind, author, body, reply_to, created_at
-		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ? ORDER BY seq LIMIT ?`,
+		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer') ORDER BY seq LIMIT ?`,
 		convID, after, upto, skipAuthor, limit)
 }
 

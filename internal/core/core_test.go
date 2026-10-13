@@ -1244,3 +1244,21 @@ func TestReadCursorCannotPassTheLog(t *testing.T) {
 		t.Fatalf("the next message was skipped: %+v", r.Messages)
 	}
 }
+
+// An observer who happens to share an agent's name is not the agent: its
+// comments still count as unread and are delivered.
+func TestObserverWithAnAgentsNameIsStillDelivered(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice", "bob")
+	f.read(t, "c", "bob")
+	must[core.Message](t)(f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: "bob", Body: "from a person named bob"}))
+	st := must[core.Standing](t)(f.svc.StandingOf(ctx, f.p, "default", "c", "bob"))
+	if st.Unread != 1 {
+		t.Fatalf("unread = %d", st.Unread)
+	}
+	d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "bob", Timeout: time.Second, InlineBytes: 1000}))
+	if d.New != 1 || len(d.Messages) != 1 || d.Messages[0].Body != "from a person named bob" {
+		t.Fatalf("digest = %+v", d)
+	}
+}

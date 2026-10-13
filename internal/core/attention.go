@@ -58,14 +58,17 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 		// Counts stop at c.LastSeq so they agree with the rest of the result
 		// even if messages land while it is being built.
 		if err := q.QueryRowContext(ctx, `SELECT count(*) FROM messages
-			WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?`,
+			WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer')`,
 			c.id, pt.ReadSeq, c.LastSeq, agent).Scan(&st.Unread); err != nil {
 			return Standing{}, err
 		}
-		if err := q.QueryRowContext(ctx, `SELECT count(*) FROM messages
-			WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ? AND reply_to IN
-				(SELECT seq FROM messages WHERE conversation_id = ? AND author = ? AND kind IN ('say', 'conclude'))`,
-			c.id, pt.ReadSeq, c.LastSeq, agent, c.id, agent).Scan(&st.RepliesToYou); err != nil {
+		// A reply to you answers one of your own posts; the replied-to
+		// message is looked up by its primary key.
+		if err := q.QueryRowContext(ctx, `SELECT count(*) FROM messages m
+			WHERE m.conversation_id = ? AND m.seq > ? AND m.seq <= ? AND (m.author != ? OR m.kind = 'observer')
+			AND EXISTS (SELECT 1 FROM messages p WHERE p.conversation_id = m.conversation_id AND p.seq = m.reply_to
+				AND p.author = ? AND p.kind IN ('say', 'conclude'))`,
+			c.id, pt.ReadSeq, c.LastSeq, agent, agent).Scan(&st.RepliesToYou); err != nil {
 			return Standing{}, err
 		}
 	}
@@ -349,7 +352,7 @@ func (s *Service) digest(ctx context.Context, ns, name, agent string, after int6
 		err := rows.Scan(&ac.Author, &ac.Count)
 		return ac, err
 	}, `SELECT author, count(*) FROM messages
-		WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?
+		WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer')
 		GROUP BY author ORDER BY min(seq)`, c.id, after, c.LastSeq, agent)
 	if err != nil {
 		return Digest{}, err
@@ -377,7 +380,7 @@ func (s *Service) previews(ctx context.Context, q querier, c *conv, after int64,
 		pv.Text = previewText(body)
 		return pv, err
 	}, `SELECT seq, kind, author, reply_to, body FROM
-		(SELECT * FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?
+		(SELECT * FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer')
 		 ORDER BY seq DESC LIMIT ?) ORDER BY seq`, c.id, after, c.LastSeq, agent, maxPreviews)
 }
 
