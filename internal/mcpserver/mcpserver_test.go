@@ -561,3 +561,39 @@ func TestBodiesCannotForgeMessages(t *testing.T) {
 		t.Fatal("a multi-line topic was accepted")
 	}
 }
+
+// Sessions are capped per account; closing one frees its place.
+func TestSessionsAreCapped(t *testing.T) {
+	svc := newService(t)
+	srv := httptest.NewServer(mcpserver.Handler(svc, headerAuth{}, mcpserver.Options{MaxSessionsPerAccount: 2}))
+	t.Cleanup(srv.Close)
+	open := func(user string) (*mcp.ClientSession, error) {
+		httpc := &http.Client{Transport: addHeader{user: user, rt: http.DefaultTransport}}
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
+			&mcp.StreamableClientTransport{Endpoint: srv.URL, HTTPClient: httpc}, nil)
+		if err == nil {
+			t.Cleanup(func() { _ = cs.Close() })
+		}
+		return cs, err
+	}
+	a, err := open("1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := open("1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := open("1"); err == nil {
+		t.Fatal("a third session for one account was allowed")
+	}
+	// Another account has its own allowance.
+	if _, err := open("2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := open("1"); err != nil {
+		t.Fatalf("after closing a session: %v", err)
+	}
+}

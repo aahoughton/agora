@@ -42,6 +42,12 @@ type Options struct {
 	URL string
 	// Wording supplies instructions, tool descriptions and result phrases.
 	Wording *wording.Wording
+	// MaxSessionsPerAccount and MaxSessions cap the open MCP sessions of one
+	// account and of the whole server; defaults DefaultMaxSessionsPerAccount
+	// and DefaultMaxSessions. The anonymous principal (auth mode none)
+	// counts as one account.
+	MaxSessionsPerAccount int
+	MaxSessions           int
 	// Authenticator, if set, authenticates each tool call from its HTTP
 	// headers, so a call uses the credential it carries rather than the
 	// one that opened the session. Handler sets it.
@@ -62,7 +68,12 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Han
 	if opts.Version == "" {
 		opts.Version = "dev"
 	}
-	const sessionTimeout = 24 * time.Hour
+	if opts.MaxSessionsPerAccount == 0 {
+		opts.MaxSessionsPerAccount = DefaultMaxSessionsPerAccount
+	}
+	if opts.MaxSessions == 0 {
+		opts.MaxSessions = DefaultMaxSessions
+	}
 	sdk := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		p, ok := r.Context().Value(principalKey{}).(core.Principal)
 		if !ok {
@@ -78,13 +89,28 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Han
 		o := opts
 		o.URL = baseURL(r)
 		o.Authenticator = authn
-		return NewServer(svc, p, ns, o)
+		srv := NewServer(svc, p, ns, o)
+		if ref, ok := r.Context().Value(serverRefKey{}).(*serverRef); ok {
+			ref.srv = srv
+		}
+		return srv
 	}, &mcp.StreamableHTTPOptions{
 		Logger:         quiet(opts.Logger),
-		SessionTimeout: sessionTimeout,
+		SessionTimeout: SessionTimeout,
 	})
-	return &guard{authn: authn, next: sdk, ttl: sessionTimeout, owners: map[string]owner{}}
+	return &guard{
+		authn: authn, next: sdk, ttl: SessionTimeout, owners: map[string]owner{},
+		perAccount: opts.MaxSessionsPerAccount, total: opts.MaxSessions,
+	}
 }
+
+// Session limits. A session idle for SessionTimeout is closed; a client
+// that comes back starts a new one.
+const (
+	SessionTimeout               = 2 * time.Hour
+	DefaultMaxSessionsPerAccount = 64
+	DefaultMaxSessions           = 1024
+)
 
 // baseURL is the server URL as the client reached it, for the shell-wait
 // recipe in the instructions.
