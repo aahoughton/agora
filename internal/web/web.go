@@ -103,6 +103,9 @@ type Options struct {
 	// SessionTTL is how long a browser session lasts; default
 	// core.DefaultSessionTTL.
 	SessionTTL time.Duration
+	// StreamHeartbeat is how often an event stream sends fresh state when
+	// no message arrives; default DefaultStreamHeartbeat.
+	StreamHeartbeat time.Duration
 	// Failures, if set, limits failed logins per client address.
 	Failures *auth.Failures
 }
@@ -120,6 +123,9 @@ const observerCookie = "agora_observer"
 // Handler returns the viewer. It fails if the theme is incomplete or its
 // templates do not parse.
 func Handler(svc *core.Service, authn auth.Authenticator, opts Options) (http.Handler, error) {
+	if opts.StreamHeartbeat == 0 {
+		opts.StreamHeartbeat = DefaultStreamHeartbeat
+	}
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -562,9 +568,12 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 // backgroundHeader marks a comment posted by the page's script.
 const backgroundHeader = "X-Agora-Background"
 
-// followTimeout bounds each server-side wait in the event stream; a comment
-// line is sent between waits to keep proxies from closing the connection.
-const followTimeout = 25 * time.Second
+// DefaultStreamHeartbeat bounds each server-side wait in the event stream;
+// fresh conversation state is sent between waits.
+const DefaultStreamHeartbeat = 25 * time.Second
+
+// streamWriteTimeout bounds each write to an event stream.
+const streamWriteTimeout = 30 * time.Second
 
 func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 	p, _, ok := v.principal(w, r)
@@ -585,28 +594,45 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), statusOf(err))
 		return
 	}
-	batch, err := v.svc.Follow(r.Context(), p, ns, name, after, 0)
+	// The stream holds one viewer slot for as long as it is connected.
+	viewer, err := v.svc.OpenViewer(r.Context(), p, ns, name)
+	if err != nil {
+		http.Error(w, err.Error(), statusOf(err))
+		return
+	}
+	defer viewer.Close()
+	batch, err := viewer.Follow(r.Context(), after, 0)
 	if err != nil {
 		http.Error(w, err.Error(), statusOf(err))
 		return
 	}
 
 	rc := http.NewResponseController(w)
+	// Each write and flush must finish within streamWriteTimeout, so a
+	// client that stops reading is dropped instead of holding the stream.
+	writeBy := func() { _ = rc.SetWriteDeadline(time.Now().Add(streamWriteTimeout)) }
 	w.Header().Set("Content-Type", "text/event-stream")
+	writeBy()
 	w.WriteHeader(http.StatusOK)
 	// Start with fresh state, so a reconnecting page catches up on anything
 	// it missed between events.
 	if v.snapshot(w, c) != nil || rc.Flush() != nil {
 		return
 	}
+	connecting := true
 	for {
+		writeBy()
 		for _, m := range batch.Messages {
 			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), m); err != nil {
 				return
 			}
 			after = m.Seq
 		}
-		if len(batch.Messages) > 0 {
+		// Fresh state after new messages, and at every heartbeat, which
+		// keeps proxies from closing the connection and shows presence
+		// changes and countdowns in a quiet conversation. The state sent on
+		// connecting needs no repeat.
+		if len(batch.Messages) > 0 || !connecting {
 			c, err := v.svc.GetConversation(r.Context(), p, ns, name)
 			if err != nil || v.snapshot(w, c) != nil {
 				return
@@ -614,10 +640,11 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 		} else if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
 			return
 		}
+		connecting = false
 		if rc.Flush() != nil {
 			return
 		}
-		batch, err = v.svc.Follow(r.Context(), p, ns, name, after, followTimeout)
+		batch, err = viewer.Follow(r.Context(), after, v.opts.StreamHeartbeat)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				v.opts.Logger.Info("event stream ended", "err", err)

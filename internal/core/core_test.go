@@ -1262,3 +1262,22 @@ func TestObserverWithAnAgentsNameIsStillDelivered(t *testing.T) {
 		t.Fatalf("digest = %+v", d)
 	}
 }
+
+// A viewer holds its slot for as long as it is open, not only while it
+// waits, so viewers that stop reading still count against the cap.
+func TestViewersHoldTheirSlot(t *testing.T) {
+	f := newFixture(t, core.Options{MaxWatchers: 1})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice")
+	v := must[*core.Viewer](t)(f.svc.OpenViewer(ctx, f.p, "default", "c"))
+	_, err := f.svc.OpenViewer(ctx, f.p, "default", "c")
+	wantCode(t, err, core.CodeTooManyWatchers)
+	if _, err := v.Follow(ctx, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.svc.Follow(ctx, f.p, "default", "c", 0, 0)
+	wantCode(t, err, core.CodeTooManyWatchers)
+	v.Close()
+	v.Close() // closing twice is harmless
+	must[*core.Viewer](t)(f.svc.OpenViewer(ctx, f.p, "default", "c")).Close()
+}

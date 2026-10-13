@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -415,6 +416,44 @@ const FollowLimit = 200
 // passes, then returns the new messages (all authors). It is for viewers:
 // it needs no participant, sets no presence, and moves no read position.
 func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, after int64, timeout time.Duration) (ReadResult, error) {
+	return s.follow(ctx, p, ns, name, after, timeout, true)
+}
+
+// Viewer is a viewer slot held open across many follows, for a stream that
+// stays connected: it counts against the conversation's viewer cap until
+// Close, including while its owner is busy writing to a slow client.
+type Viewer struct {
+	s        *Service
+	p        Principal
+	ns, name string
+	convID   int64
+	once     sync.Once
+}
+
+// OpenViewer reserves a viewer slot on a conversation.
+func (s *Service) OpenViewer(ctx context.Context, p Principal, ns, name string) (*Viewer, error) {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+		return nil, err
+	}
+	c, err := s.loadConvRead(ctx, ns, name)
+	if err != nil {
+		return nil, err
+	}
+	if !s.hub.watch(c.id, s.opts.MaxWatchers) {
+		return nil, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+	}
+	return &Viewer{s: s, p: p, ns: ns, name: name, convID: c.id}, nil
+}
+
+// Follow is Service.Follow within the viewer's slot.
+func (v *Viewer) Follow(ctx context.Context, after int64, timeout time.Duration) (ReadResult, error) {
+	return v.s.follow(ctx, v.p, v.ns, v.name, after, timeout, false)
+}
+
+// Close releases the viewer's slot.
+func (v *Viewer) Close() { v.once.Do(func() { v.s.hub.unwatch(v.convID) }) }
+
+func (s *Service) follow(ctx context.Context, p Principal, ns, name string, after int64, timeout time.Duration, takeSlot bool) (ReadResult, error) {
 	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
 		return ReadResult{}, err
 	}
@@ -425,10 +464,12 @@ func (s *Service) Follow(ctx context.Context, p Principal, ns, name string, afte
 	if err != nil {
 		return ReadResult{}, err
 	}
-	if !s.hub.watch(c.id, s.opts.MaxWatchers) {
-		return ReadResult{}, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+	if takeSlot {
+		if !s.hub.watch(c.id, s.opts.MaxWatchers) {
+			return ReadResult{}, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+		}
+		defer s.hub.unwatch(c.id)
 	}
-	defer s.hub.unwatch(c.id)
 
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
