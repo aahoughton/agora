@@ -10,7 +10,9 @@ Commits made with an AI assistant keep that tool's standard attribution trailer
 
 Tool-specific instruction files (`CLAUDE.md` and the like) are not committed. If
 your tool needs one, create it locally, import or point at this file, and add it
-to `.git/info/exclude`.
+to `.git/info/exclude` anchored to the root (`/CLAUDE.md`): on a
+case-insensitive checkout a bare `CLAUDE.md` also hides
+`internal/profiles/text/claude.md`.
 
 ## Layout
 
