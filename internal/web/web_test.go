@@ -654,3 +654,40 @@ func TestConversationListPagesAndFilters(t *testing.T) {
 		t.Fatalf("bad cursor = %d", status)
 	}
 }
+
+func TestEarlierMessages(t *testing.T) {
+	e := newEnv(t, web.Options{ShownMessages: 3})
+	ctx, p := t.Context(), core.Anonymous()
+	if _, err := e.svc.Start(ctx, p, "default", core.StartParams{Name: "long", Agent: "alice", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 8 { // seqs 3..10
+		if _, err := e.svc.Say(ctx, p, "default", "long", core.SayParams{Agent: "alice", Body: fmt.Sprintf("body-%d", i+3)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seqs := func(body string) string {
+		var out []string
+		for _, m := range regexp.MustCompile(`id="m(\d+)"`).FindAllStringSubmatch(body, -1) {
+			out = append(out, m[1])
+		}
+		return strings.Join(out, ",")
+	}
+
+	_, body := e.get("/n/default/c/long")
+	if seqs(body) != "8,9,10" || !strings.Contains(body, `href="?before=8"`) || !strings.Contains(body, "data-events=") {
+		t.Fatalf("latest page: %s", seqs(body))
+	}
+	_, body = e.get("/n/default/c/long?before=8")
+	if seqs(body) != "5,6,7" || !strings.Contains(body, `href="?before=5"`) || strings.Contains(body, "data-events=") ||
+		strings.Contains(body, `<form class="observe"`) || !strings.Contains(body, "Back to the latest") {
+		t.Fatalf("earlier page: %s", seqs(body))
+	}
+	_, body = e.get("/n/default/c/long?before=3")
+	if seqs(body) != "1,2" || strings.Contains(body, "Earlier messages") {
+		t.Fatalf("first page: %s", seqs(body))
+	}
+	if status, _ := e.get("/n/default/c/long?before=x"); status != http.StatusBadRequest {
+		t.Fatalf("bad before = %d", status)
+	}
+}

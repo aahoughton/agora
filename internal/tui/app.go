@@ -114,8 +114,12 @@ type thread struct {
 	lines     [][]string
 	after     int64
 	truncated bool
-	vp        viewport.Model
-	newBelow  int
+	// start is the seq the loaded messages follow: earlier ones exist
+	// when it is above 0, and load on scrolling past the top.
+	start          int64
+	loadingEarlier bool
+	vp             viewport.Model
+	newBelow       int
 	// panel shows participants beside the thread on a wide screen;
 	// overlay shows them in place of the thread on a narrow one.
 	panel    bool
@@ -154,7 +158,13 @@ type (
 		res client.FollowResult
 		err error
 	}
-	retryMsg    struct{ gen int }
+	retryMsg   struct{ gen int }
+	earlierMsg struct {
+		gen  int
+		from int64
+		res  client.FollowResult
+		err  error
+	}
 	observedMsg struct {
 		gen int
 		err error
@@ -393,8 +403,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t := m.t
 		t.conv = msg.conv
 		t.after = max(0, msg.conv.LastSeq-int64(m.opts.ShownMessages))
-		t.truncated = t.after > 0
+		t.start, t.truncated = t.after, t.after > 0
 		return m, m.follow(0)
+	case earlierMsg:
+		if msg.gen != m.gen {
+			return m, nil
+		}
+		m.t.loadingEarlier = false
+		if msg.err != nil {
+			m.setNotice(msg.err)
+			return m, nil
+		}
+		m.prependEarlier(msg.from, msg.res.Messages)
+		return m, nil
 	case followMsg:
 		if msg.gen != m.gen {
 			return m, nil
@@ -772,6 +793,7 @@ func (m *Model) threadKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 	case "g", "home":
 		t.vp.GotoTop()
+		return m.loadEarlier()
 	case "G", "end":
 		t.vp.GotoBottom()
 		t.newBelow = 0
@@ -781,9 +803,51 @@ func (m *Model) threadKey(k tea.KeyPressMsg) tea.Cmd {
 		if t.vp.AtBottom() {
 			t.newBelow = 0
 		}
+		if t.vp.AtTop() {
+			return tea.Batch(cmd, m.loadEarlier())
+		}
 		return cmd
 	}
 	return nil
+}
+
+// earlierPage is how many earlier messages load at a time; a follow
+// returns at most core.FollowLimit.
+const earlierPage = core.FollowLimit
+
+// loadEarlier fetches the messages before the loaded ones, if any.
+func (m *Model) loadEarlier() tea.Cmd {
+	t := m.t
+	if t.start == 0 || t.loadingEarlier {
+		return nil
+	}
+	t.loadingEarlier = true
+	from := max(0, t.start-earlierPage)
+	gen, c, ctx, ns, name := m.gen, m.opts.Client, m.screenCtx, m.ns, t.name
+	return func() tea.Msg {
+		ctx, done := context.WithTimeout(ctx, requestTimeout)
+		defer done()
+		res, err := c.Follow(ctx, ns, name, from, 0)
+		return earlierMsg{gen: gen, from: from, res: res, err: err}
+	}
+}
+
+// prependEarlier adds messages before the loaded ones and keeps the same
+// lines on screen.
+func (m *Model) prependEarlier(from int64, msgs []core.Message) {
+	t := m.t
+	var earlier []core.Message
+	for _, mm := range msgs {
+		if mm.Seq <= t.start {
+			earlier = append(earlier, mm)
+		}
+	}
+	t.messages = append(earlier, t.messages...)
+	t.start = from
+	t.truncated = from > 0
+	total, off := t.vp.TotalLineCount(), t.vp.YOffset()
+	m.rerender()
+	t.vp.SetYOffset(off + t.vp.TotalLineCount() - total)
 }
 
 func (m *Model) composerKey(k tea.KeyPressMsg) tea.Cmd {

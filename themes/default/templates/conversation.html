@@ -10,12 +10,15 @@
 
 {{define "content" -}}
 <section class="thread">
-  {{- if .Truncated}}<p class="truncated">Showing the most recent messages only.</p>{{end}}
-  <ol id="messages" class="messages" style="--seq-width: {{len (printf "#%d" .Conversation.LastSeq)}}ch" data-last-seq="{{.Conversation.LastSeq}}" data-events="/n/{{.Namespace}}/c/{{.Conversation.Name}}/events">
+  {{- if .Earlier}}<p class="truncated"><a href="?before={{.Earlier}}">Earlier messages</a></p>{{end}}
+  <ol id="messages" class="messages" style="--seq-width: {{len (printf "#%d" .Conversation.LastSeq)}}ch" data-last-seq="{{.Conversation.LastSeq}}"{{if not .Before}} data-events="/n/{{.Namespace}}/c/{{.Conversation.Name}}/events"{{end}}>
   {{- range .Messages}}
   {{template "message" .}}
   {{- end}}
   </ol>
+  {{- if .Before}}
+  <p class="truncated">Messages before #{{.Before}}. <a href="/n/{{.Namespace}}/c/{{.Conversation.Name}}">Back to the latest</a></p>
+  {{- else}}
   <div class="dock">
     <button type="button" class="new-below" hidden><span class="new-count">0</span> new below</button>
     {{- if eq .Conversation.Status "open"}}
@@ -28,6 +31,7 @@
     {{- end}}
     <p class="observe-closed"{{if eq .Conversation.Status "open"}} hidden{{end}}>This conversation has concluded; comments are closed.</p>
   </div>
+  {{- end}}
 </section>
 
 <aside class="details">

@@ -53,6 +53,12 @@ type Page struct {
 	Messages     []core.Message
 	// Truncated is true when older messages exist that are not shown.
 	Truncated bool
+	// Earlier is the seq to pass as ?before= for the messages just before
+	// the ones shown; 0 when the first message is shown.
+	Earlier int64
+	// Before is the ?before= of a page of earlier messages, or 0 on the
+	// live page. Earlier pages do not update live.
+	Before int64
 	// Observer is the name last used for an observer comment.
 	Observer string
 	// Draft is the text of a comment that was rejected, to show again.
@@ -404,13 +410,32 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal) (Page, erro
 	if err != nil {
 		return data, err
 	}
-	after := max(c.LastSeq-int64(v.opts.ShownMessages), 0)
-	res, err := v.svc.Read(r.Context(), p, ns, name, core.ReadParams{After: &after, Limit: v.opts.ShownMessages})
-	if err != nil {
-		return data, err
+	// The page shows up to ShownMessages messages ending at upto: the
+	// latest, or those before ?before=.
+	upto := c.LastSeq
+	if raw := r.URL.Query().Get("before"); raw != "" {
+		before, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || before < 1 {
+			return data, &core.Error{Code: core.CodeInvalid, Message: "before must be a message number"}
+		}
+		if before <= c.LastSeq {
+			upto, data.Before = before-1, before
+		}
+	}
+	after := max(upto-int64(v.opts.ShownMessages), 0)
+	data.Messages = []core.Message{}
+	if upto > after {
+		res, err := v.svc.Read(r.Context(), p, ns, name, core.ReadParams{After: &after, Limit: int(upto - after)})
+		if err != nil {
+			return data, err
+		}
+		data.Messages = res.Messages
 	}
 	c = displayable(c)
-	data.Conversation, data.Messages, data.Truncated = &c, res.Messages, after > 0
+	data.Conversation, data.Truncated = &c, after > 0
+	if after > 0 {
+		data.Earlier = after + 1
+	}
 	if ck, err := r.Cookie(observerCookie); err == nil && core.ValidName(ck.Value) {
 		data.Observer = ck.Value
 	}

@@ -410,3 +410,30 @@ func TestRefreshKeepsMoreThanOneRequestHolds(t *testing.T) {
 		t.Fatalf("after refreshes: %d conversations, next %q; want %d and none", len(h.m.conversations), h.m.next, n)
 	}
 }
+
+func TestScrollingUpLoadsEarlierMessages(t *testing.T) {
+	h := newHarness(t, Options{Namespace: "default", Conversation: "long", ShownMessages: 5})
+	ctx, p := t.Context(), core.Anonymous()
+	if _, err := h.svc.Start(ctx, p, "default", core.StartParams{Name: "long", Agent: "alice", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 20 { // seqs 3..22
+		if _, err := h.svc.Say(ctx, p, "default", "long", core.SayParams{Agent: "alice", Body: fmt.Sprintf("body-%d", i+3)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.start()
+	h.until("the latest messages", func() bool { return h.m.t != nil && len(h.m.t.messages) == 5 })
+	if !h.shows("Earlier messages")() {
+		t.Fatal("no earlier-messages notice")
+	}
+	h.keys("g")
+	h.until("the earlier messages", func() bool { return len(h.m.t.messages) == 22 && !h.m.t.loadingEarlier })
+	if h.m.t.messages[0].Seq != 1 || h.m.t.truncated {
+		t.Fatalf("first seq %d, truncated %v", h.m.t.messages[0].Seq, h.m.t.truncated)
+	}
+	// The screen stays where it was: on the oldest of the five first shown.
+	if !h.shows("body-18")() || h.shows("Earlier messages")() {
+		t.Fatalf("screen after loading:\n%s", ansi.Strip(h.m.View().Content))
+	}
+}

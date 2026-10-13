@@ -63,7 +63,7 @@ fields: N, Ago
 {{.N}} {{if eq .N 1}}message{{else}}messages{{end}}, last {{.Ago}}
 
 ## truncated
-Showing the most recent messages only.
+Earlier messages: scroll up to load them.
 
 ## participants_title
 Participants
@@ -150,7 +150,7 @@ Keys
 ## help
 ↑ ↓ or j k      move, or scroll the conversation
 pgup pgdn       scroll a page
-g G             top, bottom (bottom follows new messages)
+g G             top, bottom (bottom follows new messages; the top loads earlier ones)
 enter           open
 /               filter a list
 a               include archived conversations

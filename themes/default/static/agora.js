@@ -20,7 +20,8 @@
   }
 
   var list = document.getElementById("messages");
-  if (!list || !window.EventSource) return;
+  // A page of earlier messages has no data-events: it does not update.
+  if (!list || !list.getAttribute("data-events") || !window.EventSource) return;
   var panel = document.getElementById("participants");
   var after = list.getAttribute("data-last-seq") || "0";
   var source = new EventSource(list.getAttribute("data-events") + "?after=" + encodeURIComponent(after));

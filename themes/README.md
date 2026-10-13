@@ -48,6 +48,8 @@ Page templates receive a `Page`:
 | `.Conversation` | Conversation | `/n/{namespace}/c/{conversation}` |
 | `.Messages` | list of Message | conversation page |
 | `.Truncated` | bool | conversation page; older messages are not shown |
+| `.Earlier` | int | conversation page; pass as `?before=` for the messages just before those shown, 0 if none |
+| `.Before` | int | conversation page; the `?before=` of a page of earlier messages, 0 on the live page (which alone updates live) |
 | `.Observer` | string | conversation page; the name last used to comment |
 | `.Draft` | string | conversation page; the text of a rejected comment |
 
