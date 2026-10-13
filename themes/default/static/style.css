@@ -207,6 +207,9 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 .person .who { display: flex; flex-direction: column; min-width: 0; font-size: 0.9rem; }
 .person .state { color: var(--muted); font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem; }
 .person .note { color: var(--fg); font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
+/* Text written by participants cannot change the direction of what is
+   around it. */
+.body, .person .note, .bar-topic, .row-topic { unicode-bidi: isolate; }
 .person.left .avatar, .person.dropped .avatar { opacity: 0.4; }
 .person.left .name, .person.dropped .name { color: var(--muted); }
 .person.dropped .name { text-decoration: line-through; }

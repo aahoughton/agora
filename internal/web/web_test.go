@@ -17,6 +17,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/markdown"
 	"github.com/aahoughton/agora/internal/store"
 	"github.com/aahoughton/agora/internal/web"
 )
@@ -556,6 +557,50 @@ func TestTimeboxShowsLocalEndAndCountdown(t *testing.T) {
 	if !strings.Contains(body, ">Jan 2 17:04</time> (in 1h 50m)") {
 		t.Fatalf("timebox line missing:\n%s", body)
 	}
+}
+
+func TestBidiControlsAreNotShown(t *testing.T) {
+	e := newEnv(t, web.Options{})
+	ctx, p := t.Context(), core.Anonymous()
+	if _, err := e.svc.Start(ctx, p, "default", core.StartParams{Name: "spoof", Topic: "safe \u202eetirw", Agent: "alice", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.SetPresence(ctx, p, "default", "spoof", core.PresenceParams{Agent: "alice", Presence: core.PresenceWorking, Note: "note \u2066x\u2069"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Say(ctx, p, "default", "spoof", core.SayParams{Agent: "alice", Body: "body \u202dtxt"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/n/default/c/spoof", "/n/default"} {
+		_, body := e.get(path)
+		if strings.ContainsFunc(body, markdown.IsBidiControl) {
+			t.Errorf("%s shows a bidi control", path)
+		}
+		if !strings.Contains(body, "safe etirw") {
+			t.Errorf("%s lost the topic text", path)
+		}
+	}
+
+	ctx2, cancel := context.WithCancel(ctx)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx2, http.MethodGet, e.url+"/n/default/c/spoof/events?after=0", nil)
+	resp, err := e.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.ContainsFunc(line, markdown.IsBidiControl) {
+			t.Fatalf("event stream shows a bidi control: %q", line)
+		}
+		// The stream opens with status and participants, then the messages.
+		if strings.Contains(line, "body txt") {
+			return
+		}
+	}
+	t.Fatal("stream ended before the message")
 }
 
 func TestStreamKeepsAboutCurrent(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/markdown"
 	"github.com/aahoughton/agora/internal/tone"
 	"github.com/aahoughton/agora/themes"
 )
@@ -376,6 +377,9 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 		v.fail(w, err, Page{Namespace: ns})
 		return
 	}
+	for i := range cs {
+		cs[i] = displayable(cs[i])
+	}
 	v.render(w, http.StatusOK, "conversations", Page{Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived})
 }
 
@@ -391,6 +395,7 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal) (Page, erro
 	if err != nil {
 		return data, err
 	}
+	c = displayable(c)
 	data.Conversation, data.Messages, data.Truncated = &c, res.Messages, after > 0
 	if ck, err := r.Cookie(observerCookie); err == nil && core.ValidName(ck.Value) {
 		data.Observer = ck.Value
@@ -514,10 +519,25 @@ func (v *viewer) snapshot(w http.ResponseWriter, c core.Conversation) error {
 	if err := writeEvent(w, "status", "", string(c.Status)); err != nil {
 		return err
 	}
+	c = displayable(c)
 	if err := v.event(w, "participants", "", c); err != nil {
 		return err
 	}
 	return v.event(w, "about", "", c)
+}
+
+// displayable drops bidirectional controls from the free text of a
+// conversation, its topic and participant notes; message bodies lose them
+// in renderMarkdown.
+func displayable(c core.Conversation) core.Conversation {
+	c.Topic = markdown.StripBidi(c.Topic)
+	ps := make([]core.Participant, len(c.Participants))
+	for i, p := range c.Participants {
+		p.Note = markdown.StripBidi(p.Note)
+		ps[i] = p
+	}
+	c.Participants = ps
+	return c
 }
 
 // event writes one server-sent event whose data is the named template

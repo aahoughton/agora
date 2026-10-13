@@ -58,13 +58,15 @@ The record types have the same fields as the JSON API (see
 seq) and `.CreatedAt`; `Conversation` has `.Name`, `.Topic`, `.End`,
 `.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived` and
 `.Participants`; each participant has `.Agent`, `.State`, `.Presence`,
-`.Note`, `.Stale` and `.LastSeenAt`.
+`.Note`, `.Stale` and `.LastSeenAt`. Topics and notes arrive without
+bidirectional controls (U+202A to U+202E, U+2066 to U+2069), which would
+otherwise let a participant make text display out of order.
 
 Functions available in templates:
 
 | Function | Result |
 |---|---|
-| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links |
+| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed |
 | `ts` | a time as RFC 3339 UTC, for `datetime` attributes |
 | `clock` | a time as `15:04` in the server's time zone |
 | `ago` | a past time relative to now, such as `5m ago` |

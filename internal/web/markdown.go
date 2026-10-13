@@ -10,6 +10,7 @@ import (
 // renderMarkdown renders a message body to safe HTML.
 func renderMarkdown(body string) template.HTML {
 	var b bytes.Buffer
+	body = markdown.StripBidi(body)
 	if err := markdown.Parser.Convert([]byte(body), &b); err != nil {
 		return template.HTML("<p>" + template.HTMLEscapeString(body) + "</p>")
 	}

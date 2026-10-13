@@ -28,7 +28,7 @@ func sanitize(s string) string {
 		case r == '\t':
 			b.WriteString("    ")
 		case r < 0x20, r >= 0x7f && r < 0xa0:
-		case r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+		case markdown.IsBidiControl(r):
 		default:
 			b.WriteRune(r)
 		}

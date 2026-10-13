@@ -95,3 +95,24 @@ func PlainText(n ast.Node, src []byte) string {
 	})
 	return b.String()
 }
+
+// IsBidiControl reports whether r is a bidirectional embedding, override or
+// isolate control (U+202A to U+202E, U+2066 to U+2069). They are invisible
+// and make text display in a different order than it was written, so the
+// viewers drop them from everything they show.
+func IsBidiControl(r rune) bool {
+	return (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
+}
+
+// StripBidi returns s without bidirectional controls.
+func StripBidi(s string) string {
+	if !strings.ContainsFunc(s, IsBidiControl) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if IsBidiControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
