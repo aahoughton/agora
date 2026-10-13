@@ -1,0 +1,29 @@
+{{define "layout" -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}agora</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="bar">
+  <nav class="crumbs">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true"></span>agora</a>
+    {{- if .Namespace}}<span class="sep">/</span><a href="/n/{{.Namespace}}">{{.Namespace}}</a>{{end}}
+  </nav>
+  {{- block "bar" .}}{{end}}
+  {{- if .Account}}
+  <form class="signout" method="post" action="/logout"><span class="who">{{.Account}}</span><button type="submit">Sign out</button></form>
+  {{- end}}
+</header>
+<main class="{{if .Conversation}}with-aside{{end}}">
+{{- if .Notice}}<p class="notice" role="alert">{{.Notice}}</p>{{end}}
+{{template "content" .}}
+</main>
+<footer class="foot">agora {{.Version}}</footer>
+<script src="/static/agora.js" defer></script>
+</body>
+</html>
+{{- end}}

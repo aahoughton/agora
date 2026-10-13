@@ -1,0 +1,184 @@
+package mcpserver
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/wording"
+)
+
+// Results are plain text, not JSON: agents pay for every token they read, and
+// the text carries the same facts. Every agent-facing result ends with the
+// standing line so the next step is the last thing the agent sees.
+
+func renderStanding(st core.Standing) string {
+	return st.Line
+}
+
+func renderDigest(w *wording.Wording, d core.Digest) string {
+	var b strings.Builder
+	switch {
+	case d.New == 0 && d.TimedOut:
+		b.WriteString(w.Phrase(wording.WaitTimedOut, nil) + "\n")
+	case d.New == 0:
+		b.WriteString(w.Phrase(wording.WaitNothingNew, nil) + "\n")
+	default:
+		fmt.Fprintf(&b, "%d new (%s)", d.New, authorList(d.Authors))
+		if len(d.Messages) > 0 {
+			b.WriteString(":\n")
+			writeMessages(&b, w, d.Messages)
+			break
+		}
+		if len(d.Previews) < d.New {
+			fmt.Fprintf(&b, "; latest %d:", len(d.Previews))
+		}
+		b.WriteString("\n")
+		writePreviews(&b, w, d.Previews)
+	}
+	b.WriteString(renderStanding(d.Standing))
+	return b.String()
+}
+
+func renderSay(w *wording.Wording, r core.SayResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "posted #%d\n", r.Message.Seq)
+	if m := r.Missed; m != nil {
+		b.WriteString(w.Phrase(wording.SayMissed, map[string]any{"New": m.New, "Authors": authorList(m.Authors)}))
+		if len(m.Messages) > 0 {
+			b.WriteString(":\n")
+			writeMessages(&b, w, m.Messages)
+		} else {
+			if len(m.Previews) < m.New {
+				fmt.Fprintf(&b, "; latest %d", len(m.Previews))
+			}
+			b.WriteString(":\n")
+			writePreviews(&b, w, m.Previews)
+		}
+	}
+	b.WriteString(renderStanding(r.Standing))
+	return b.String()
+}
+
+func authorList(as []core.AuthorCount) string {
+	parts := make([]string, len(as))
+	for i, a := range as {
+		parts[i] = fmt.Sprintf("%s x%d", a.Author, a.Count)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func writePreviews(b *strings.Builder, w *wording.Wording, ps []core.Preview) {
+	for _, p := range ps {
+		fmt.Fprintf(b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind), replyTag(p.ReplyTo), p.Text)
+	}
+}
+
+func renderRead(w *wording.Wording, r core.ReadResult) string {
+	var b strings.Builder
+	if len(r.Messages) == 0 {
+		b.WriteString(w.Phrase(wording.ReadEmpty, nil) + "\n")
+	}
+	writeMessages(&b, w, r.Messages)
+	if r.More {
+		b.WriteString(w.Phrase(wording.ReadMore, map[string]any{"LastSeq": r.LastSeq}) + "\n")
+	}
+	if r.Standing != nil {
+		b.WriteString(renderStanding(*r.Standing))
+	} else {
+		fmt.Fprintf(&b, "last_seq: %d", r.LastSeq)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeMessages writes one line per single-line message, and a header line
+// plus the body for multi-line ones. Every body line is indented, so only a
+// real message starts a line with "#": a body cannot pass off its lines as
+// other messages.
+func writeMessages(b *strings.Builder, w *wording.Wording, msgs []core.Message) {
+	for _, m := range msgs {
+		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo))
+		body := strings.TrimSpace(m.Body)
+		if !strings.Contains(body, "\n") {
+			fmt.Fprintf(b, "%s %s\n", head, body)
+			continue
+		}
+		b.WriteString(head + "\n")
+		for line := range strings.Lines(body) {
+			b.WriteString("  " + strings.TrimRight(line, "\n") + "\n")
+		}
+		b.WriteString("\n")
+	}
+}
+
+func renderConversation(_ *wording.Wording, c core.Conversation) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s [%s, end: %s", c.Name, c.Status, c.End)
+	if c.EndsAt != nil {
+		fmt.Fprintf(&b, " at %s", c.EndsAt.Format("2006-01-02T15:04Z07:00"))
+	}
+	fmt.Fprintf(&b, ", created by %s, last #%d]", c.CreatedBy, c.LastSeq)
+	if c.Archived {
+		b.WriteString(" archived")
+	}
+	if c.Topic != "" {
+		fmt.Fprintf(&b, " %s", c.Topic)
+	}
+	if len(c.Participants) > 0 {
+		ps := make([]string, len(c.Participants))
+		for i, p := range c.Participants {
+			ps[i] = p.Agent + " (" + p.State
+			if p.Stale {
+				ps[i] += ", stale"
+			} else if p.State == core.StateActive || p.State == core.StateConcluded {
+				ps[i] += ", " + p.Presence
+			}
+			ps[i] += ")"
+		}
+		fmt.Fprintf(&b, "\n  participants: %s", strings.Join(ps, ", "))
+	}
+	return b.String()
+}
+
+func renderList(w *wording.Wording, page core.ListPage) string {
+	if len(page.Conversations) == 0 {
+		return w.Phrase(wording.ListNone, nil)
+	}
+	parts := make([]string, 0, len(page.Conversations)+1)
+	for _, c := range page.Conversations {
+		parts = append(parts, renderConversation(w, c))
+	}
+	if page.Next != "" {
+		parts = append(parts, w.Phrase(wording.ListMore, map[string]any{"Cursor": page.Next}))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func renderStatus(w *wording.Wording, sts []core.Standing) string {
+	if len(sts) == 0 {
+		return w.Phrase(wording.StatusNone, nil)
+	}
+	lines := make([]string, len(sts))
+	for i, st := range sts {
+		lines[i] = renderStanding(st)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func kindTag(w *wording.Wording, kind string) string {
+	switch kind {
+	case core.KindSay:
+		return ""
+	case core.KindObserver:
+		return " " + w.Phrase(wording.ObserverTag, nil)
+	default:
+		return " [" + kind + "]"
+	}
+}
+
+func replyTag(replyTo *int64) string {
+	if replyTo == nil {
+		return ""
+	}
+	return fmt.Sprintf(" (re #%d)", *replyTo)
+}

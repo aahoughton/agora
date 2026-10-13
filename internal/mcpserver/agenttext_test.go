@@ -1,0 +1,172 @@
+package mcpserver_test
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/agora/internal/wording"
+)
+
+var update = flag.Bool("update", false, "rewrite testdata/agent-text.golden")
+
+// TestAgentText snapshots everything an agent can see: instructions, tool
+// descriptions and schemas as a client receives them, every phrase, and the
+// output of a scripted session. Wording changes show up as a diff to the
+// golden file; run `go test ./internal/mcpserver -update` to accept them.
+func TestAgentText(t *testing.T) {
+	var b strings.Builder
+	w := wording.Default()
+
+	b.WriteString("# Instructions (url http://127.0.0.1:8787, namespace default)\n\n")
+	b.WriteString(w.Instructions("http://127.0.0.1:8787", "default"))
+	b.WriteString("\n\n# Tools\n")
+
+	svc := newService(t)
+	alice := connect(t, svc, mcpserver.Options{})
+	for tool, err := range alice.cs.Tools(t.Context(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		ro := ""
+		switch a := tool.Annotations; {
+		case a != nil && a.ReadOnlyHint:
+			ro = " (read-only)"
+		case a != nil && a.DestructiveHint != nil && *a.DestructiveHint:
+			ro = " (destructive)"
+		}
+		fmt.Fprintf(&b, "\n## %s%s\n%s\n", tool.Name, ro, tool.Description)
+		raw, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema struct {
+			Properties map[string]struct {
+				Type        any    `json:"type"`
+				Description string `json:"description"`
+			} `json:"properties"`
+			Required []string `json:"required"`
+		}
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatal(err)
+		}
+		names := make([]string, 0, len(schema.Properties))
+		for n := range schema.Properties {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		for _, n := range names {
+			p := schema.Properties[n]
+			req := ""
+			if slices.Contains(schema.Required, n) {
+				req = ", required"
+			}
+			fmt.Fprintf(&b, "  %s (%v%s): %s\n", n, p.Type, req, p.Description)
+		}
+	}
+
+	b.WriteString("\n# Phrases (sample fields)\n")
+	sample := map[string]any{
+		"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
+		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
+		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
+		"New": 2, "Authors": "bob x2", "Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
+	}
+	for _, k := range wording.PhraseKeys {
+		fmt.Fprintf(&b, "\n## %s\n%s\n", k, w.Phrase(k, sample))
+	}
+
+	b.WriteString("\n# Sample session\n")
+	bob := connect(t, svc, mcpserver.Options{})
+	step := func(who string, s *session, tool string, args map[string]any) {
+		out, isErr := s.call(tool, args)
+		raw, err := json.Marshal(args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(raw) > 160 {
+			raw = append(raw[:150:150], fmt.Sprintf("... (%d bytes)", len(raw))...)
+		}
+		mark := ""
+		if isErr {
+			mark = " [error]"
+		}
+		fmt.Fprintf(&b, "\n> %s %s %s%s\n%s\n", who, tool, raw, mark, out)
+	}
+	conv := map[string]any{"conversation": "cache"}
+	with := func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for k, v := range conv {
+			m[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	step("alice", alice, "start", with("agent", "alice", "end", "agreement", "topic", "pick an eviction policy"))
+	step("bob", bob, "join", with("agent", "bob"))
+	step("bob", bob, "read", with("agent", "bob"))
+	step("alice", alice, "say", with("agent", "alice", "body", "LRU or LFU?\nReasoning to follow."))
+	step("bob", bob, "wait", with("agent", "bob", "timeout_seconds", 5))
+	if _, err := svc.Observe(t.Context(), core.Anonymous(), "default", "cache", core.ObserveParams{Name: "pat", Body: "remember the memory budget"}); err != nil {
+		t.Fatal(err)
+	}
+	step("bob", bob, "say", with("agent", "bob", "body", "LRU; LFU costs more memory.", "reply_to", 4))
+	step("alice", alice, "wait", with("agent", "alice", "timeout_seconds", 5))
+	step("alice", alice, "say", with("agent", "alice", "body", "Benchmark notes: "+strings.Repeat("row ok; ", 600)))
+	if _, err := svc.Observe(t.Context(), core.Anonymous(), "default", "cache", core.ObserveParams{Name: "pat", Body: "keep the notes short"}); err != nil {
+		t.Fatal(err)
+	}
+	step("bob", bob, "wait", with("agent", "bob", "timeout_seconds", 5))
+	step("bob", bob, "read", with("agent", "bob", "limit", 1))
+	step("alice", alice, "conclude", with("agent", "alice", "body", "AGREED: LRU"))
+	step("bob", bob, "say", with("agent", "zed", "body", "hi"))
+	step("bob", bob, "conclude", with("agent", "bob", "body", "AGREED: LRU"))
+	step("alice", alice, "wait", with("agent", "alice"))
+	step("alice", alice, "status", map[string]any{"agent": "alice"})
+	step("alice", alice, "list", map[string]any{"status": "all"})
+
+	got := b.String()
+	path := filepath.Join("testdata", "agent-text.golden")
+	if *update {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run go test ./internal/mcpserver -update to create it)", err)
+	}
+	if got != string(want) {
+		t.Fatalf("agent-facing text changed; review the diff and run go test ./internal/mcpserver -update\n%s", firstDiff(string(want), got))
+	}
+}
+
+func firstDiff(want, got string) string {
+	wl, gl := strings.Split(want, "\n"), strings.Split(got, "\n")
+	for i := 0; i < max(len(wl), len(gl)); i++ {
+		var a, b string
+		if i < len(wl) {
+			a = wl[i]
+		}
+		if i < len(gl) {
+			b = gl[i]
+		}
+		if a != b {
+			return fmt.Sprintf("first difference at line %d:\n  want: %q\n  got:  %q", i+1, a, b)
+		}
+	}
+	return ""
+}

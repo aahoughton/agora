@@ -1,0 +1,289 @@
+/* agora default theme.
+   Colors are variables: override them in a theme's style.css to restyle
+   without touching templates. tone-0..tone-7 color participants; every name
+   maps to one tone, the same on every page. */
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #fbfaf8;
+  --fg: #23201c;
+  --muted: #77716a;
+  --faint: #a59f97;
+  --line: #e6e2dc;
+  --accent: #4f46e5;
+  --accent-soft: #eef0ff;
+  --open: #0f7b4b;
+  --open-bg: #e3f5ec;
+  --done: #5d6470;
+  --done-bg: #eceef1;
+  --observer: #a3600b;
+  --observer-bg: #fff7e6;
+  --observer-line: #f2c46d;
+  --conclude-bg: #effaf4;
+  --code-bg: #f3f1ee;
+  --shadow: 0 1px 2px rgb(35 32 28 / 0.06), 0 1px 1px rgb(35 32 28 / 0.04);
+  --radius: 10px;
+
+  --tone-0: #4f46e5; --tone-0-bg: #eef0ff;
+  --tone-1: #0f766e; --tone-1-bg: #e6f6f4;
+  --tone-2: #b4235b; --tone-2-bg: #fdebf2;
+  --tone-3: #7c3aed; --tone-3-bg: #f3edff;
+  --tone-4: #15803d; --tone-4-bg: #e8f7ee;
+  --tone-5: #c2410c; --tone-5-bg: #fdf0e8;
+  --tone-6: #0369a1; --tone-6-bg: #e6f3fb;
+  --tone-7: #a21caf; --tone-7-bg: #faebfc;
+
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121110;
+    --surface: #1c1a18;
+    --surface-2: #181715;
+    --fg: #ece8e2;
+    --muted: #a39d95;
+    --faint: #6f6a63;
+    --line: #2e2b27;
+    --accent: #8b8cf6;
+    --accent-soft: #23234a;
+    --open: #4ade80;
+    --open-bg: #12301f;
+    --done: #a1a8b3;
+    --done-bg: #262a30;
+    --observer: #f5b54a;
+    --observer-bg: #2b2210;
+    --observer-line: #6b4f17;
+    --conclude-bg: #13261b;
+    --code-bg: #262320;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+
+    --tone-0: #8b8cf6; --tone-0-bg: #23234a;
+    --tone-1: #2dd4bf; --tone-1-bg: #0f2e2b;
+    --tone-2: #f472b6; --tone-2-bg: #3a1528;
+    --tone-3: #b794f6; --tone-3-bg: #2a1d45;
+    --tone-4: #4ade80; --tone-4-bg: #12301f;
+    --tone-5: #fb923c; --tone-5-bg: #3a2010;
+    --tone-6: #38bdf8; --tone-6-bg: #0e2a3b;
+    --tone-7: #e879f9; --tone-7-bg: #36153b;
+  }
+}
+.tone-0 { --tone: var(--tone-0); --tone-bg: var(--tone-0-bg); }
+.tone-1 { --tone: var(--tone-1); --tone-bg: var(--tone-1-bg); }
+.tone-2 { --tone: var(--tone-2); --tone-bg: var(--tone-2-bg); }
+.tone-3 { --tone: var(--tone-3); --tone-bg: var(--tone-3-bg); }
+.tone-4 { --tone: var(--tone-4); --tone-bg: var(--tone-4-bg); }
+.tone-5 { --tone: var(--tone-5); --tone-bg: var(--tone-5-bg); }
+.tone-6 { --tone: var(--tone-6); --tone-bg: var(--tone-6-bg); }
+.tone-7 { --tone: var(--tone-7); --tone-bg: var(--tone-7-bg); }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.55; font-size: 15px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2 { line-height: 1.25; }
+h2 { font-size: 0.75rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.75rem; }
+time { font-variant-numeric: tabular-nums; }
+
+/* Sticky bar: breadcrumb, and on conversation pages the conversation itself. */
+.bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 0.6rem 1.25rem;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.crumbs { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+.crumbs .sep { color: var(--faint); }
+.brand { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; color: var(--fg); letter-spacing: -0.01em; }
+.brand .mark { width: 0.85rem; height: 0.85rem; border-radius: 4px; background: linear-gradient(135deg, var(--tone-0), var(--tone-2)); }
+.bar-conversation { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; flex: 1; }
+.bar-conversation h1 { font-size: 1.05rem; margin: 0; white-space: nowrap; }
+.bar-topic { color: var(--muted); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+main.with-aside { max-width: 76rem; display: grid; grid-template-columns: minmax(0, 1fr) 18rem; gap: 2rem; align-items: start; }
+main.with-aside > .notice { grid-column: 1 / -1; }
+.foot { text-align: center; color: var(--faint); font-size: 0.8rem; padding: 1.5rem; }
+.notice { background: var(--observer-bg); border: 1px solid var(--observer-line); padding: 0.6rem 0.9rem; border-radius: var(--radius); }
+.empty, .truncated, .back { color: var(--muted); }
+
+.pill { display: inline-block; padding: 0.05rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
+.pill.open { color: var(--open); background: var(--open-bg); }
+.pill.concluded { color: var(--done); background: var(--done-bg); }
+
+/* Avatars: initials on the participant's tone. */
+.avatar {
+  display: inline-grid; place-items: center; flex: none;
+  width: 1.75rem; height: 1.75rem; border-radius: 50%;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--tone, var(--muted)); background: var(--tone-bg, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--muted)) 25%, transparent);
+}
+.name { color: var(--tone, var(--fg)); font-weight: 600; }
+
+/* Page headings and lists. */
+.page-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1rem; }
+.page-head h1 { font-size: 1.5rem; margin: 0 auto 0 0; }
+.toggle { font-size: 0.9rem; }
+.more { margin: 1rem 0 0; font-size: 0.9rem; }
+
+.conversation-list, .namespace-grid { list-style: none; margin: 0; padding: 0; }
+.conversation-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.conversation-row + .conversation-row { border-top: 1px solid var(--line); }
+.row-link { display: grid; grid-template-columns: minmax(0, 1fr) 11rem 9rem 5.5rem; gap: 1rem; align-items: center; padding: 0.85rem 1.1rem; color: inherit; }
+.row-link:hover { background: var(--surface-2); text-decoration: none; }
+.row-main { display: flex; flex-direction: column; min-width: 0; }
+.row-name { font-weight: 600; color: var(--fg); }
+.row-topic { color: var(--muted); font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-meta { display: flex; align-items: center; gap: 0.5rem; }
+.end { color: var(--muted); font-size: 0.85rem; }
+.row-time { color: var(--muted); font-size: 0.85rem; text-align: right; }
+.stack { display: flex; flex-wrap: wrap; }
+.stack .avatar { width: 1.6rem; height: 1.6rem; margin-right: -0.35rem; border: 2px solid var(--surface); }
+.stack .avatar.left, .stack .avatar.dropped { opacity: 0.4; }
+.conversation-row.concluded .row-name { color: var(--muted); }
+.conversation-row.archived { opacity: 0.6; }
+
+.namespace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; }
+.namespace-card { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); color: inherit; }
+.namespace-card:hover { border-color: var(--accent); text-decoration: none; }
+
+/* The thread: a gutter of seq numbers, then the message. The gutter is as
+   wide as the largest seq on the page (--seq-width). */
+.messages { list-style: none; margin: 0; padding: 0; }
+.message { display: grid; grid-template-columns: calc(var(--seq-width, 4ch) + 0.5ch) minmax(0, 1fr); column-gap: 0.75rem; align-items: start; margin: 0.6rem 0; }
+.message .seq { color: var(--faint); text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.message .seq:hover { color: var(--accent); }
+.message:not(.system) .seq { padding-top: 0.95rem; }
+.message.system { margin: 0.15rem 0; align-items: baseline; }
+.message .system-line { color: var(--muted); font-size: 0.82rem; padding-left: 0.25rem; }
+.message .system-line time { color: var(--faint); margin-left: 0.35rem; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--tone, var(--line));
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.7rem 1rem 0.8rem;
+}
+.card .head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; margin-bottom: 0.35rem; }
+.card .avatar { width: 1.5rem; height: 1.5rem; font-size: 0.6rem; }
+.card .author { font-weight: 650; color: var(--tone, var(--fg)); }
+.card .tag { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.card .reply { font-size: 0.8rem; }
+.card .head time { margin-left: auto; color: var(--faint); font-size: 0.8rem; }
+.message.observer .card { --tone: var(--observer); --tone-bg: var(--observer-bg); background: var(--observer-bg); border-color: var(--observer-line); border-left-color: var(--observer); }
+.message.observer .tag { color: var(--observer); }
+.message.conclude .card { background: var(--conclude-bg); }
+.message.conclude .tag { color: var(--open); }
+.message:target .card { box-shadow: 0 0 0 2px var(--accent); }
+
+.body > :first-child { margin-top: 0; }
+.body > :last-child { margin-bottom: 0; }
+.body p, .body ul, .body ol, .body pre, .body table { margin: 0.5rem 0; }
+.body ul, .body ol { padding-left: 1.4rem; }
+.body li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.4rem; }
+.body li > input[type="checkbox"] { margin: 0 0.45rem 0 0; accent-color: var(--tone, var(--accent)); }
+.body code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; background: var(--code-bg); border-radius: 4px; padding: 0.08rem 0.3rem; }
+.body pre { background: var(--code-bg); border-radius: 8px; padding: 0.75rem 0.9rem; overflow-x: auto; }
+.body pre code { background: none; padding: 0; font-size: 0.82rem; }
+.body table { border-collapse: collapse; font-size: 0.9rem; }
+.body th, .body td { border: 1px solid var(--line); padding: 0.3rem 0.65rem; text-align: left; }
+.body th { background: var(--surface-2); }
+.body blockquote { margin: 0.5rem 0; padding-left: 0.8rem; border-left: 3px solid var(--line); color: var(--muted); }
+
+.message.new .card, .message.new .system-line { animation: arrive 1.4s ease-out; }
+@keyframes arrive { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: var(--shadow); } }
+
+/* Sidebar. */
+.details { position: sticky; top: 4.5rem; display: grid; gap: 1rem; }
+.details-toggle { display: none; }
+.details:not(.collapsed) .when-collapsed, .details.collapsed .when-open { display: none; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem 1.1rem; }
+.panel h2 .count { color: var(--faint); font-weight: 600; margin-left: 0.25rem; }
+.about dl { margin: 0; display: grid; gap: 0.6rem; }
+.about dt { font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+.about dd { margin: -0.45rem 0 0; font-size: 0.9rem; }
+.people { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.person { display: flex; gap: 0.65rem; align-items: flex-start; }
+.person .who { display: flex; flex-direction: column; min-width: 0; font-size: 0.9rem; }
+.person .state { color: var(--muted); font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+.person .note { color: var(--fg); font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
+/* Text written by participants cannot change the direction of what is
+   around it. */
+.body, .person .note, .bar-topic, .row-topic { unicode-bidi: isolate; }
+.person.left .avatar, .person.dropped .avatar { opacity: 0.4; }
+.person.left .name, .person.dropped .name { color: var(--muted); }
+.person.dropped .name { text-decoration: line-through; }
+.dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.working { background: var(--open); }
+.dot.waiting { background: var(--accent); }
+.dot.away { background: var(--observer); }
+.dot.stale { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
+/* The dock: pinned to the bottom of the thread column. It holds the
+   observer composer (or the line saying comments are closed) and, above
+   it, the count of messages that arrived while scrolled up. */
+.dock {
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 1.25rem 0 0 calc(var(--seq-width, 4ch) + 0.5ch + 0.75rem);
+}
+.new-below {
+  position: absolute; top: -2.6rem; left: 50%; transform: translateX(-50%);
+  font: inherit; font-size: 0.82rem; font-weight: 600; padding: 0.3rem 0.85rem;
+  border: 0; border-radius: 999px; background: var(--accent); color: white; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.new-below[hidden] { display: none; }
+.observe-closed { margin: 0; padding: 0.6rem 0.8rem; color: var(--muted); font-size: 0.88rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.observe-closed[hidden] { display: none; }
+form.observe {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.5rem; align-items: end;
+  padding: 0.6rem; border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  box-shadow: 0 -6px 16px -10px rgb(0 0 0 / 0.25), var(--shadow);
+}
+form.observe .as { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.82rem; }
+form.observe .as input { width: 8rem; }
+form.observe input, form.observe textarea { font: inherit; font-size: 0.92rem; padding: 0.42rem 0.6rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+form.observe textarea { width: 100%; resize: none; max-height: 12rem; line-height: 1.45; }
+form.observe input:focus, form.observe textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+form.observe button { font: inherit; font-weight: 600; font-size: 0.9rem; padding: 0.45rem 1rem; border-radius: 8px; border: 0; background: var(--accent); color: white; cursor: pointer; }
+form.observe button:hover { filter: brightness(1.08); }
+
+/* Signing in and out (auth mode token). */
+.signout { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+.signout button, form.login button { font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer; }
+.signout button { font-size: 0.82rem; padding: 0.25rem 0.7rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+form.login { max-width: 28rem; margin: 3rem auto; display: grid; gap: 0.6rem; }
+form.login h1 { margin: 0; font-size: 1.3rem; }
+form.login p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+form.login input { font: inherit; padding: 0.5rem 0.7rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+form.login input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+form.login button { padding: 0.5rem 1rem; border: 0; background: var(--accent); color: white; justify-self: start; }
+form.observe button:disabled { opacity: 0.6; cursor: progress; }
+.observe-error { grid-column: 1 / -1; margin: 0; color: var(--tone-2); font-size: 0.82rem; }
+.message { scroll-margin-top: 4.5rem; scroll-margin-bottom: 6rem; }
+
+/* Narrow screens: one column, sidebar above the thread, simpler rows. */
+@media (max-width: 62rem) {
+  main.with-aside { grid-template-columns: minmax(0, 1fr); }
+  .details { position: static; order: -1; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+  /* Participants and details collapse behind a toggle so the thread
+     starts near the top; agora.js collapses them on load. */
+  .details-toggle:not([hidden]) {
+    display: block; grid-column: 1 / -1; justify-self: start;
+    font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--accent);
+    background: none; border: 0; padding: 0; cursor: pointer;
+  }
+  .details.collapsed > .panel { display: none; }
+  .row-link { grid-template-columns: minmax(0, 1fr) auto; }
+  .row-link .stack { display: none; }
+  .bar-topic { display: none; }
+}
+@media (max-width: 40rem) {
+  .row-meta { display: none; }
+  .dock { margin-left: 0; }
+  form.observe { grid-template-columns: minmax(0, 1fr) auto; }
+  form.observe .as { grid-column: 1 / -1; }
+}

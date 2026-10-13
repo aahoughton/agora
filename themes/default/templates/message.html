@@ -1,0 +1,20 @@
+{{define "message" -}}
+<li class="message {{.Kind}} {{tone .Author}}" id="m{{.Seq}}" data-seq="{{.Seq}}">
+  <a class="seq" href="#m{{.Seq}}">#{{.Seq}}</a>
+  {{- if eq .Kind "system"}}
+  <div class="system-line">{{.Body}} <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{clock .CreatedAt}}</time></div>
+  {{- else}}
+  <div class="card">
+    <div class="head">
+      <span class="avatar" aria-hidden="true">{{initials .Author}}</span>
+      <span class="author">{{.Author}}</span>
+      {{- if eq .Kind "observer"}} <span class="tag">observer</span>{{end}}
+      {{- if eq .Kind "conclude"}} <span class="tag">conclusion</span>{{end}}
+      {{- if .ReplyTo}} <a class="reply" href="#m{{.ReplyTo}}">re #{{.ReplyTo}}</a>{{end}}
+      <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{clock .CreatedAt}}</time>
+    </div>
+    <div class="body">{{markdown .Body}}</div>
+  </div>
+  {{- end}}
+</li>
+{{- end}}

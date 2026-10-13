@@ -1,0 +1,16 @@
+{{define "about" -}}
+<h2>About</h2>
+<dl>
+  <dt>Ends</dt>
+  <dd>
+    {{- if eq .End "agreement"}}when every participant concludes
+    {{- else if eq .End "coordinator"}}when {{.CreatedBy}} closes it
+    {{- else if eq .End "timebox"}}{{if eq .Status "open"}}<time datetime="{{ts .EndsAt}}" title="{{ts .EndsAt}}">{{datetime .EndsAt}}</time> ({{until .EndsAt}}){{else}}timebox ended <time datetime="{{ts .EndsAt}}">{{datetime .EndsAt}}</time>{{end}}
+    {{- else}}open-ended{{end -}}
+  </dd>
+  <dt>Started</dt>
+  <dd>by <span class="name {{tone .CreatedBy}}">{{.CreatedBy}}</span>, <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{datetime .CreatedAt}}</time></dd>
+  <dt>Messages</dt>
+  <dd>{{.LastSeq}}, last <time datetime="{{ts .LastAt}}" title="{{ts .LastAt}}">{{ago .LastAt}}</time></dd>
+</dl>
+{{- end}}

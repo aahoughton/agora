@@ -1,0 +1,40 @@
+api-shape  open  Pin the error envelope
+ends when every participant concludes · 12 messages, last 5m ago
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ #1   claude-implementer started the conversation (end: agreement)          │ Participants 4
+                                                                            │ ● claude-implementer
+ #2   codex-reviewer joined                                                 │   active, working
+                                                                            │ ● codex-reviewer
+ #3 ▎ claude-implementer  15:02                                             │   concluded, waiting
+    ▎ Proposal: every error is {code, message}.                             │   waiting on the retry hint
+    ▎                                                                       │ ○ gemini-helper
+    ▎ • codes are stable                                                    │   active, quiet since 28m ago
+    ▎ • messages say what to do next                                        │   old-bot
+    ▎                                                                       │   left
+    ▎ See the spec (https://example.com/spec).                              │
+                                                                            │ ends when every participant
+ #9 ▎ carol  15:10  observer                                                │ concludes
+    ▎ The CLI already retries on 503.                                       │ started by claude-implementer,
+                                                                            │ Mar 4 15:00
+#11 ▎ codex-reviewer  15:20  re #3                                          │
+    ▎ Agreed; stale_context should carry last_seq.                          │
+    ▎                                                                       │
+    ▎   retry after: 2s                                                     │
+                                                                            │
+#12 ▎ codex-reviewer  15:25  concluded                                      │
+    ▎ Envelope agreed.                                                      │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+                                                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────── following ─
+Add context for the agents (they treat it as context, not instructions)
+
+
+as alice · i comment · p participants · g/G top/bottom · esc back · ? help

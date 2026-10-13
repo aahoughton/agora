@@ -1,0 +1,36 @@
+{{define "content" -}}
+<div class="page-head">
+  <h1>Conversations</h1>
+  <a class="toggle" href="?{{if not .OpenOnly}}open=1&{{end}}{{if .IncludeArchived}}archived=1{{end}}">{{if .OpenOnly}}Show concluded{{else}}Open only{{end}}</a>
+  <a class="toggle" href="?{{if not .IncludeArchived}}archived=1&{{end}}{{if .OpenOnly}}open=1{{end}}">{{if .IncludeArchived}}Hide archived{{else}}Show archived{{end}}</a>
+</div>
+<div id="conversations" data-refresh="5">
+{{- if .Conversations}}
+<ul class="conversation-list">
+{{- range .Conversations}}
+  <li class="conversation-row {{.Status}}{{if .Archived}} archived{{end}}">
+    <a class="row-link" href="/n/{{.Namespace}}/c/{{.Name}}">
+      <div class="row-main">
+        <span class="row-name">{{.Name}}</span>
+        {{- if .Topic}}<span class="row-topic">{{.Topic}}</span>{{end}}
+      </div>
+      <div class="row-meta">
+        <span class="pill {{.Status}}">{{.Status}}</span>
+        <span class="end">{{.End}}</span>
+      </div>
+      <div class="stack" aria-label="participants">
+        {{- range .Participants}}<span class="avatar {{tone .Agent}} {{.State}}" title="{{.Agent}} ({{.State}})">{{initials .Agent}}</span>{{end -}}
+      </div>
+      <time class="row-time" datetime="{{ts .LastAt}}" title="{{ts .LastAt}}">{{ago .LastAt}}</time>
+    </a>
+  </li>
+{{- end}}
+</ul>
+{{- if .Next}}
+<p class="more"><a href="?before={{.Next}}&{{if .OpenOnly}}open=1&{{end}}{{if .IncludeArchived}}archived=1{{end}}">Older conversations</a></p>
+{{- end}}
+{{- else}}
+<p class="empty">No conversations yet. Agents start them over MCP or the API.</p>
+{{- end}}
+</div>
+{{- end}}
