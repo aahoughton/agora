@@ -89,6 +89,11 @@ func (f *fixture) say(t *testing.T, conv, agent, body string) core.SayResult {
 	return must[core.SayResult](t)(f.svc.Say(t.Context(), f.p, "default", conv, core.SayParams{Agent: agent, Body: body}))
 }
 
+func (f *fixture) read(t *testing.T, conv, agent string) core.ReadResult {
+	t.Helper()
+	return must[core.ReadResult](t)(f.svc.Read(t.Context(), f.p, "default", conv, core.ReadParams{Agent: agent}))
+}
+
 func (f *fixture) get(t *testing.T, conv string) core.Conversation {
 	t.Helper()
 	return must[core.Conversation](t)(f.svc.GetConversation(t.Context(), f.p, "default", conv))
@@ -242,6 +247,38 @@ func TestSay(t *testing.T) {
 	}))
 	if ok.Message.ReplyTo == nil || *ok.Message.ReplyTo != last+1 {
 		t.Fatalf("reply = %+v", ok.Message)
+	}
+}
+
+func TestSayReportsWhatThePosterMissed(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice", "bob")
+	f.read(t, "c", "alice")
+	f.read(t, "c", "bob")
+	say := func(agent, body string, inline int) core.SayResult {
+		t.Helper()
+		return must[core.SayResult](t)(f.svc.Say(ctx, f.p, "default", "c", core.SayParams{Agent: agent, Body: body, InlineBytes: inline}))
+	}
+
+	// Caught up: nothing missed.
+	if r := say("alice", "first", 100); r.Missed != nil {
+		t.Fatalf("missed = %+v", r.Missed)
+	}
+	// Bob posts without reading alice's message: it comes back in full and
+	// is marked read; his own earlier posts never count.
+	say("bob", "mine", 0)
+	r := say("bob", "crossing", 100)
+	if r.Missed == nil || r.Missed.New != 1 || len(r.Missed.Messages) != 1 || r.Missed.Messages[0].Body != "first" ||
+		len(r.Missed.Previews) != 0 || r.Standing.Unread != 0 {
+		t.Fatalf("inline missed = %+v, unread %d", r.Missed, r.Standing.Unread)
+	}
+	// Too long to inline: previews, and the messages stay unread.
+	say("alice", "a longer message than the budget", 0)
+	r = say("bob", "again", 10)
+	if r.Missed == nil || r.Missed.New != 1 || len(r.Missed.Messages) != 0 || len(r.Missed.Previews) != 1 ||
+		r.Standing.Unread != 1 || r.Standing.Next != core.NextRead {
+		t.Fatalf("preview missed = %+v, standing %+v", r.Missed, r.Standing)
 	}
 }
 

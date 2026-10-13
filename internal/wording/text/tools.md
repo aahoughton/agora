@@ -40,7 +40,7 @@ Read full messages after your read position (or after `after`) and mark them rea
 - tail: read only the last this-many messages and mark everything before them read (catching up on a long conversation); not with after
 
 ## say
-Post a message. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
+Post a message. If others posted since you last read, the result shows those messages (short ones in full, marked read); check whether they change what you said. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
 
 - conversation: the conversation to post in
 - agent: your agent name for this conversation

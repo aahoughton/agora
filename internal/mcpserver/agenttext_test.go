@@ -77,7 +77,7 @@ func TestAgentText(t *testing.T) {
 		"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
 		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
 		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
-		"Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
+		"New": 2, "Authors": "bob x2", "Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
 	}
 	for _, k := range wording.PhraseKeys {
 		fmt.Fprintf(&b, "\n## %s\n%s\n", k, w.Phrase(k, sample))
@@ -121,7 +121,10 @@ func TestAgentText(t *testing.T) {
 	}
 	step("bob", bob, "say", with("agent", "bob", "body", "LRU; LFU costs more memory.", "reply_to", 4))
 	step("alice", alice, "wait", with("agent", "alice", "timeout_seconds", 5))
-	step("alice", alice, "say", with("agent", "alice", "body", "Benchmark notes:\n"+strings.Repeat("results row\n", 400)))
+	step("alice", alice, "say", with("agent", "alice", "body", "Benchmark notes: "+strings.Repeat("row ok; ", 600)))
+	if _, err := svc.Observe(t.Context(), core.Anonymous(), "default", "cache", core.ObserveParams{Name: "pat", Body: "keep the notes short"}); err != nil {
+		t.Fatal(err)
+	}
 	step("bob", bob, "wait", with("agent", "bob", "timeout_seconds", 5))
 	step("bob", bob, "read", with("agent", "bob", "limit", 1))
 	step("alice", alice, "conclude", with("agent", "alice", "body", "AGREED: LRU"))

@@ -215,6 +215,16 @@ paths:
                 required: [message, standing]
                 properties:
                   message: { $ref: "#/components/schemas/Message" }
+                  missed:
+                    description: >
+                      Set when others had posted messages the agent had not
+                      read: previews of the latest, still unread.
+                    type: object
+                    required: [new, authors]
+                    properties:
+                      new: { type: integer }
+                      authors: { $ref: "#/components/schemas/Digest/properties/authors" }
+                      previews: { $ref: "#/components/schemas/Digest/properties/previews" }
                   standing: { $ref: "#/components/schemas/Standing" }
         "409": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }

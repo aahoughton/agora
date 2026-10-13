@@ -26,12 +26,28 @@ type SayParams struct {
 	// ExpectedLastSeq, if set, rejects the post with CodeStaleContext when
 	// another message has landed since.
 	ExpectedLastSeq *int64
+	// InlineBytes, if positive, returns the messages the agent had not read
+	// in full when their bodies total at most this many bytes, and marks
+	// them read. Otherwise they come back as previews and stay unread.
+	InlineBytes int
 }
 
 // SayResult is the appended message and the agent's standing after it.
+// Missed is set when others had posted messages the agent had not read.
 type SayResult struct {
 	Message  Message  `json:"message"`
+	Missed   *Missed  `json:"missed,omitempty"`
 	Standing Standing `json:"standing"`
+}
+
+// Missed summarizes the messages from others that the agent had not read
+// when it posted: in full (Messages, now marked read) when they were short,
+// otherwise as Previews of the latest.
+type Missed struct {
+	New      int           `json:"new"`
+	Authors  []AuthorCount `json:"authors"`
+	Previews []Preview     `json:"previews,omitempty"`
+	Messages []Message     `json:"messages,omitempty"`
 }
 
 // Say appends a message from a participant. A concluded participant who says
@@ -70,6 +86,10 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 		if sp.ReplyTo != nil && (*sp.ReplyTo < 1 || *sp.ReplyTo > c.LastSeq) {
 			return errorf(CodeInvalid, "reply_to %d is not a message in conversation %q", *sp.ReplyTo, name)
 		}
+		out.Missed, err = s.missed(ctx, tx, c, pt.ReadSeq, sp.Agent, sp.InlineBytes)
+		if err != nil {
+			return err
+		}
 		if pt.State == StateConcluded {
 			if _, err := s.appendMsg(ctx, tx, c, KindSystem, sp.Agent, sp.Agent+" withdrew their conclusion", nil); err != nil {
 				return err
@@ -87,6 +107,49 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 		return err
 	})
 	return out, err
+}
+
+// missed summarizes messages from others in (after, c.LastSeq], or returns
+// nil if there are none. When they fit inlineBytes it returns them in full
+// and moves the agent's read position past them.
+func (s *Service) missed(ctx context.Context, tx *wtx, c *conv, after int64, agent string, inlineBytes int) (*Missed, error) {
+	if after >= c.LastSeq {
+		return nil, nil
+	}
+	authors, err := collect(ctx, tx, func(rows *sql.Rows) (AuthorCount, error) {
+		var ac AuthorCount
+		err := rows.Scan(&ac.Author, &ac.Count)
+		return ac, err
+	}, `SELECT author, count(*) FROM messages
+		WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?
+		GROUP BY author ORDER BY min(seq)`, c.id, after, c.LastSeq, agent)
+	if err != nil || len(authors) == 0 {
+		return nil, err
+	}
+	m := &Missed{Authors: authors}
+	for _, ac := range authors {
+		m.New += ac.Count
+	}
+	if inlineBytes > 0 && m.New <= maxInlineMessages {
+		res, covered, err := s.page(ctx, tx, c, after, maxInlineMessages, agent)
+		if err != nil {
+			return nil, err
+		}
+		size := 0
+		for _, msg := range res.Messages {
+			size += len(msg.Body)
+		}
+		if !res.More && size <= inlineBytes {
+			if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?)
+				WHERE conversation_id = ? AND agent = ?`, covered, c.id, agent); err != nil {
+				return nil, err
+			}
+			m.Messages = res.Messages
+			return m, nil
+		}
+	}
+	m.Previews, err = s.previews(ctx, tx, c, after, agent)
+	return m, err
 }
 
 // ObserveParams describe a comment from someone watching, not participating.

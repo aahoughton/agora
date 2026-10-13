@@ -338,7 +338,19 @@ func (s *Service) digest(ctx context.Context, ns, name, agent string, after int6
 		d.New += ac.Count
 	}
 
-	d.Previews, err = collect(ctx, s.db, func(rows *sql.Rows) (Preview, error) {
+	d.Previews, err = s.previews(ctx, s.db, c, after, agent)
+	if err != nil {
+		return Digest{}, err
+	}
+
+	d.Standing, err = s.standing(ctx, s.db, c, agent)
+	return d, err
+}
+
+// previews returns one-line previews of the latest maxPreviews messages
+// from others in (after, c.LastSeq].
+func (s *Service) previews(ctx context.Context, q querier, c *conv, after int64, agent string) ([]Preview, error) {
+	return collect(ctx, q, func(rows *sql.Rows) (Preview, error) {
 		var pv Preview
 		var body string
 		err := rows.Scan(&pv.Seq, &pv.Kind, &pv.Author, &pv.ReplyTo, &body)
@@ -347,12 +359,6 @@ func (s *Service) digest(ctx context.Context, ns, name, agent string, after int6
 	}, `SELECT seq, kind, author, reply_to, body FROM
 		(SELECT * FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND author != ?
 		 ORDER BY seq DESC LIMIT ?) ORDER BY seq`, c.id, after, c.LastSeq, agent, maxPreviews)
-	if err != nil {
-		return Digest{}, err
-	}
-
-	d.Standing, err = s.standing(ctx, s.db, c, agent)
-	return d, err
 }
 
 // previewText returns the first non-blank line of body, cut to

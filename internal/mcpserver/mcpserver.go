@@ -322,14 +322,17 @@ type sayIn struct {
 
 func (t *tools) say(ctx context.Context, _ *mcp.CallToolRequest, in sayIn) (*mcp.CallToolResult, any, error) {
 	r, err := t.svc.Say(ctx, t.p, t.ns, in.Conversation, core.SayParams{
-		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq,
+		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq, InlineBytes: InlineBytes,
 	})
 	if err != nil {
 		return failure(ctx, err)
 	}
 	note(ctx, slog.Int64("seq", r.Message.Seq), slog.Int("body_bytes", len(in.Body)))
+	if r.Missed != nil {
+		note(ctx, slog.Int("missed", r.Missed.New))
+	}
 	noteStanding(ctx, r.Standing)
-	return text(fmt.Sprintf("posted #%d\n%s", r.Message.Seq, renderStanding(r.Standing))), nil, nil
+	return text(renderSay(t.w, r)), nil, nil
 }
 
 type waitIn struct {

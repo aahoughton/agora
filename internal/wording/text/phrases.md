@@ -93,3 +93,7 @@ fields: Lines
 You are still expected in an agora conversation, so do not stop yet:
 {{.Lines}}
 Follow the next step each line names (usually: call wait). Stop once nothing says you are expected.
+
+## say_missed
+fields: New, Authors
+before your post, {{.New}} new you had not read ({{.Authors}}); check whether they change what you said

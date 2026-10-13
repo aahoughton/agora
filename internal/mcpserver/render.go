@@ -24,11 +24,7 @@ func renderDigest(w *wording.Wording, d core.Digest) string {
 	case d.New == 0:
 		b.WriteString(w.Phrase(wording.WaitNothingNew, nil) + "\n")
 	default:
-		parts := make([]string, len(d.Authors))
-		for i, a := range d.Authors {
-			parts[i] = fmt.Sprintf("%s x%d", a.Author, a.Count)
-		}
-		fmt.Fprintf(&b, "%d new (%s)", d.New, strings.Join(parts, ", "))
+		fmt.Fprintf(&b, "%d new (%s)", d.New, authorList(d.Authors))
 		if len(d.Messages) > 0 {
 			b.WriteString(":\n")
 			writeMessages(&b, w, d.Messages)
@@ -38,12 +34,44 @@ func renderDigest(w *wording.Wording, d core.Digest) string {
 			fmt.Fprintf(&b, "; latest %d:", len(d.Previews))
 		}
 		b.WriteString("\n")
-		for _, p := range d.Previews {
-			fmt.Fprintf(&b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind), replyTag(p.ReplyTo), p.Text)
-		}
+		writePreviews(&b, w, d.Previews)
 	}
 	b.WriteString(renderStanding(d.Standing))
 	return b.String()
+}
+
+func renderSay(w *wording.Wording, r core.SayResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "posted #%d\n", r.Message.Seq)
+	if m := r.Missed; m != nil {
+		b.WriteString(w.Phrase(wording.SayMissed, map[string]any{"New": m.New, "Authors": authorList(m.Authors)}))
+		if len(m.Messages) > 0 {
+			b.WriteString(":\n")
+			writeMessages(&b, w, m.Messages)
+		} else {
+			if len(m.Previews) < m.New {
+				fmt.Fprintf(&b, "; latest %d", len(m.Previews))
+			}
+			b.WriteString(":\n")
+			writePreviews(&b, w, m.Previews)
+		}
+	}
+	b.WriteString(renderStanding(r.Standing))
+	return b.String()
+}
+
+func authorList(as []core.AuthorCount) string {
+	parts := make([]string, len(as))
+	for i, a := range as {
+		parts[i] = fmt.Sprintf("%s x%d", a.Author, a.Count)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func writePreviews(b *strings.Builder, w *wording.Wording, ps []core.Preview) {
+	for _, p := range ps {
+		fmt.Fprintf(b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind), replyTag(p.ReplyTo), p.Text)
+	}
 }
 
 func renderRead(w *wording.Wording, r core.ReadResult) string {

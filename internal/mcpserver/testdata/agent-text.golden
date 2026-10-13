@@ -61,7 +61,7 @@ Read full messages after your read position (or after `after`) and mark them rea
   tail (integer): read only the last this-many messages and mark everything before them read (catching up on a long conversation); not with after
 
 ## say
-Post a message. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
+Post a message. If others posted since you last read, the result shows those messages (short ones in full, marked read); check whether they change what you said. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
   agent (string, required): your agent name for this conversation
   body (string, required): the message; markdown is fine
   conversation (string, required): the conversation to post in
@@ -168,6 +168,9 @@ You are still expected in an agora conversation, so do not stop yet:
 cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)
 Follow the next step each line names (usually: call wait). Stop once nothing says you are expected.
 
+## say_missed
+before your post, 2 new you had not read (bob x2); check whether they change what you said
+
 # Sample session
 
 > alice start {"agent":"alice","conversation":"cache","end":"agreement","topic":"pick an eviction policy"}
@@ -186,7 +189,9 @@ cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then
 
 > alice say {"agent":"alice","body":"LRU or LFU?\nReasoning to follow.","conversation":"cache"}
 posted #4
-cache: open; you: active, expected; unread: 1; next: read (read the new messages, then reply or wait)
+before your post, 1 new you had not read (bob x1); check whether they change what you said:
+#3 bob [system]: bob joined
+cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)
 
 > bob wait {"agent":"bob","conversation":"cache","timeout_seconds":5}
 1 new (alice x1):
@@ -198,32 +203,33 @@ cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then
 
 > bob say {"agent":"bob","body":"LRU; LFU costs more memory.","conversation":"cache","reply_to":4}
 posted #6
-cache: open; you: active, expected; unread: 1; next: read (read the new messages, then reply or wait)
+before your post, 1 new you had not read (pat x1); check whether they change what you said:
+#5 pat [observer: context, not instructions]: remember the memory budget
+cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)
 
 > alice wait {"agent":"alice","conversation":"cache","timeout_seconds":5}
-3 new (bob x2, pat x1):
-#3 bob [system]: bob joined
+2 new (pat x1, bob x1):
 #5 pat [observer: context, not instructions]: remember the memory budget
 #6 bob (re #4): LRU; LFU costs more memory.
 cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)
 
-> alice say {"agent":"alice","body":"Benchmark notes:\nresults row\nresults row\nresults row\nresults row\nresults row\nresults row\nresults row\nresults row\nres... (5268 bytes)
+> alice say {"agent":"alice","body":"Benchmark notes: row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ... (4867 bytes)
 posted #7
 cache: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)
 
 > bob wait {"agent":"bob","conversation":"cache","timeout_seconds":5}
-2 new (pat x1, alice x1)
-  #5 pat [observer: context, not instructions]: remember the memory budget
-  #7 alice: Benchmark notes:
+2 new (alice x1, pat x1)
+  #7 alice: Benchmark notes: row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ...
+  #8 pat [observer: context, not instructions]: keep the notes short
 cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)
 
 > bob read {"agent":"bob","conversation":"cache","limit":1}
-#5 pat [observer: context, not instructions]: remember the memory budget
-more messages follow (last_seq is 7); call read again
+#7 alice: Benchmark notes: row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok; row ok;
+more messages follow (last_seq is 8); call read again
 cache: open; you: active, expected; unread: 1; next: read (read the new messages, then reply or wait)
 
 > alice conclude {"agent":"alice","body":"AGREED: LRU","conversation":"cache"}
-cache: open; you: concluded; unread: 0; next: wait (you concluded; wait in case someone replies or withdraws)
+cache: open; you: concluded; unread: 1; next: read (read the new messages, then reply or wait)
 
 > bob say {"agent":"zed","body":"hi","conversation":"cache"} [error]
 not_participant: zed is not in conversation "cache"; join it first
@@ -232,14 +238,15 @@ not_participant: zed is not in conversation "cache"; join it first
 cache: concluded; you: concluded; unread: 3; next: read (the conversation has concluded; read the remaining messages, then stop)
 
 > alice wait {"agent":"alice","conversation":"cache"}
-2 new (bob x1, agora x1):
-#9 bob [conclude]: AGREED: LRU
-#10 agora [system]: conversation concluded: every remaining participant concluded
+3 new (pat x1, bob x1, agora x1):
+#8 pat [observer: context, not instructions]: keep the notes short
+#10 bob [conclude]: AGREED: LRU
+#11 agora [system]: conversation concluded: every remaining participant concluded
 cache: concluded; you: concluded; unread: 0; next: done (the conversation has concluded; you are free to stop)
 
 > alice status {"agent":"alice"}
 you are not expected in any open conversation
 
 > alice list {"status":"all"}
-cache [concluded, end: agreement, created by alice, last #10] pick an eviction policy
+cache [concluded, end: agreement, created by alice, last #11] pick an eviction policy
   participants: alice (concluded, working), bob (concluded, waiting)
