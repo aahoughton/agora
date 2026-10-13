@@ -489,6 +489,75 @@ func TestWhoamiWithAuthOff(t *testing.T) {
 	}
 }
 
+func TestAdminBootstrapAndRecover(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.db")
+	if r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", missing, "--name", "root"); r.code != exitError {
+		t.Fatalf("bootstrap on a missing file = %+v", r)
+	}
+	path := filepath.Join(dir, "agora.db")
+	db, err := store.Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "root")
+	if r.code != exitOK || !strings.Contains(r.stdout, "root is a server admin") || !strings.Contains(r.stdout, core.TokenPrefix) {
+		t.Fatalf("bootstrap = %+v", r)
+	}
+	if r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "again"); r.code != exitError || !strings.Contains(r.stderr, "accounts already exist") {
+		t.Fatalf("second bootstrap = %+v", r)
+	}
+	if r := runCLI(t.Context(), "", "admin", "recover", "--db", path, "--name", "root"); r.code != exitOK || !strings.Contains(r.stdout, core.TokenPrefix) {
+		t.Fatalf("recover = %+v", r)
+	}
+	if r := runCLI(t.Context(), "", "admin", "recover", "--db", path); r.code != exitUsage {
+		t.Fatalf("recover without --name = %+v", r)
+	}
+}
+
+func TestAdminThroughTheServer(t *testing.T) {
+	url, token, _ := tokenServer(t)
+	admin := func(args ...string) cliResult {
+		return runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": token}, append([]string{"admin"}, args...)...)
+	}
+	steps := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"accounts", "add", "pat"}, "pat "},
+		{[]string{"accounts", "add", "boss", "--server-admin"}, "boss  yes"},
+		{[]string{"accounts", "disable", "pat"}, "pat   no            yes"},
+		{[]string{"accounts", "enable", "pat"}, "pat   no            no"},
+		{[]string{"accounts", "list"}, "root"},
+		{[]string{"namespaces", "create", "team"}, "created namespace team"},
+		{[]string{"members", "set", "team", "pat", "member"}, "pat is member in team"},
+		{[]string{"members", "list", "team"}, "pat      member"},
+		{[]string{"tokens", "issue", "pat", "--label", "laptop", "--ttl", "720h"}, "for pat (shown once):\n" + core.TokenPrefix},
+		{[]string{"tokens", "list", "pat"}, "laptop"},
+		{[]string{"tokens", "revoke-all", "pat"}, "revoked 1 tokens of pat"},
+		{[]string{"members", "remove", "team", "pat"}, "pat has no role in team"},
+	}
+	for _, s := range steps {
+		r := admin(s.args...)
+		if r.code != exitOK || !strings.Contains(r.stdout, s.want) {
+			t.Fatalf("admin %v = %+v, want %q", s.args, r, s.want)
+		}
+	}
+	if r := admin("accounts", "demote", "root"); r.code != exitOK {
+		t.Fatalf("demote with another admin left = %+v", r)
+	}
+	if r := admin("members", "set", "team"); r.code != exitUsage || !strings.Contains(r.stderr, "takes 3 arguments") {
+		t.Fatalf("missing arguments = %+v", r)
+	}
+	if r := admin("accounts", "rename", "x"); r.code != exitUsage {
+		t.Fatalf("unknown command = %+v", r)
+	}
+	if r := runCLIInput(t.Context(), url, "", nil, "admin", "accounts", "list"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
+		t.Fatalf("no token = %+v", r)
+	}
+}
+
 func TestTUIChecksItsToken(t *testing.T) {
 	url, _, _ := tokenServer(t)
 	r := runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": "agora_wrong"}, "tui")

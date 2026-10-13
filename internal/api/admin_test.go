@@ -1,11 +1,13 @@
 package api_test
 
 import (
+	"bytes"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/aahoughton/agora/internal/api"
@@ -18,6 +20,11 @@ import (
 // holding the bootstrapped server admin's token.
 func newTokenServer(t *testing.T) *client {
 	t.Helper()
+	return newTokenServerLogging(t, slog.New(slog.DiscardHandler))
+}
+
+func newTokenServerLogging(t *testing.T, logger *slog.Logger) *client {
+	t.Helper()
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +36,7 @@ func newTokenServer(t *testing.T) *client {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{Logger: slog.New(slog.DiscardHandler), AuthMode: "token", Version: "test"})
+	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{Logger: logger, AuthMode: "token", Version: "test"})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &client{t: t, url: srv.URL, token: tok.Secret}
@@ -91,6 +98,30 @@ func TestAdminFlow(t *testing.T) {
 		t.Fatalf("self revoke = %d", got)
 	}
 	pat.wantError("GET", "/v1/whoami", nil, http.StatusUnauthorized, "unauthorized")
+}
+
+func TestAdminChangesAreLoggedWithoutSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	root := newTokenServerLogging(t, slog.New(slog.NewTextHandler(&buf, nil)))
+	root.ok("POST", "/v1/accounts", map[string]any{"name": "pat"}, http.StatusCreated, nil)
+	var issued struct {
+		Secret string `json:"secret"`
+	}
+	root.ok("POST", "/v1/accounts/pat/tokens", map[string]any{}, http.StatusCreated, &issued)
+	root.ok("PUT", "/v1/namespaces/default/members/pat", map[string]any{"role": "viewer"}, http.StatusOK, nil)
+	log := buf.String()
+	for _, want := range []string{
+		"msg=admin actor=1 action=create_account target=pat",
+		"msg=admin actor=1 action=issue_token target=pat token=2",
+		"msg=admin actor=1 action=set_member target=pat namespace=default role=viewer",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("log lacks %q:\n%s", want, log)
+		}
+	}
+	if strings.Contains(log, issued.Secret) || strings.Contains(log, root.token) {
+		t.Fatalf("a token reached the log:\n%s", log)
+	}
 }
 
 func TestTokenLifetimesAreBounded(t *testing.T) {

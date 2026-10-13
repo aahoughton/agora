@@ -10,7 +10,12 @@ import (
 
 // Accounts, tokens and memberships. Every call is authorized in core: server
 // admins manage accounts, an account manages its own tokens, and namespace
-// admins manage their namespace's members.
+// admins manage their namespace's members. Each change is logged once, with
+// the acting account, the action and its target; secrets never are.
+
+func (h *handler) audit(r *http.Request, p core.Principal, action, target string, attrs ...any) {
+	h.logger.InfoContext(r.Context(), "admin", append([]any{"actor", p.AccountID, "action", action, "target", target}, attrs...)...)
+}
 
 func (h *handler) whoami(w http.ResponseWriter, r *http.Request, p core.Principal) error {
 	id, err := h.svc.Whoami(r.Context(), p)
@@ -44,6 +49,7 @@ func (h *handler) createAccount(w http.ResponseWriter, r *http.Request, p core.P
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "create_account", a.Name, "server_admin", a.ServerAdmin)
 	writeJSON(w, http.StatusCreated, a)
 	return nil
 }
@@ -61,6 +67,7 @@ func (h *handler) updateAccount(w http.ResponseWriter, r *http.Request, p core.P
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "update_account", a.Name, "disabled", a.Disabled, "server_admin", a.ServerAdmin)
 	writeJSON(w, http.StatusOK, a)
 	return nil
 }
@@ -89,6 +96,7 @@ func (h *handler) issueToken(w http.ResponseWriter, r *http.Request, p core.Prin
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "issue_token", t.Account, "token", t.ID)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, t)
 	return nil
@@ -102,6 +110,7 @@ func (h *handler) revokeAllTokens(w http.ResponseWriter, r *http.Request, p core
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "revoke_all_tokens", r.PathValue("account"), "revoked", n)
 	writeJSON(w, http.StatusOK, map[string]any{"revoked": n})
 	return nil
 }
@@ -114,6 +123,7 @@ func (h *handler) revokeToken(w http.ResponseWriter, r *http.Request, p core.Pri
 	if err := h.svc.RevokeToken(r.Context(), p, id); err != nil {
 		return err
 	}
+	h.audit(r, p, "revoke_token", strconv.FormatInt(id, 10))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -138,6 +148,7 @@ func (h *handler) setMember(w http.ResponseWriter, r *http.Request, p core.Princ
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "set_member", m.Account, "namespace", m.Namespace, "role", m.Role)
 	writeJSON(w, http.StatusOK, m)
 	return nil
 }
@@ -146,6 +157,7 @@ func (h *handler) removeMember(w http.ResponseWriter, r *http.Request, p core.Pr
 	if err := h.svc.RemoveMembership(r.Context(), p, r.PathValue("ns"), r.PathValue("account")); err != nil {
 		return err
 	}
+	h.audit(r, p, "remove_member", r.PathValue("account"), "namespace", r.PathValue("ns"))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

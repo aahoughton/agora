@@ -52,6 +52,20 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// OpenExisting opens the database at path like Open, but refuses a path
+// that does not name an existing regular file, so a mistyped path is an
+// error instead of a new, empty database.
+func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("store: %s is not a database file", path)
+	}
+	return Open(ctx, path)
+}
+
 type migration struct {
 	version int
 	name    string

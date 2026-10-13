@@ -39,6 +39,7 @@ commands:
   skills      install agora's agent skills (skills install)
   hook        run as an agent client hook (hook stop)
   whoami      show the server and who your token belongs to
+  admin       manage accounts, tokens and members (agora admin help)
   health      check that the server is up
   version     print the version
 
@@ -89,6 +90,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runTUI(ctx, args[1:], stderr, getenv)
 	case "whoami":
 		return runWhoami(ctx, args[1:], stdout, stderr, getenv)
+	case "admin":
+		return runAdmin(ctx, args[1:], stdout, stderr, getenv)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version":

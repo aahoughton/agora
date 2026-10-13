@@ -238,3 +238,100 @@ func (c *Client) Observe(ctx context.Context, ns, conv, name, body string) (core
 	err := c.do(ctx, http.MethodPost, convPath(ns, conv)+"/observe", nil, map[string]string{"name": name, "body": body}, &out)
 	return out, err
 }
+
+// IssuedToken is a new token; Secret is shown only once.
+type IssuedToken struct {
+	core.Token
+	Secret string `json:"secret"`
+}
+
+// ListAccounts lists every account (server admins only).
+func (c *Client) ListAccounts(ctx context.Context) ([]core.Account, error) {
+	var out struct {
+		Accounts []core.Account `json:"accounts"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/accounts", nil, nil, &out)
+	return out.Accounts, err
+}
+
+// CreateAccount creates an account (server admins only).
+func (c *Client) CreateAccount(ctx context.Context, name string, serverAdmin bool) (core.Account, error) {
+	var out core.Account
+	err := c.do(ctx, http.MethodPost, "/v1/accounts", nil, map[string]any{"name": name, "server_admin": serverAdmin}, &out)
+	return out, err
+}
+
+// UpdateAccount disables, enables, promotes or demotes an account; nil
+// fields stay as they are.
+func (c *Client) UpdateAccount(ctx context.Context, name string, disabled, serverAdmin *bool) (core.Account, error) {
+	body := map[string]any{}
+	if disabled != nil {
+		body["disabled"] = *disabled
+	}
+	if serverAdmin != nil {
+		body["server_admin"] = *serverAdmin
+	}
+	var out core.Account
+	err := c.do(ctx, http.MethodPatch, "/v1/accounts/"+url.PathEscape(name), nil, body, &out)
+	return out, err
+}
+
+// ListTokens lists an account's tokens, without secrets.
+func (c *Client) ListTokens(ctx context.Context, account string) ([]core.Token, error) {
+	var out struct {
+		Tokens []core.Token `json:"tokens"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/accounts/"+url.PathEscape(account)+"/tokens", nil, nil, &out)
+	return out.Tokens, err
+}
+
+// IssueToken issues a token for an account; ttl 0 never expires.
+func (c *Client) IssueToken(ctx context.Context, account, label string, ttl time.Duration) (IssuedToken, error) {
+	var out IssuedToken
+	err := c.do(ctx, http.MethodPost, "/v1/accounts/"+url.PathEscape(account)+"/tokens", nil,
+		map[string]any{"label": label, "ttl_seconds": int64(ttl / time.Second)}, &out)
+	return out, err
+}
+
+// RevokeToken revokes one token.
+func (c *Client) RevokeToken(ctx context.Context, id int64) error {
+	return c.do(ctx, http.MethodDelete, "/v1/tokens/"+strconv.FormatInt(id, 10), nil, nil, nil)
+}
+
+// RevokeAllTokens revokes every token of an account and returns how many.
+func (c *Client) RevokeAllTokens(ctx context.Context, account string) (int, error) {
+	var out struct {
+		Revoked int `json:"revoked"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/accounts/"+url.PathEscape(account)+"/tokens/revoke", nil, map[string]any{}, &out)
+	return out.Revoked, err
+}
+
+// ListMembers lists a namespace's members.
+func (c *Client) ListMembers(ctx context.Context, ns string) ([]core.Membership, error) {
+	var out struct {
+		Members []core.Membership `json:"members"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/members", nil, nil, &out)
+	return out.Members, err
+}
+
+// SetMember gives an account a role in a namespace.
+func (c *Client) SetMember(ctx context.Context, ns, account string, role core.Role) (core.Membership, error) {
+	var out core.Membership
+	err := c.do(ctx, http.MethodPut, "/v1/namespaces/"+url.PathEscape(ns)+"/members/"+url.PathEscape(account), nil,
+		map[string]any{"role": role}, &out)
+	return out, err
+}
+
+// RemoveMember removes an account's role in a namespace.
+func (c *Client) RemoveMember(ctx context.Context, ns, account string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/namespaces/"+url.PathEscape(ns)+"/members/"+url.PathEscape(account), nil, nil, nil)
+}
+
+// CreateNamespace creates a namespace (server admins only in token mode).
+func (c *Client) CreateNamespace(ctx context.Context, name string) (core.Namespace, error) {
+	var out core.Namespace
+	err := c.do(ctx, http.MethodPost, "/v1/namespaces", nil, map[string]any{"name": name}, &out)
+	return out, err
+}

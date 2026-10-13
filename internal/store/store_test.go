@@ -171,3 +171,27 @@ func TestMigratesAVersionOneDatabase(t *testing.T) {
 		t.Fatal("a second account named pat was accepted")
 	}
 }
+
+func TestOpenExistingRefusesMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := OpenExisting(t.Context(), filepath.Join(dir, "missing.db")); err == nil {
+		t.Fatal("opened a missing file")
+	}
+	if _, err := OpenExisting(t.Context(), dir); err == nil {
+		t.Fatal("opened a directory")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "missing.db")); !os.IsNotExist(err) {
+		t.Fatalf("a file was created: %v", err)
+	}
+	path := filepath.Join(dir, "agora.db")
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	db, err = OpenExisting(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+}

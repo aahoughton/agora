@@ -292,6 +292,7 @@ func (h *handler) createNamespace(w http.ResponseWriter, r *http.Request, p core
 	if err != nil {
 		return err
 	}
+	h.audit(r, p, "create_namespace", ns.Name)
 	writeJSON(w, http.StatusCreated, ns)
 	return nil
 }
