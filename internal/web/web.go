@@ -42,6 +42,12 @@ type Page struct {
 	Namespaces      []core.Namespace
 	Conversations   []core.Conversation
 	IncludeArchived bool
+	// OpenOnly is true when the conversation list leaves out concluded
+	// conversations.
+	OpenOnly bool
+	// Next continues the conversation list (as ?before=); empty on the
+	// last page.
+	Next string
 
 	Conversation *core.Conversation
 	Messages     []core.Message
@@ -371,16 +377,24 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns := r.PathValue("ns")
-	archived := r.URL.Query().Get("archived") == "1"
-	cs, err := v.svc.ListConversations(r.Context(), p, ns, core.ListParams{IncludeArchived: archived})
+	q := r.URL.Query()
+	archived, openOnly := q.Get("archived") == "1", q.Get("open") == "1"
+	lp := core.ListParams{IncludeArchived: archived, Before: q.Get("before")}
+	if openOnly {
+		lp.Status = core.StatusOpen
+	}
+	page, err := v.svc.ListConversations(r.Context(), p, ns, lp)
 	if err != nil {
 		v.fail(w, err, Page{Namespace: ns})
 		return
 	}
+	cs := page.Conversations
 	for i := range cs {
 		cs[i] = displayable(cs[i])
 	}
-	v.render(w, http.StatusOK, "conversations", Page{Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived})
+	v.render(w, http.StatusOK, "conversations", Page{
+		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, OpenOnly: openOnly, Next: page.Next,
+	})
 }
 
 func (v *viewer) conversationPage(r *http.Request, p core.Principal) (Page, error) {

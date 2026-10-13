@@ -27,6 +27,9 @@ CREATE TABLE conversations (
     UNIQUE (namespace_id, name)
 );
 
+-- Listings page through a namespace by recent activity.
+CREATE INDEX conversations_recent ON conversations (namespace_id, last_at, id);
+
 -- The message log is append-only. kind: say | conclude | observer | system
 CREATE TABLE messages (
     conversation_id INTEGER NOT NULL REFERENCES conversations (id),

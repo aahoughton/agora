@@ -481,3 +481,41 @@ func TestTooManyWatchers(t *testing.T) {
 	}
 	<-done
 }
+
+func TestListPagesAndFilters(t *testing.T) {
+	c := newServer(t, auth.None{}, core.Options{})
+	for _, n := range []string{"a", "b", "c"} {
+		c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": n, "agent": "alice", "end": "agreement"}, 201, nil)
+	}
+	c.ok("POST", "/v1/namespaces/default/conversations/a/conclude", map[string]any{"agent": "alice", "body": "done"}, 200, nil)
+	c.ok("POST", "/v1/namespaces/default/conversations/a/leave", map[string]any{"agent": "alice"}, 200, nil)
+
+	// Each response decodes into a fresh page: omitted fields such as next
+	// must not carry over.
+	var page core.ListPage
+	get := func(path string) {
+		t.Helper()
+		page = core.ListPage{}
+		c.ok("GET", path, nil, 200, &page)
+	}
+	get("/v1/namespaces/default/conversations?status=open&limit=1")
+	if len(page.Conversations) != 1 || page.Next == "" || page.Conversations[0].Status != core.StatusOpen {
+		t.Fatalf("first page = %+v", page)
+	}
+	first := page.Conversations[0].Name
+	get("/v1/namespaces/default/conversations?status=open&limit=1&before=" + page.Next)
+	if len(page.Conversations) != 1 || page.Conversations[0].Name == first || page.Next != "" {
+		t.Fatalf("second page = %+v", page)
+	}
+	get("/v1/namespaces/default/conversations?status=concluded")
+	if len(page.Conversations) != 1 || page.Conversations[0].Name != "a" {
+		t.Fatalf("concluded = %+v", page)
+	}
+	get("/v1/namespaces/default/conversations?status=all")
+	if len(page.Conversations) != 3 {
+		t.Fatalf("all = %+v", page)
+	}
+	c.wantError("GET", "/v1/namespaces/default/conversations?status=done", nil, 400, "invalid")
+	c.wantError("GET", "/v1/namespaces/default/conversations?limit=0", nil, 400, "invalid")
+	c.wantError("GET", "/v1/namespaces/default/conversations?before=x", nil, 400, "invalid")
+}

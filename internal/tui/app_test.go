@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -318,4 +320,93 @@ func TestNavigationCancelsRequests(t *testing.T) {
 	h.keys("esc")
 	h.until("the namespace list", h.shows("Namespaces"))
 	h.await("the stalled list request to be cancelled", ended)
+}
+
+func TestListLoadsMoreAtTheEnd(t *testing.T) {
+	h := newHarness(t, Options{Namespace: "default"})
+	ctx, p := t.Context(), core.Anonymous()
+	for i := range listPage + 5 {
+		if _, err := h.svc.Start(ctx, p, "default", core.StartParams{Name: fmt.Sprintf("c%03d", i), Agent: "alice"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.start()
+	h.until("the first page", func() bool { return len(h.m.conversations) == listPage })
+	h.keys("G")
+	h.until("the next page", func() bool { return len(h.m.conversations) == listPage+5 && h.m.next == "" })
+	// A refresh keeps what has been loaded.
+	h.until("a refresh", func() bool { return len(h.m.conversations) == listPage+5 && !h.m.loadingMore })
+	time.Sleep(3 * h.m.opts.RefreshEvery)
+	h.until("the list after refreshes", func() bool { return len(h.m.conversations) == listPage+5 })
+}
+
+// holdOnce holds the first matching request until release is closed, then
+// serves it.
+func holdOnce(match func(*http.Request) bool, started chan<- struct{}, release <-chan struct{}) func(http.Handler) http.Handler {
+	var once sync.Once
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hold := false
+			if match(r) {
+				once.Do(func() { hold = true })
+			}
+			if hold {
+				started <- struct{}{}
+				<-release
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func seedConversations(t *testing.T, h *harness, n int) {
+	t.Helper()
+	for i := range n {
+		if _, err := h.svc.Start(t.Context(), core.Anonymous(), "default", core.StartParams{Name: fmt.Sprintf("c%03d", i), Agent: "alice"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestRefreshDuringLoadMoreKeepsPaging(t *testing.T) {
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	isMore := func(r *http.Request) bool { return r.URL.Query().Get("before") != "" }
+	h := newHarness(t, Options{Namespace: "default"}, holdOnce(isMore, started, release))
+	seedConversations(t, h, listPage+5)
+	h.start()
+	h.until("the first page", func() bool { return len(h.m.conversations) == listPage })
+	h.keys("G")
+	h.await("the next-page request", started)
+	h.keys("r")
+	close(release)
+	h.until("the refresh", func() bool { return !h.m.loadingMore })
+	h.keys("G")
+	h.until("the next page after a refresh", func() bool { return len(h.m.conversations) == listPage+5 })
+}
+
+func TestRefreshKeepsMoreThanOneRequestHolds(t *testing.T) {
+	var refreshes atomic.Int64
+	count := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+			if strings.HasSuffix(r.URL.Path, "/conversations") && r.URL.Query().Get("before") == "" {
+				refreshes.Add(1)
+			}
+		})
+	}
+	h := newHarness(t, Options{Namespace: "default"}, count)
+	const n = core.MaxListLimit + 50
+	seedConversations(t, h, n)
+	h.start()
+	h.until("the first page", func() bool { return len(h.m.conversations) == listPage })
+	for len(h.m.conversations) < n {
+		have := len(h.m.conversations)
+		h.keys("G")
+		h.until("another page", func() bool { return len(h.m.conversations) > have && !h.m.loadingMore })
+	}
+	seen := refreshes.Load()
+	h.until("three refreshes", func() bool { return refreshes.Load() >= seen+3 })
+	if len(h.m.conversations) != n || h.m.next != "" {
+		t.Fatalf("after refreshes: %d conversations, next %q; want %d and none", len(h.m.conversations), h.m.next, n)
+	}
 }

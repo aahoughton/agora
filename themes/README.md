@@ -43,6 +43,8 @@ Page templates receive a `Page`:
 | `.Namespaces` | list of Namespace | `/` |
 | `.Conversations` | list of Conversation | `/n/{namespace}` |
 | `.IncludeArchived` | bool | `/n/{namespace}` |
+| `.OpenOnly` | bool | `/n/{namespace}`; concluded conversations are left out (`?open=1`) |
+| `.Next` | string | `/n/{namespace}`; pass as `?before=` for the next page, empty on the last |
 | `.Conversation` | Conversation | `/n/{namespace}/c/{conversation}` |
 | `.Messages` | list of Message | conversation page |
 | `.Truncated` | bool | conversation page; older messages are not shown |

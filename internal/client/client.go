@@ -163,18 +163,25 @@ func (c *Client) ListNamespaces(ctx context.Context) ([]core.Namespace, error) {
 	return out.Namespaces, err
 }
 
-// ListConversations returns the conversations in a namespace, archived ones
-// only if includeArchived is set.
-func (c *Client) ListConversations(ctx context.Context, ns string, includeArchived bool) ([]core.Conversation, error) {
-	var q url.Values
-	if includeArchived {
-		q = url.Values{"include_archived": {"true"}}
+// ListConversations returns a page of a namespace's conversations, most
+// recently active first. Pass the page's Next as lp.Before for the next one.
+func (c *Client) ListConversations(ctx context.Context, ns string, lp core.ListParams) (core.ListPage, error) {
+	q := url.Values{}
+	if lp.Status != "" {
+		q.Set("status", string(lp.Status))
 	}
-	var out struct {
-		Conversations []core.Conversation `json:"conversations"`
+	if lp.IncludeArchived {
+		q.Set("include_archived", "true")
 	}
+	if lp.Limit != 0 {
+		q.Set("limit", strconv.Itoa(lp.Limit))
+	}
+	if lp.Before != "" {
+		q.Set("before", lp.Before)
+	}
+	var out core.ListPage
 	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/conversations", q, nil, &out)
-	return out.Conversations, err
+	return out, err
 }
 
 // GetConversation returns one conversation with its participants.

@@ -51,13 +51,27 @@ paths:
       - $ref: "#/components/parameters/ns"
     get:
       operationId: listConversations
+      description: |
+        One page of conversations, most recently active first. Pass `next`
+        from a response as `before` for the following page.
       parameters:
+        - name: status
+          in: query
+          description: A timebox past its end counts as concluded.
+          schema: { type: string, enum: [open, concluded, all], default: all }
         - name: include_archived
           in: query
           schema: { type: boolean, default: false }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: before
+          in: query
+          description: The `next` of an earlier page.
+          schema: { type: string }
       responses:
         "200":
-          description: Conversations, most recently active first.
+          description: A page of conversations.
           content:
             application/json:
               schema:
@@ -67,6 +81,10 @@ paths:
                   conversations:
                     type: array
                     items: { $ref: "#/components/schemas/Conversation" }
+                  next:
+                    type: string
+                    description: Present when there are more conversations.
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: startConversation

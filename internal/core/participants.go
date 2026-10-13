@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -57,6 +58,46 @@ func (s *Service) participants(ctx context.Context, q querier, convID int64) ([]
 	return collect(ctx, q, func(rows *sql.Rows) (Participant, error) { return s.scanParticipant(rows) },
 		`SELECT `+participantColumns+` FROM participants WHERE conversation_id = ? ORDER BY joined_at, agent`, convID)
 }
+
+// participantsOf returns the participants of several conversations in one
+// query, by conversation id.
+func (s *Service) participantsOf(ctx context.Context, q querier, convIDs []int64) (map[int64][]Participant, error) {
+	out := map[int64][]Participant{}
+	if len(convIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(convIDs)), ",")
+	args := make([]any, len(convIDs))
+	for i, id := range convIDs {
+		args[i] = id
+	}
+	type row struct {
+		convID int64
+		pt     Participant
+	}
+	rows, err := collect(ctx, q, func(rows *sql.Rows) (row, error) {
+		var r row
+		var err error
+		r.pt, err = s.scanParticipant(prefixed{rows, &r.convID})
+		return r, err
+	}, `SELECT conversation_id, `+participantColumns+` FROM participants
+		WHERE conversation_id IN (`+marks+`) ORDER BY joined_at, agent`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.convID] = append(out[r.convID], r.pt)
+	}
+	return out, nil
+}
+
+// prefixed scans one leading column into first, then the rest as usual.
+type prefixed struct {
+	rows  *sql.Rows
+	first any
+}
+
+func (p prefixed) Scan(dest ...any) error { return p.rows.Scan(append([]any{p.first}, dest...)...) }
 
 // participant returns the agent's row, or nil if the agent never joined.
 func (s *Service) participant(ctx context.Context, q querier, convID int64, agent string) (*Participant, error) {

@@ -58,13 +58,21 @@ func TestViewerCalls(t *testing.T) {
 	if err != nil || len(nss) != 1 || nss[0].Name != "default" {
 		t.Fatalf("namespaces = %+v, %v", nss, err)
 	}
-	cs, err := c.ListConversations(ctx, "default", false)
-	if err != nil || len(cs) != 1 || cs[0].Name != "design" {
-		t.Fatalf("conversations = %+v, %v", cs, err)
+	page, err := c.ListConversations(ctx, "default", core.ListParams{})
+	if err != nil || len(page.Conversations) != 1 || page.Conversations[0].Name != "design" {
+		t.Fatalf("conversations = %+v, %v", page, err)
 	}
-	cs, err = c.ListConversations(ctx, "default", true)
-	if err != nil || len(cs) != 2 {
-		t.Fatalf("with archived = %+v, %v", cs, err)
+	page, err = c.ListConversations(ctx, "default", core.ListParams{IncludeArchived: true, Limit: 1})
+	if err != nil || len(page.Conversations) != 1 || page.Next == "" {
+		t.Fatalf("first page with archived = %+v, %v", page, err)
+	}
+	page, err = c.ListConversations(ctx, "default", core.ListParams{IncludeArchived: true, Limit: 1, Before: page.Next})
+	if err != nil || len(page.Conversations) != 1 || page.Conversations[0].Name != "old" || page.Next != "" {
+		t.Fatalf("second page with archived = %+v, %v", page, err)
+	}
+	page, err = c.ListConversations(ctx, "default", core.ListParams{Status: core.StatusConcluded})
+	if err != nil || len(page.Conversations) != 0 {
+		t.Fatalf("concluded = %+v, %v", page, err)
 	}
 	conv, err := c.GetConversation(ctx, "default", "design")
 	if err != nil || conv.Topic != "shape" {

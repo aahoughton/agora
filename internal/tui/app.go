@@ -95,9 +95,12 @@ type Model struct {
 	namespaces    []core.Namespace
 	conversations []core.Conversation
 	archived      bool
-	cursor        int
-	filter        string
-	filtering     bool
+	// next continues the conversation list; empty when all is loaded.
+	next        string
+	loadingMore bool
+	cursor      int
+	filter      string
+	filtering   bool
 
 	t *thread
 }
@@ -135,7 +138,9 @@ type (
 	}
 	conversationsMsg struct {
 		gen  int
-		list []core.Conversation
+		page core.ListPage
+		// more is true for a following page, appended to the list.
+		more bool
 		err  error
 	}
 	refreshMsg      struct{ gen int }
@@ -243,17 +248,44 @@ func (m *Model) loadNamespaces() tea.Cmd {
 
 func (m *Model) openConversations(ns string) tea.Cmd {
 	m.leave()
-	m.screen, m.ns, m.conversations = screenConversations, ns, nil
+	m.screen, m.ns, m.conversations, m.next, m.loadingMore = screenConversations, ns, nil, "", false
 	return m.loadConversations()
 }
 
 func (m *Model) loadConversations() tea.Cmd {
-	gen, c, ctx, ns, archived := m.gen, m.opts.Client, m.screenCtx, m.ns, m.archived
+	// A refresh reloads as many as are already shown, so paging further
+	// is not undone every few seconds.
+	limit := min(max(listPage, len(m.conversations)), core.MaxListLimit)
+	return m.listRequest(core.ListParams{IncludeArchived: m.archived, Limit: limit}, false)
+}
+
+// reloadList drops responses still in flight, including a pending next
+// page, and loads the list again.
+func (m *Model) reloadList() tea.Cmd {
+	m.gen++
+	m.loadingMore = false
+	return m.loadConversations()
+}
+
+// listPage is how many conversations the list loads at a time.
+const listPage = 100
+
+// loadMore fetches the page after the loaded ones.
+func (m *Model) loadMore() tea.Cmd {
+	if m.next == "" || m.loadingMore {
+		return nil
+	}
+	m.loadingMore = true
+	return m.listRequest(core.ListParams{IncludeArchived: m.archived, Limit: listPage, Before: m.next}, true)
+}
+
+func (m *Model) listRequest(lp core.ListParams, more bool) tea.Cmd {
+	gen, c, ctx, ns := m.gen, m.opts.Client, m.screenCtx, m.ns
 	return func() tea.Msg {
 		ctx, done := context.WithTimeout(ctx, requestTimeout)
 		defer done()
-		list, err := c.ListConversations(ctx, ns, archived)
-		return conversationsMsg{gen: gen, list: list, err: err}
+		page, err := c.ListConversations(ctx, ns, lp)
+		return conversationsMsg{gen: gen, page: page, more: more, err: err}
 	}
 }
 
@@ -332,8 +364,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.setNotice(msg.err)
+		if msg.more {
+			m.loadingMore = false
+			if msg.err == nil {
+				m.appendConversations(msg.page)
+			}
+			return m, nil
+		}
 		if msg.err == nil {
-			m.conversations = msg.list
+			m.replaceConversations(msg.page)
 			m.clampCursor()
 		}
 		return m, m.refreshLater()
@@ -606,7 +645,52 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 	return m.listKey(k)
 }
 
+// appendConversations adds a following page, skipping any a refresh has
+// already brought in.
+// replaceConversations applies a refresh. A refresh loads at most
+// core.MaxListLimit, so conversations loaded beyond that are kept after the
+// refreshed ones, and paging continues from where it was.
+func (m *Model) replaceConversations(page core.ListPage) {
+	if page.Next == "" || len(m.conversations) <= len(page.Conversations) {
+		m.conversations, m.next = page.Conversations, page.Next
+		return
+	}
+	seen := map[string]bool{}
+	for _, c := range page.Conversations {
+		seen[c.Name] = true
+	}
+	list := page.Conversations
+	for _, c := range m.conversations[len(page.Conversations):] {
+		if !seen[c.Name] {
+			list = append(list, c)
+		}
+	}
+	m.conversations = list
+}
+
+func (m *Model) appendConversations(page core.ListPage) {
+	seen := map[string]bool{}
+	for _, c := range m.conversations {
+		seen[c.Name] = true
+	}
+	for _, c := range page.Conversations {
+		if !seen[c.Name] {
+			m.conversations = append(m.conversations, c)
+		}
+	}
+	m.next = page.Next
+}
+
 func (m *Model) listKey(k tea.KeyPressMsg) tea.Cmd {
+	cmd := m.moveInList(k)
+	// Reaching the end of what is loaded fetches the next page.
+	if m.screen == screenConversations && m.filter == "" && m.cursor >= len(m.visible())-1 {
+		return tea.Batch(cmd, m.loadMore())
+	}
+	return cmd
+}
+
+func (m *Model) moveInList(k tea.KeyPressMsg) tea.Cmd {
 	names := m.visible()
 	switch k.String() {
 	case "up", "k":
@@ -623,13 +707,11 @@ func (m *Model) listKey(k tea.KeyPressMsg) tea.Cmd {
 		if m.screen == screenNamespaces {
 			return m.loadNamespaces()
 		}
-		m.gen++
-		return m.loadConversations()
+		return m.reloadList()
 	case "a":
 		if m.screen == screenConversations {
 			m.archived = !m.archived
-			m.gen++
-			return m.loadConversations()
+			return m.reloadList()
 		}
 	case "esc":
 		if m.filter != "" {

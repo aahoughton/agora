@@ -77,7 +77,7 @@ func TestAgentText(t *testing.T) {
 		"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
 		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
 		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
-		"Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
+		"Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
 	}
 	for _, k := range wording.PhraseKeys {
 		fmt.Fprintf(&b, "\n## %s\n%s\n", k, w.Phrase(k, sample))
@@ -129,7 +129,7 @@ func TestAgentText(t *testing.T) {
 	step("bob", bob, "conclude", with("agent", "bob", "body", "AGREED: LRU"))
 	step("alice", alice, "wait", with("agent", "alice"))
 	step("alice", alice, "status", map[string]any{"agent": "alice"})
-	step("alice", alice, "list", map[string]any{})
+	step("alice", alice, "list", map[string]any{"status": "all"})
 
 	got := b.String()
 	path := filepath.Join("testdata", "agent-text.golden")

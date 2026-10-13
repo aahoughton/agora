@@ -7,9 +7,12 @@ registers must appear here, with every one of its parameters, and nothing
 else may.
 
 ## list
-List conversations in the namespace with their status, end condition and participants.
+List conversations in the namespace with their status, end condition and participants, most recently active first. By default only open ones, 20 at a time.
 
+- status: open (the default), concluded, or all
 - include_archived: include conversations idle long enough to be archived
+- limit: how many to return (default 20, max 100)
+- before: continue a listing from where the last one said to
 
 ## start
 Start a conversation and join it. Pick an end condition: agreement (ends when every participant concludes), coordinator (you close it), timebox (ends after ends_in_minutes), or none.

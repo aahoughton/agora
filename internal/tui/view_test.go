@@ -131,7 +131,7 @@ func TestViews(t *testing.T) {
 		m := newTestModel(t, Options{Namespace: "default"}, 90, 10)
 		c1, c2 := sampleConversation(), sampleConversation()
 		c2.Name, c2.Topic, c2.Status, c2.Archived, c2.Participants = "naming", "", core.StatusConcluded, true, nil
-		m.Update(conversationsMsg{gen: m.gen, list: []core.Conversation{c1, c2}})
+		m.Update(conversationsMsg{gen: m.gen, page: core.ListPage{Conversations: []core.Conversation{c1, c2}}})
 		golden(t, "conversations", shot(m))
 	})
 }
@@ -162,7 +162,7 @@ func TestViewFitsTheWindow(t *testing.T) {
 		m.Update(followMsg{gen: m.gen, res: client.FollowResult{ReadResult: core.ReadResult{LastSeq: 12}, Conversation: multiline}})
 		checkFits(t, m, size[0], size[1])
 		list := newTestModel(t, Options{Namespace: "default"}, size[0], size[1])
-		list.Update(conversationsMsg{gen: list.gen, list: []core.Conversation{multiline}})
+		list.Update(conversationsMsg{gen: list.gen, page: core.ListPage{Conversations: []core.Conversation{multiline}}})
 		checkFits(t, list, size[0], size[1])
 	}
 }

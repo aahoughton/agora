@@ -59,7 +59,11 @@ more messages follow (last_seq is {{.LastSeq}}); call read again
 you are not expected in any open conversation
 
 ## list_none
-no conversations
+no conversations match
+
+## list_more
+fields: Cursor
+more conversations: call list again with before={{.Cursor}}
 
 ## wait_timeout_range
 fields: Max

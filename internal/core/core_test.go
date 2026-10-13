@@ -3,6 +3,7 @@ package core_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -514,6 +515,14 @@ func TestPresenceAndStale(t *testing.T) {
 	}
 }
 
+func names(page core.ListPage) string {
+	var ns []string
+	for _, c := range page.Conversations {
+		ns = append(ns, c.Name)
+	}
+	return strings.Join(ns, ",")
+}
+
 func TestListArchivesQuietConversations(t *testing.T) {
 	f := newFixture(t, core.Options{ArchiveAfter: 24 * time.Hour})
 	ctx := t.Context()
@@ -521,13 +530,82 @@ func TestListArchivesQuietConversations(t *testing.T) {
 	f.clock.Advance(48 * time.Hour)
 	f.start(t, "new", core.EndNone, "alice")
 
-	cs := must[[]core.Conversation](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{}))
-	if len(cs) != 1 || cs[0].Name != "new" {
-		t.Fatalf("list = %+v", cs)
+	page := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{}))
+	if names(page) != "new" {
+		t.Fatalf("list = %s", names(page))
 	}
-	cs = must[[]core.Conversation](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{IncludeArchived: true}))
-	if len(cs) != 2 || cs[0].Name != "new" || !cs[1].Archived {
-		t.Fatalf("list = %+v", cs)
+	page = must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{IncludeArchived: true}))
+	if names(page) != "new,old" || !page.Conversations[1].Archived {
+		t.Fatalf("list = %+v", page)
+	}
+}
+
+func TestListFiltersByStatus(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "done", core.EndAgreement, "alice")
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "done", core.ConcludeParams{Agent: "alice", Body: "ok"}))
+	must[core.Standing](t)(f.svc.Leave(ctx, f.p, "default", "done", core.LeaveParams{Agent: "alice"}))
+	f.clock.Advance(time.Minute)
+	must[core.Conversation](t)(f.svc.Start(ctx, f.p, "default", core.StartParams{
+		Name: "boxed", End: core.EndTimebox, EndsAt: ptr(f.clock.Now().Add(time.Hour)), Agent: "alice", Join: true,
+	}))
+	f.clock.Advance(time.Minute)
+	f.start(t, "live", core.EndNone, "alice")
+
+	for status, want := range map[core.Status]string{"": "live,boxed,done", core.StatusOpen: "live,boxed", core.StatusConcluded: "done"} {
+		page := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: status}))
+		if names(page) != want {
+			t.Errorf("status %q: %s, want %s", status, names(page), want)
+		}
+	}
+	// A timebox past its end counts as concluded before anyone records it.
+	f.clock.Advance(2 * time.Hour)
+	page := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: core.StatusOpen, IncludeArchived: true}))
+	if names(page) != "live" {
+		t.Errorf("open after the timebox: %s", names(page))
+	}
+	page = must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: core.StatusConcluded, IncludeArchived: true}))
+	if !strings.Contains(names(page), "boxed") {
+		t.Errorf("concluded after the timebox: %s", names(page))
+	}
+	_, err := f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: "gone"})
+	wantCode(t, err, core.CodeInvalid)
+}
+
+func TestListPages(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	var want []string
+	for i := range 7 {
+		name := fmt.Sprintf("c%d", i)
+		f.start(t, name, core.EndNone, "alice")
+		want = append([]string{name}, want...)
+		if i%2 == 0 {
+			f.clock.Advance(time.Second) // some share a last_at; the id breaks ties
+		}
+	}
+	var got []string
+	before := ""
+	for range 10 {
+		page := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Limit: 3, Before: before}))
+		if len(page.Conversations) > 3 {
+			t.Fatalf("page of %d", len(page.Conversations))
+		}
+		for _, c := range page.Conversations {
+			got = append(got, c.Name)
+		}
+		if page.Next == "" {
+			break
+		}
+		before = page.Next
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("pages = %v, want %v", got, want)
+	}
+	for _, bad := range []core.ListParams{{Before: "nonsense"}, {Limit: -1}, {Limit: core.MaxListLimit + 1}} {
+		_, err := f.svc.ListConversations(ctx, f.p, "default", bad)
+		wantCode(t, err, core.CodeInvalid)
 	}
 }
 

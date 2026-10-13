@@ -277,11 +277,27 @@ func (h *handler) listConversations(w http.ResponseWriter, r *http.Request, p co
 	if err != nil {
 		return err
 	}
-	cs, err := h.svc.ListConversations(r.Context(), p, r.PathValue("ns"), core.ListParams{IncludeArchived: archived})
+	lp := core.ListParams{IncludeArchived: archived, Before: r.URL.Query().Get("before")}
+	switch status := r.URL.Query().Get("status"); status {
+	case "", "all":
+	default:
+		lp.Status = core.Status(status)
+	}
+	limit, err := queryInt(r, "limit")
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
+	if limit != nil {
+		if *limit < 1 || *limit > core.MaxListLimit {
+			return invalid("limit must be between 1 and %d", core.MaxListLimit)
+		}
+		lp.Limit = int(*limit)
+	}
+	page, err := h.svc.ListConversations(r.Context(), p, r.PathValue("ns"), lp)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, page)
 	return nil
 }
 

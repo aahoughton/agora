@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -620,5 +622,35 @@ func TestStreamKeepsAboutCurrent(t *testing.T) {
 	})
 	if last := evs[len(evs)-1]; !strings.Contains(last.data, "<dd>8, last") {
 		t.Fatalf("about after a message = %+v", last)
+	}
+}
+
+func TestConversationListPagesAndFilters(t *testing.T) {
+	e := newEnv(t, web.Options{})
+	ctx, p := t.Context(), core.Anonymous()
+	for i := range core.DefaultListLimit + 1 {
+		if _, err := e.svc.Start(ctx, p, "default", core.StartParams{Name: fmt.Sprintf("c%03d", i), Agent: "alice", Join: true, End: core.EndAgreement}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.Conclude(ctx, p, "default", "c100", core.ConcludeParams{Agent: "alice", Body: "done"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, body := e.get("/n/default")
+	m := regexp.MustCompile(`href="\?before=([^&"]+)&`).FindStringSubmatch(body)
+	if m == nil || strings.Count(body, `class="conversation-row`) != core.DefaultListLimit {
+		t.Fatalf("first page has no next link or the wrong size")
+	}
+	_, body = e.get("/n/default?before=" + m[1])
+	if strings.Count(body, `class="conversation-row`) != 1 || strings.Contains(body, "Older conversations") {
+		t.Fatalf("second page:\n%s", body)
+	}
+	_, body = e.get("/n/default?open=1")
+	if strings.Contains(body, ">c100<") || strings.Contains(body, "Older conversations") {
+		t.Fatal("open-only list shows a concluded conversation or a next page")
+	}
+	if status, _ := e.get("/n/default?before=nonsense"); status != http.StatusBadRequest {
+		t.Fatalf("bad cursor = %d", status)
 	}
 }

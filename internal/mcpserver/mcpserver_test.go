@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -155,7 +156,7 @@ func TestTwoAgentFlow(t *testing.T) {
 		t.Fatalf("final wait = %q", out)
 	}
 
-	out = alice.ok("list", map[string]any{})
+	out = alice.ok("list", map[string]any{"status": "all"})
 	if !strings.Contains(out, "cache [concluded, end: agreement") || !strings.Contains(out, "pick an eviction policy") {
 		t.Fatalf("list = %q", out)
 	}
@@ -248,11 +249,11 @@ func TestHTTPHandlerBindsNamespace(t *testing.T) {
 	s.ok("start", map[string]any{"conversation": "c", "agent": "alice"})
 
 	cs2, err := svc.ListConversations(t.Context(), core.Anonymous(), "team-blue", core.ListParams{})
-	if err != nil || len(cs2) != 1 {
+	if err != nil || len(cs2.Conversations) != 1 {
 		t.Fatalf("team-blue = %+v, %v", cs2, err)
 	}
 	def, err := svc.ListConversations(t.Context(), core.Anonymous(), "default", core.ListParams{})
-	if err != nil || len(def) != 0 {
+	if err != nil || len(def.Conversations) != 0 {
 		t.Fatalf("default = %+v, %v", def, err)
 	}
 
@@ -422,5 +423,36 @@ func TestToolAnnotations(t *testing.T) {
 	}
 	if seen != len(want) {
 		t.Errorf("saw %d tools, want %d", seen, len(want))
+	}
+}
+
+func TestListShowsLiveConversationsInPages(t *testing.T) {
+	svc := newService(t)
+	alice := connect(t, svc, mcpserver.Options{})
+	for _, n := range []string{"c1", "c2", "c3"} {
+		alice.ok("start", map[string]any{"conversation": n, "agent": "alice", "end": "agreement"})
+	}
+	alice.ok("conclude", map[string]any{"conversation": "c1", "agent": "alice", "body": "done"})
+
+	// By default: open ones only, and here all fit.
+	out := alice.ok("list", map[string]any{})
+	if strings.Contains(out, "c1 [") || !strings.Contains(out, "c2 [") || !strings.Contains(out, "c3 [") {
+		t.Fatalf("default list = %q", out)
+	}
+	out = alice.ok("list", map[string]any{"status": "all", "limit": 1})
+	m := regexp.MustCompile(`before=(\S+)`).FindStringSubmatch(out)
+	if strings.Count(out, " [") != 1 || m == nil {
+		t.Fatalf("first page = %q", out)
+	}
+	out = alice.ok("list", map[string]any{"status": "all", "limit": 2, "before": m[1]})
+	if strings.Count(out, " [") != 2 || strings.Contains(out, "before=") {
+		t.Fatalf("last page = %q", out)
+	}
+	out = alice.ok("list", map[string]any{"status": "concluded"})
+	if !strings.Contains(out, "c1 [concluded") || strings.Contains(out, "c2 [") {
+		t.Fatalf("concluded = %q", out)
+	}
+	if out, isErr := alice.call("list", map[string]any{"status": "done"}); !isErr || !strings.Contains(out, "invalid") {
+		t.Fatalf("bad status = %q", out)
 	}
 }

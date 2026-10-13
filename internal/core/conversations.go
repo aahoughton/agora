@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -299,47 +300,136 @@ func (s *Service) Start(ctx context.Context, p Principal, ns string, sp StartPar
 	return out, err
 }
 
-// ListParams filter ListConversations.
+// Listing bounds.
+const (
+	DefaultListLimit = 100
+	MaxListLimit     = 500
+)
+
+// ListParams filter and page ListConversations.
 type ListParams struct {
+	// Status keeps only open or only concluded conversations; empty keeps
+	// both. A timebox past its end counts as concluded.
+	Status Status
+	// IncludeArchived keeps conversations idle longer than ArchiveAfter.
 	IncludeArchived bool
+	// Limit caps the page; 0 means DefaultListLimit.
+	Limit int
+	// Before continues a listing from an earlier page's Next.
+	Before string
 }
 
-// ListConversations returns a namespace's conversations, most recently
-// active first.
-func (s *Service) ListConversations(ctx context.Context, p Principal, ns string, lp ListParams) ([]Conversation, error) {
+// ListPage is one page of conversations, most recently active first.
+type ListPage struct {
+	Conversations []Conversation `json:"conversations"`
+	// Next continues the listing as ListParams.Before; empty on the last
+	// page.
+	Next string `json:"next,omitempty"`
+}
+
+// listCursor is a position in a listing: the last_at and id of the last
+// conversation on the page before.
+type listCursor struct{ at, id int64 }
+
+func (c listCursor) String() string { return fmt.Sprintf("%d.%d", c.at, c.id) }
+
+func parseListCursor(s string) (listCursor, error) {
+	at, id, ok := strings.Cut(s, ".")
+	var c listCursor
+	var err1, err2 error
+	c.at, err1 = strconv.ParseInt(at, 10, 64)
+	c.id, err2 = strconv.ParseInt(id, 10, 64)
+	if !ok || err1 != nil || err2 != nil {
+		return listCursor{}, errorf(CodeInvalid, "before %q is not a cursor from an earlier page", s)
+	}
+	return c, nil
+}
+
+// ListConversations returns a page of a namespace's conversations, most
+// recently active first.
+func (s *Service) ListConversations(ctx context.Context, p Principal, ns string, lp ListParams) (ListPage, error) {
 	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
-		return nil, err
+		return ListPage{}, err
+	}
+	limit := lp.Limit
+	switch {
+	case limit == 0:
+		limit = DefaultListLimit
+	case limit < 0 || limit > MaxListLimit:
+		return ListPage{}, errorf(CodeInvalid, "limit must be between 1 and %d", MaxListLimit)
 	}
 	nsID, err := namespaceID(ctx, s.db, ns)
 	if err != nil {
-		return nil, err
+		return ListPage{}, err
 	}
-	all, err := collect(ctx, s.db, func(rows *sql.Rows) (*conv, error) { return scanConv(rows) },
-		`SELECT `+convColumns+` FROM conversations c JOIN namespaces n ON n.id = c.namespace_id
-		WHERE c.namespace_id = ? ORDER BY c.last_at DESC, c.id DESC`, nsID)
-	if err != nil {
-		return nil, err
+	now := ms(s.now())
+	where := []string{"c.namespace_id = ?"}
+	args := []any{nsID}
+	// A timebox whose end has passed is concluded even before its expiry
+	// is recorded.
+	const due = "(c.end_condition = 'timebox' AND c.ends_at <= ?)"
+	switch lp.Status {
+	case "":
+	case StatusOpen:
+		where = append(where, "c.status = 'open' AND NOT "+due)
+		args = append(args, now)
+	case StatusConcluded:
+		where = append(where, "(c.status = 'concluded' OR "+due+")")
+		args = append(args, now)
+	default:
+		return ListPage{}, errorf(CodeInvalid, "status must be open or concluded, or empty for both")
 	}
-	out := []Conversation{}
-	for _, c := range all {
-		c.Archived = s.now().Sub(c.LastAt) > s.opts.ArchiveAfter
-		if c.Archived && !lp.IncludeArchived {
-			continue
+	if !lp.IncludeArchived {
+		where = append(where, "c.last_at >= ?")
+		args = append(args, now-s.opts.ArchiveAfter.Milliseconds())
+	}
+	if lp.Before != "" {
+		cur, err := parseListCursor(lp.Before)
+		if err != nil {
+			return ListPage{}, err
 		}
+		where = append(where, "(c.last_at < ? OR (c.last_at = ? AND c.id < ?))")
+		args = append(args, cur.at, cur.at, cur.id)
+	}
+	args = append(args, limit+1)
+	rows, err := collect(ctx, s.db, func(rows *sql.Rows) (*conv, error) { return scanConv(rows) },
+		`SELECT `+convColumns+` FROM conversations c JOIN namespaces n ON n.id = c.namespace_id
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY c.last_at DESC, c.id DESC LIMIT ?`, args...)
+	if err != nil {
+		return ListPage{}, err
+	}
+	page := ListPage{Conversations: []Conversation{}}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		page.Next = listCursor{ms(last.LastAt), last.id}.String()
+	}
+	ids := make([]int64, len(rows))
+	for i, c := range rows {
+		ids[i] = c.id
+	}
+	pts, err := s.participantsOf(ctx, s.db, ids)
+	if err != nil {
+		return ListPage{}, err
+	}
+	for _, c := range rows {
 		if s.timeboxDue(c) {
 			fresh, err := s.loadConvRead(ctx, ns, c.Name)
 			if err != nil {
-				return nil, err
+				return ListPage{}, err
 			}
 			c = fresh
 		}
-		full, err := s.conversationWithParticipants(ctx, s.db, c)
-		if err != nil {
-			return nil, err
+		c.Archived = s.now().Sub(c.LastAt) > s.opts.ArchiveAfter
+		out := c.Conversation
+		out.Participants = pts[c.id]
+		if out.Participants == nil {
+			out.Participants = []Participant{}
 		}
-		out = append(out, full)
+		page.Conversations = append(page.Conversations, out)
 	}
-	return out, nil
+	return page, nil
 }
 
 // GetConversation returns one conversation with its participants.

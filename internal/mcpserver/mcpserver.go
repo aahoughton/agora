@@ -197,15 +197,39 @@ func failure(err error) (*mcp.CallToolResult, any, error) {
 }
 
 type listIn struct {
-	IncludeArchived bool `json:"include_archived,omitempty"`
+	Status          string `json:"status,omitempty"`
+	IncludeArchived bool   `json:"include_archived,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	Before          string `json:"before,omitempty"`
 }
 
+// Agents list a page of live conversations unless they ask for more:
+// every listed conversation costs them tokens.
+const (
+	defaultListLimit = 20
+	maxListLimit     = 100
+)
+
 func (t *tools) list(ctx context.Context, _ *mcp.CallToolRequest, in listIn) (*mcp.CallToolResult, any, error) {
-	cs, err := t.svc.ListConversations(ctx, t.p, t.ns, core.ListParams{IncludeArchived: in.IncludeArchived})
+	lp := core.ListParams{IncludeArchived: in.IncludeArchived, Limit: in.Limit, Before: in.Before}
+	switch in.Status {
+	case "":
+		lp.Status = core.StatusOpen
+	case "all":
+	default:
+		lp.Status = core.Status(in.Status)
+	}
+	switch {
+	case lp.Limit == 0:
+		lp.Limit = defaultListLimit
+	case lp.Limit < 0 || lp.Limit > maxListLimit:
+		return failure(&core.Error{Code: core.CodeInvalid, Message: fmt.Sprintf("limit must be between 1 and %d", maxListLimit)})
+	}
+	page, err := t.svc.ListConversations(ctx, t.p, t.ns, lp)
 	if err != nil {
 		return failure(err)
 	}
-	return text(renderList(t.w, cs)), nil, nil
+	return text(renderList(t.w, page)), nil, nil
 }
 
 type startIn struct {

@@ -43,8 +43,11 @@ Leave a conversation, optionally with a final message. Leaving while you are exp
   conversation (string, required): the conversation to leave
 
 ## list (read-only)
-List conversations in the namespace with their status, end condition and participants.
+List conversations in the namespace with their status, end condition and participants, most recently active first. By default only open ones, 20 at a time.
+  before (string): continue a listing from where the last one said to
   include_archived (boolean): include conversations idle long enough to be archived
+  limit (integer): how many to return (default 20, max 100)
+  status (string): open (the default), concluded, or all
 
 ## presence
 Tell others what you are doing (working, waiting, away) and when you will check back, before going quiet for a while.
@@ -141,7 +144,10 @@ more messages follow (last_seq is 12); call read again
 you are not expected in any open conversation
 
 ## list_none
-no conversations
+no conversations match
+
+## list_more
+more conversations: call list again with before=1791855824890.3
 
 ## wait_timeout_range
 timeout_seconds must be between 0 and 50 on this server; omit it to use the maximum
@@ -235,6 +241,6 @@ cache: concluded; you: concluded; unread: 0; next: done (the conversation has co
 > alice status {"agent":"alice"}
 you are not expected in any open conversation
 
-> alice list {}
+> alice list {"status":"all"}
 cache [concluded, end: agreement, created by alice, last #10] pick an eviction policy
   participants: alice (concluded, working), bob (concluded, waiting)

@@ -106,13 +106,16 @@ func renderConversation(_ *wording.Wording, c core.Conversation) string {
 	return b.String()
 }
 
-func renderList(w *wording.Wording, cs []core.Conversation) string {
-	if len(cs) == 0 {
+func renderList(w *wording.Wording, page core.ListPage) string {
+	if len(page.Conversations) == 0 {
 		return w.Phrase(wording.ListNone, nil)
 	}
-	parts := make([]string, len(cs))
-	for i, c := range cs {
-		parts[i] = renderConversation(w, c)
+	parts := make([]string, 0, len(page.Conversations)+1)
+	for _, c := range page.Conversations {
+		parts = append(parts, renderConversation(w, c))
+	}
+	if page.Next != "" {
+		parts = append(parts, w.Phrase(wording.ListMore, map[string]any{"Cursor": page.Next}))
 	}
 	return strings.Join(parts, "\n")
 }
