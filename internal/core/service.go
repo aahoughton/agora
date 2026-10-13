@@ -74,9 +74,13 @@ func New(db *sql.DB, opts Options) *Service {
 	if opts.MaxWatchers == 0 {
 		opts.MaxWatchers = DefaultMaxWatchers
 	}
-	return &Service{db: db, opts: opts, hub: hub{
+	s := &Service{db: db, opts: opts, hub: hub{
 		subs: map[int64]chan struct{}{}, waiters: map[int64]int{}, watchers: map[int64]int{},
 	}}
+	if r, ok := opts.Policy.(*Roles); ok {
+		r.svc = s
+	}
+	return s
 }
 
 func (s *Service) now() time.Time { return s.opts.Now().UTC() }

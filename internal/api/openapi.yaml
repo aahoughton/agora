@@ -647,6 +647,12 @@ components:
                 - stale_context
                 - message_too_large
                 - not_coordinator
+                - too_many_watchers
+                - unauthorized
+                - account_not_found
+                - account_exists
+                - token_not_found
+                - last_admin
             message: { type: string }
             last_seq:
               type: integer

@@ -25,6 +25,11 @@ const (
 	CodeNotCoordinator        Code = "not_coordinator"
 	CodeTooManyWaiters        Code = "too_many_waiters"
 	CodeTooManyWatchers       Code = "too_many_watchers"
+	CodeUnauthorized          Code = "unauthorized"
+	CodeAccountNotFound       Code = "account_not_found"
+	CodeAccountExists         Code = "account_exists"
+	CodeTokenNotFound         Code = "token_not_found"
+	CodeLastAdmin             Code = "last_admin"
 )
 
 // Error is a failure the caller can act on. Message is short, ASCII, and

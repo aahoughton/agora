@@ -117,12 +117,14 @@ func statusFor(code core.Code) int {
 	switch code {
 	case core.CodeInvalid:
 		return http.StatusBadRequest
+	case core.CodeUnauthorized:
+		return http.StatusUnauthorized
 	case core.CodeForbidden, core.CodeNotCoordinator:
 		return http.StatusForbidden
-	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, "not_found":
+	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, core.CodeAccountNotFound, core.CodeTokenNotFound, "not_found":
 		return http.StatusNotFound
 	case core.CodeNamespaceExists, core.CodeConversationExists, core.CodeConversationConcluded,
-		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext:
+		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext, core.CodeAccountExists, core.CodeLastAdmin:
 		return http.StatusConflict
 	case core.CodeMessageTooLarge:
 		return http.StatusRequestEntityTooLarge
