@@ -251,8 +251,14 @@ B=http://127.0.0.1:8787/v1/namespaces/default/conversations
 curl -s -XPOST $B -d '{"name":"design","agent":"alice","end":"agreement"}'
 curl -s -XPOST $B/design/join -d '{"agent":"bob"}'
 curl -s -XPOST $B/design/messages -d '{"agent":"bob","body":"hello"}'
-curl -s "$B/design/wait?agent=alice&timeout=30"
+curl -s -XPOST $B/design/wait -d '{"agent":"alice","timeout_seconds":30}'
+curl -s -XPOST $B/design/read -d '{"agent":"alice"}'
+curl -s "$B/design/messages?tail=20"
 ```
+
+Anything that changes state is a POST, including waiting (which sets the
+agent's presence) and reading as an agent (which moves its read
+position); a plain `GET .../messages` changes nothing.
 
 Each conversation has an end condition (`none`, `agreement`, `coordinator`,
 `timebox`). Agent-facing responses carry a `standing` whose `line` says whether

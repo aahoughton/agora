@@ -149,13 +149,13 @@ func TestFlow(t *testing.T) {
 	c.ok("POST", conv+"/messages", map[string]any{"agent": "alice", "body": "LRU or LFU?"}, 201, &said)
 
 	var d core.Digest
-	c.ok("GET", conv+"/wait?agent=bob&timeout=5", nil, 200, &d)
+	c.ok("POST", conv+"/wait", map[string]any{"agent": "bob", "timeout_seconds": 5}, 200, &d)
 	if d.New == 0 || d.TimedOut || d.Previews[len(d.Previews)-1].Text != "LRU or LFU?" {
 		t.Fatalf("digest = %+v", d)
 	}
 
 	var page core.ReadResult
-	c.ok("GET", conv+"/messages?agent=bob", nil, 200, &page)
+	c.ok("POST", conv+"/read", map[string]any{"agent": "bob"}, 200, &page)
 	if page.Standing == nil || page.Standing.Unread != 0 {
 		t.Fatalf("read = %+v", page)
 	}
@@ -245,14 +245,14 @@ func TestErrors(t *testing.T) {
 func TestWaitBounds(t *testing.T) {
 	c := newServer(t, auth.None{}, core.Options{})
 	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice", "end": "agreement"}, 201, nil)
-	c.ok("GET", conv+"/messages?agent=alice", nil, 200, nil)
+	c.ok("POST", conv+"/read", map[string]any{"agent": "alice"}, 200, nil)
 
-	c.wantError("GET", conv+"/wait?agent=alice&timeout=301", nil, 400, "invalid")
-	c.wantError("GET", conv+"/wait?agent=alice&timeout=-1", nil, 400, "invalid")
-	c.wantError("GET", conv+"/wait?timeout=0", nil, 400, "invalid")
+	c.wantError("POST", conv+"/wait", map[string]any{"agent": "alice", "timeout_seconds": 301}, 400, "invalid")
+	c.wantError("POST", conv+"/wait", map[string]any{"agent": "alice", "timeout_seconds": -1}, 400, "invalid")
+	c.wantError("POST", conv+"/wait", map[string]any{"timeout_seconds": 0}, 400, "invalid")
 
 	var d core.Digest
-	c.ok("GET", conv+"/wait?agent=alice&timeout=0", nil, 200, &d)
+	c.ok("POST", conv+"/wait", map[string]any{"agent": "alice", "timeout_seconds": 0}, 200, &d)
 	if !d.TimedOut || !d.Standing.Expected {
 		t.Fatalf("digest = %+v", d)
 	}
@@ -371,13 +371,13 @@ func TestTooManyWaiters(t *testing.T) {
 	c := newServer(t, auth.None{}, core.Options{MaxWaiters: 1})
 	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice"}, 201, nil)
 	c.ok("POST", conv+"/join", map[string]any{"agent": "bob"}, 200, nil)
-	c.ok("GET", conv+"/messages?agent=alice", nil, 200, nil)
-	c.ok("GET", conv+"/messages?agent=bob", nil, 200, nil)
+	c.ok("POST", conv+"/read", map[string]any{"agent": "alice"}, 200, nil)
+	c.ok("POST", conv+"/read", map[string]any{"agent": "bob"}, 200, nil)
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.url+conv+"/wait?agent=alice&timeout=2", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, c.url+conv+"/wait", strings.NewReader(`{"agent":"alice","timeout_seconds":2}`))
 		if err != nil {
 			return
 		}
@@ -398,7 +398,7 @@ func TestTooManyWaiters(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	c.wantError("GET", conv+"/wait?agent=bob&timeout=1", nil, 429, "too_many_waiters")
+	c.wantError("POST", conv+"/wait", map[string]any{"agent": "bob", "timeout_seconds": 1}, 429, "too_many_waiters")
 	<-done
 }
 
@@ -541,4 +541,15 @@ func TestReadTail(t *testing.T) {
 	}
 	c.wantError("GET", conv+"/messages?tail=0", nil, 400, "invalid")
 	c.wantError("GET", conv+"/messages?tail=2&after=1", nil, 400, "invalid")
+}
+
+// Reading as an agent changes state, so it is a POST; the GET refuses an
+// agent instead of quietly moving its read position.
+func TestReadingAsAnAgentIsAPost(t *testing.T) {
+	c := newServer(t, auth.None{}, core.Options{})
+	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice", "join": true}, 201, nil)
+	c.wantError("GET", conv+"/messages?agent=alice", nil, 400, "invalid")
+	if got := c.do("GET", conv+"/wait?agent=alice", nil, nil); got != http.StatusNotFound {
+		t.Fatalf("GET wait = %d", got)
+	}
 }

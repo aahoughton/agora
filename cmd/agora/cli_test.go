@@ -204,10 +204,17 @@ func TestWaitRetriesWhileServerIsDown(t *testing.T) {
 }
 
 func TestWaitTimeoutBoundsAHungServer(t *testing.T) {
+	// The server never answers; with a request body it does not read, it
+	// also never sees the client go, so the test stops it.
+	stop := make(chan struct{})
 	hung := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+		select {
+		case <-r.Context().Done():
+		case <-stop:
+		}
 	}))
 	t.Cleanup(hung.Close)
+	t.Cleanup(func() { close(stop) })
 	start := time.Now()
 	r := runCLI(t.Context(), hung.URL, "wait", "c", "--agent", "alice", "--timeout", "2s")
 	if r.code != exitTimedOut || time.Since(start) > 5*time.Second {

@@ -70,7 +70,8 @@ var routes = []route{
 	{"GET", convPath, (*handler).getConversation},
 	{"GET", convPath + "/messages", (*handler).read},
 	{"POST", convPath + "/messages", (*handler).say},
-	{"GET", convPath + "/wait", (*handler).wait},
+	{"POST", convPath + "/read", (*handler).readAsAgent},
+	{"POST", convPath + "/wait", (*handler).wait},
 	{"GET", convPath + "/follow", (*handler).follow},
 	{"POST", convPath + "/join", (*handler).join},
 	{"POST", convPath + "/leave", (*handler).leave},
@@ -376,7 +377,12 @@ func (h *handler) getConversation(w http.ResponseWriter, r *http.Request, p core
 	return nil
 }
 
+// read is a plain read of the log: it changes nothing. Reading as an agent,
+// which moves its read position, is POST .../read.
 func (h *handler) read(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	if r.URL.Query().Has("agent") {
+		return invalid("to read as an agent (which marks messages read), POST to .../read")
+	}
 	after, err := queryInt(r, "after")
 	if err != nil {
 		return err
@@ -389,18 +395,46 @@ func (h *handler) read(w http.ResponseWriter, r *http.Request, p core.Principal)
 	if err != nil {
 		return err
 	}
-	rp := core.ReadParams{Agent: r.URL.Query().Get("agent"), After: after}
+	rp := core.ReadParams{After: after}
 	if tail != nil {
-		if *tail < 1 {
-			return invalid("tail must be between 1 and %d", core.MaxReadLimit)
-		}
 		rp.Tail = int(*tail)
 	}
 	if limit != nil {
 		rp.Limit = int(*limit)
-		if rp.Limit == 0 {
-			return invalid("limit must be between 1 and %d", core.MaxReadLimit)
-		}
+	}
+	return h.readWith(w, r, p, rp, limit != nil, tail != nil)
+}
+
+// readAsAgent reads as an agent and moves its read position.
+func (h *handler) readAsAgent(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	var req struct {
+		Agent string `json:"agent"`
+		After *int64 `json:"after"`
+		Limit *int   `json:"limit"`
+		Tail  *int   `json:"tail"`
+	}
+	if err := h.decode(w, r, &req); err != nil {
+		return err
+	}
+	if req.Agent == "" {
+		return invalid("agent is required; to read without marking anything read, GET .../messages")
+	}
+	rp := core.ReadParams{Agent: req.Agent, After: req.After}
+	if req.Tail != nil {
+		rp.Tail = *req.Tail
+	}
+	if req.Limit != nil {
+		rp.Limit = *req.Limit
+	}
+	return h.readWith(w, r, p, rp, req.Limit != nil, req.Tail != nil)
+}
+
+func (h *handler) readWith(w http.ResponseWriter, r *http.Request, p core.Principal, rp core.ReadParams, limitSet, tailSet bool) error {
+	if tailSet && rp.Tail < 1 {
+		return invalid("tail must be between 1 and %d", core.MaxReadLimit)
+	}
+	if limitSet && rp.Limit == 0 {
+		return invalid("limit must be between 1 and %d", core.MaxReadLimit)
 	}
 	res, err := h.svc.Read(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), rp)
 	if err != nil {
@@ -431,31 +465,28 @@ func (h *handler) say(w http.ResponseWriter, r *http.Request, p core.Principal) 
 }
 
 func (h *handler) wait(w http.ResponseWriter, r *http.Request, p core.Principal) error {
-	after, err := queryInt(r, "after")
-	if err != nil {
-		return err
+	var req struct {
+		Agent          string `json:"agent"`
+		After          *int64 `json:"after"`
+		TimeoutSeconds *int64 `json:"timeout_seconds"`
+		InlineBytes    *int64 `json:"inline_bytes"`
 	}
-	timeout, err := queryInt(r, "timeout")
-	if err != nil {
+	if err := h.decode(w, r, &req); err != nil {
 		return err
 	}
 	secs := int64(DefaultWaitSeconds)
-	if timeout != nil {
-		if *timeout < 0 || *timeout > MaxWaitSeconds {
-			return invalid("timeout must be between 0 and %d seconds", MaxWaitSeconds)
+	if req.TimeoutSeconds != nil {
+		if *req.TimeoutSeconds < 0 || *req.TimeoutSeconds > MaxWaitSeconds {
+			return invalid("timeout_seconds must be between 0 and %d", MaxWaitSeconds)
 		}
-		secs = *timeout
+		secs = *req.TimeoutSeconds
 	}
-	inline, err := queryInt(r, "inline")
-	if err != nil {
-		return err
-	}
-	wp := core.WaitParams{Agent: r.URL.Query().Get("agent"), After: after, Timeout: time.Duration(secs) * time.Second}
-	if inline != nil {
-		if *inline < 0 || *inline > maxRequestBytes {
-			return invalid("inline must be between 0 and %d bytes", maxRequestBytes)
+	wp := core.WaitParams{Agent: req.Agent, After: req.After, Timeout: time.Duration(secs) * time.Second}
+	if req.InlineBytes != nil {
+		if *req.InlineBytes < 0 || *req.InlineBytes > maxRequestBytes {
+			return invalid("inline_bytes must be between 0 and %d", maxRequestBytes)
 		}
-		wp.InlineBytes = int(*inline)
+		wp.InlineBytes = int(*req.InlineBytes)
 	}
 	d, err := h.svc.Wait(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), wp)
 	if err != nil {

@@ -425,12 +425,10 @@ paths:
     get:
       operationId: read
       description: |
-        Messages after a seq, oldest first. With `agent`, reading starts after
-        the agent's read position unless `after` is given, and advances it.
+        Messages after a seq, oldest first. A plain read changes nothing; to
+        read as an agent, which advances its read position, POST to
+        .../read (an `agent` parameter here is refused).
       parameters:
-        - name: agent
-          in: query
-          schema: { $ref: "#/components/schemas/Name" }
         - name: after
           in: query
           schema: { type: integer, minimum: 0 }
@@ -439,9 +437,7 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
         - name: tail
           in: query
-          description: |
-            Read only the last this-many messages. With `agent`, everything
-            before them is marked read too. Not with `after`.
+          description: Read only the last this-many messages. Not with `after`.
           schema: { type: integer, minimum: 1, maximum: 500 }
       responses:
         "200":
@@ -449,6 +445,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReadResult" }
+        "400": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
     post:
       operationId: say
@@ -492,31 +489,73 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
 
+  /v1/namespaces/{ns}/conversations/{conv}/read:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/conv"
+    post:
+      operationId: readAsAgent
+      description: |
+        Messages after the agent's read position (or after `after`), oldest
+        first, skipping the agent's own posts; advances the read position.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                after: { type: integer, minimum: 0 }
+                limit: { type: integer, minimum: 1, maximum: 500, default: 50 }
+                tail:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  description: Read only the last this-many messages and mark everything before them read. Not with `after`.
+      responses:
+        "200":
+          description: A page of the log, with the agent's standing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
   /v1/namespaces/{ns}/conversations/{conv}/wait:
     parameters:
       - $ref: "#/components/parameters/ns"
       - $ref: "#/components/parameters/conv"
-    get:
+    post:
       operationId: wait
       description: |
         Blocks until another author posts past `after` (default: the agent's
         read position), the conversation concludes, or the timeout passes.
-        A timeout is a normal 200 with `timed_out: true`.
-      parameters:
-        - $ref: "#/components/parameters/agentRequired"
-        - name: after
-          in: query
-          schema: { type: integer, minimum: 0 }
-        - name: timeout
-          in: query
-          description: Seconds.
-          schema: { type: integer, minimum: 0, maximum: 300, default: 30 }
-        - name: inline
-          in: query
-          description: |
-            If the new messages' bodies total at most this many bytes, return
-            them in full in `messages` and mark them read. Ignored with `after`.
-          schema: { type: integer, minimum: 0, maximum: 1048576, default: 0 }
+        A timeout is a normal 200 with `timed_out: true`. Sets the agent's
+        presence while it waits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent]
+              additionalProperties: false
+              properties:
+                agent: { $ref: "#/components/schemas/Name" }
+                after: { type: integer, minimum: 0 }
+                timeout_seconds: { type: integer, minimum: 0, maximum: 300, default: 30 }
+                inline_bytes:
+                  type: integer
+                  minimum: 0
+                  maximum: 1048576
+                  default: 0
+                  description: |
+                    If the new messages' bodies total at most this many bytes,
+                    return them in full in `messages` and mark them read.
+                    Ignored with `after`.
       responses:
         "200":
           description: A digest of new activity; with `inline`, short messages in full.

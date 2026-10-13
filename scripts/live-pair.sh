@@ -67,8 +67,11 @@ post "$CONV/messages" "$(jq -n --arg a "$HOST" --arg b "$QUESTION" '{agent:$a, b
 
 case "$AGENT_CLI" in
 codex)
-	(cd "$OUT" && codex exec --approve-for-me --skip-git-repo-check ${MODEL:+-m "$MODEL"} \
+	# The user's own config may give agora a token variable; this server
+	# runs with auth off, so point it at one that is always set.
+	(cd "$OUT" && AGORA_LIVE_PAIR_TOKEN=unused codex exec --approve-for-me --skip-git-repo-check ${MODEL:+-m "$MODEL"} \
 		-c "mcp_servers.agora.url=\"$URL/mcp\"" -c 'mcp_servers.agora.tool_timeout_sec=60' \
+		-c 'mcp_servers.agora.bearer_token_env_var="AGORA_LIVE_PAIR_TOKEN"' \
 		-o "$OUT/agent-final.txt" "$PROMPT" >"$OUT/agent.log" 2>&1) &
 	;;
 claude)
@@ -89,7 +92,7 @@ while :; do
 		outcome="agent went quiet for $TURN_TIMEOUT"
 		break
 	fi
-	new=$(curl -fsS "$API/$CONV/messages?agent=$HOST&limit=500")
+	new=$(curl -fsS -XPOST "$API/$CONV/read" -H 'Content-Type: application/json' -d "$(jq -n --arg a "$HOST" '{agent:$a, limit:500}')")
 	from_agent=$(jq --arg a "$AGENT_NAME" '[.messages[] | select(.author == $a and (.kind == "say" or .kind == "conclude"))]' <<<"$new")
 	if [ "$pushed" = yes ] && [ "$(jq length <<<"$from_agent")" -gt 0 ]; then
 		replied_after_pushback=yes

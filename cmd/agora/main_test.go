@@ -145,7 +145,7 @@ func TestShutdownDoesNotWaitForLongPolls(t *testing.T) {
 
 	waitErr := make(chan error, 1)
 	go func() {
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/c/wait?agent=alice&after=1000&timeout=300", nil)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, base+"/c/wait", strings.NewReader(`{"agent":"alice","after":1000,"timeout_seconds":300}`))
 		if err != nil {
 			waitErr <- err
 			return

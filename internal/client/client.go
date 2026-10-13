@@ -147,12 +147,12 @@ type WaitParams struct {
 
 // Wait blocks on the server until there is something new for the agent.
 func (c *Client) Wait(ctx context.Context, ns, conv string, p WaitParams) (core.Digest, error) {
-	q := url.Values{"agent": {p.Agent}, "timeout": {strconv.Itoa(int(p.Timeout / time.Second))}}
+	body := map[string]any{"agent": p.Agent, "timeout_seconds": int(p.Timeout / time.Second)}
 	if p.After != nil {
-		q.Set("after", strconv.FormatInt(*p.After, 10))
+		body["after"] = *p.After
 	}
 	var d core.Digest
-	err := c.do(ctx, http.MethodGet, convPath(ns, conv)+"/wait", q, nil, &d)
+	err := c.do(ctx, http.MethodPost, convPath(ns, conv)+"/wait", nil, body, &d)
 	return d, err
 }
 
