@@ -155,6 +155,8 @@ func StatusFor(code core.Code) int {
 		return http.StatusTooManyRequests
 	case codeRequestTimeout:
 		return http.StatusRequestTimeout
+	case core.CodeBusy:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

@@ -35,13 +35,15 @@ func (c *clock) Advance(d time.Duration) {
 type fixture struct {
 	svc   *core.Service
 	db    *sql.DB
+	path  string
 	clock *clock
 	p     core.Principal
 }
 
 func newFixture(t *testing.T, opts core.Options) *fixture {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	path := filepath.Join(t.TempDir(), "agora.db")
+	db, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +54,7 @@ func newFixture(t *testing.T, opts core.Options) *fixture {
 	})
 	clk := &clock{t: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)}
 	opts.Now = clk.Now
-	return &fixture{svc: core.New(db, opts), db: db, clock: clk, p: core.Anonymous()}
+	return &fixture{svc: core.New(db, opts), db: db, path: path, clock: clk, p: core.Anonymous()}
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -1280,4 +1282,47 @@ func TestViewersHoldTheirSlot(t *testing.T) {
 	v.Close()
 	v.Close() // closing twice is harmless
 	must[*core.Viewer](t)(f.svc.OpenViewer(ctx, f.p, "default", "c")).Close()
+}
+
+// Writes queue in this process instead of failing on SQLite's lock; a
+// database held by another process past its busy timeout is reported as
+// busy (retryable), not as an internal error.
+func TestWritesQueueAndBusyIsRetryable(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice")
+	var wg sync.WaitGroup
+	errs := make(chan error, 100)
+	for range 100 {
+		wg.Go(func() {
+			_, err := f.svc.Say(ctx, f.p, "default", "c", core.SayParams{Agent: "alice", Body: "x"})
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if testing.Short() {
+		t.Skip("the busy case waits out SQLite's 5s busy timeout")
+	}
+	other, err := sql.Open("sqlite", "file:"+f.path+"?_txlock=immediate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = other.Close() }()
+	tx, err := other.BeginTx(ctx, nil) // another process holding the write lock
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = f.svc.Say(ctx, f.p, "default", "c", core.SayParams{Agent: "alice", Body: "blocked"})
+	ce, ok := errors.AsType[*core.Error](err)
+	if !ok || ce.Code != core.CodeBusy || ce.RetryAfter <= 0 {
+		t.Fatalf("write under another process's lock: %v", err)
+	}
 }

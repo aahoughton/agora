@@ -59,6 +59,10 @@ type Service struct {
 	opts   Options
 	hub    hub
 	writes *ratelimit.Limiter
+	// writer admits one write transaction at a time, so this process's
+	// writes queue here (in order, and cancelable) instead of spinning on
+	// SQLite's lock.
+	writer chan struct{}
 }
 
 // New returns a Service over an opened store.
@@ -90,7 +94,7 @@ func New(db *sql.DB, opts Options) *Service {
 	if opts.RecheckEvery == 0 {
 		opts.RecheckEvery = DefaultRecheckEvery
 	}
-	s := &Service{db: db, opts: opts, hub: hub{
+	s := &Service{db: db, opts: opts, writer: make(chan struct{}, 1), hub: hub{
 		subs: map[int64]chan struct{}{}, waiters: map[int64]int{}, watchers: map[int64]int{},
 	}}
 	if r, ok := opts.Policy.(*Roles); ok {
@@ -127,6 +131,22 @@ func (s *Service) limitWrite(p Principal) error {
 	return nil
 }
 
+// busyRetryAfter is how soon a busy write is worth retrying.
+const busyRetryAfter = time.Second
+
+// busy turns SQLite's "database is locked" into CodeBusy.
+func busy(err error) error {
+	var se interface{ Code() int }
+	if err == nil || !errors.As(err, &se) {
+		return err
+	}
+	switch se.Code() & 0xff { // primary result code
+	case 5, 6: // SQLITE_BUSY, SQLITE_LOCKED
+		return &Error{Code: CodeBusy, Message: "the database is busy; retry in a moment", RetryAfter: busyRetryAfter}
+	}
+	return err
+}
+
 // querier is satisfied by *sql.DB and *sql.Tx.
 type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -161,6 +181,16 @@ func (s *Service) writeAs(ctx context.Context, p Principal, ns string, a Action,
 // writeChecked is write on behalf of p with check run first, inside the
 // transaction.
 func (s *Service) writeChecked(ctx context.Context, p Principal, check func(querier) error, fn func(tx *wtx) error) error {
+	select {
+	case s.writer <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-s.writer }()
+	return busy(s.runWrite(ctx, p, check, fn))
+}
+
+func (s *Service) runWrite(ctx context.Context, p Principal, check func(querier) error, fn func(tx *wtx) error) error {
 	sqlTx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

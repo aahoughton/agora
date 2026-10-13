@@ -956,6 +956,7 @@ components:
                 - token_not_found
                 - last_admin
                 - rate_limited
+                - busy
             message: { type: string }
             last_seq:
               type: integer

@@ -42,6 +42,9 @@ const (
 	CodeTokenNotFound         Code = "token_not_found"
 	CodeLastAdmin             Code = "last_admin"
 	CodeRateLimited           Code = "rate_limited"
+	// CodeBusy is a write that could not get the database (held by another
+	// process) in time; retrying shortly is expected to succeed.
+	CodeBusy Code = "busy"
 )
 
 // Error is a failure the caller can act on. Message is short, ASCII, and
