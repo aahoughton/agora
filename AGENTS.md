@@ -43,7 +43,9 @@ takes a `core.Principal` and consults the `core.Policy`. Do not bypass core to
 reach the database.
 
 When changing the API, update `internal/api/openapi.yaml` in the same commit; a
-test fails if routes and spec disagree.
+test fails if routes and spec disagree. Response bodies are snapshotted in
+`internal/api/testdata/contract.golden`; after an intended change run
+`go test ./internal/api -update` and review that diff with the spec.
 
 MCP tool results are plain text that ends with the standing line. Keep them
 short: agents pay for every token, and the last line is what they act on.

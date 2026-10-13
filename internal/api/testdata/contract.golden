@@ -1,0 +1,554 @@
+
+## GET /v1/whoami -> OK
+{
+  "account": {
+    "created_at": "2030-01-02T03:04:05Z",
+    "disabled": false,
+    "id": 1,
+    "name": "root",
+    "server_admin": true
+  },
+  "auth_mode": "token",
+  "memberships": [],
+  "version": "test"
+}
+
+## POST /v1/namespaces -> Created
+{
+  "created_at": "2030-01-02T03:04:05Z",
+  "name": "team"
+}
+
+## GET /v1/namespaces -> OK
+{
+  "namespaces": [
+    {
+      "created_at": "<real time>",
+      "name": "default"
+    },
+    {
+      "created_at": "2030-01-02T03:04:05Z",
+      "name": "team"
+    }
+  ]
+}
+
+## POST /v1/accounts -> Created
+{
+  "created_at": "2030-01-02T03:04:05Z",
+  "disabled": false,
+  "id": 2,
+  "name": "pat",
+  "server_admin": false
+}
+
+## GET /v1/accounts -> OK
+{
+  "accounts": [
+    {
+      "created_at": "2030-01-02T03:04:05Z",
+      "disabled": false,
+      "id": 2,
+      "name": "pat",
+      "server_admin": false
+    },
+    {
+      "created_at": "2030-01-02T03:04:05Z",
+      "disabled": false,
+      "id": 1,
+      "name": "root",
+      "server_admin": true
+    }
+  ]
+}
+
+## PATCH /v1/accounts/pat -> OK
+{
+  "created_at": "2030-01-02T03:04:05Z",
+  "disabled": false,
+  "id": 2,
+  "name": "pat",
+  "server_admin": false
+}
+
+## POST /v1/accounts/pat/tokens -> Created
+{
+  "account": "pat",
+  "created_at": "2030-01-02T03:04:05Z",
+  "expires_at": "2030-01-02T04:04:05Z",
+  "id": 2,
+  "label": "laptop",
+  "secret": "agora_<secret>"
+}
+
+## GET /v1/accounts/pat/tokens -> OK
+{
+  "tokens": [
+    {
+      "account": "pat",
+      "created_at": "2030-01-02T03:04:05Z",
+      "expires_at": "2030-01-02T04:04:05Z",
+      "id": 2,
+      "label": "laptop"
+    }
+  ]
+}
+
+## PUT /v1/namespaces/default/members/pat -> OK
+{
+  "account": "pat",
+  "namespace": "default",
+  "role": "member"
+}
+
+## GET /v1/namespaces/default/members -> OK
+{
+  "members": [
+    {
+      "account": "pat",
+      "namespace": "default",
+      "role": "member"
+    }
+  ]
+}
+
+## POST /v1/namespaces/default/conversations -> Created
+{
+  "archived": false,
+  "created_at": "2030-01-02T03:04:05Z",
+  "created_by": "alice",
+  "end": "agreement",
+  "last_at": "2030-01-02T03:04:05Z",
+  "last_seq": 2,
+  "name": "design",
+  "namespace": "default",
+  "participants": [
+    {
+      "agent": "alice",
+      "joined_at": "2030-01-02T03:04:05Z",
+      "last_seen_at": "2030-01-02T03:04:05Z",
+      "presence": "working",
+      "read_seq": 0,
+      "stale": false,
+      "state": "active"
+    }
+  ],
+  "status": "open",
+  "topic": "pick a cache"
+}
+
+## GET /v1/namespaces/default/conversations?status=all -> OK
+{
+  "conversations": [
+    {
+      "archived": false,
+      "created_at": "2030-01-02T03:04:05Z",
+      "created_by": "alice",
+      "end": "agreement",
+      "last_at": "2030-01-02T03:04:05Z",
+      "last_seq": 2,
+      "name": "design",
+      "namespace": "default",
+      "participants": [
+        {
+          "agent": "alice",
+          "joined_at": "2030-01-02T03:04:05Z",
+          "last_seen_at": "2030-01-02T03:04:05Z",
+          "presence": "working",
+          "read_seq": 0,
+          "stale": false,
+          "state": "active"
+        }
+      ],
+      "status": "open",
+      "topic": "pick a cache"
+    }
+  ]
+}
+
+## GET /v1/namespaces/default/conversations/design -> OK
+{
+  "archived": false,
+  "created_at": "2030-01-02T03:04:05Z",
+  "created_by": "alice",
+  "end": "agreement",
+  "last_at": "2030-01-02T03:04:05Z",
+  "last_seq": 2,
+  "name": "design",
+  "namespace": "default",
+  "participants": [
+    {
+      "agent": "alice",
+      "joined_at": "2030-01-02T03:04:05Z",
+      "last_seen_at": "2030-01-02T03:04:05Z",
+      "presence": "working",
+      "read_seq": 0,
+      "stale": false,
+      "state": "active"
+    }
+  ],
+  "status": "open",
+  "topic": "pick a cache"
+}
+
+## POST /v1/namespaces/default/conversations/design/join -> OK
+{
+  "conversation": "design",
+  "expected": true,
+  "line": "design: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
+  "namespace": "default",
+  "next": "read",
+  "replies_to_you": 0,
+  "status": "open",
+  "unread": 2,
+  "you": "active"
+}
+
+## POST /v1/namespaces/default/conversations/design/presence -> OK
+{
+  "agent": "bob",
+  "joined_at": "2030-01-02T03:04:05Z",
+  "last_seen_at": "2030-01-02T03:04:05Z",
+  "note": "reading",
+  "presence": "working",
+  "read_seq": 0,
+  "stale": false,
+  "state": "active"
+}
+
+## POST /v1/namespaces/default/conversations/design/messages -> Created
+{
+  "message": {
+    "author": "alice",
+    "body": "LRU or LFU?",
+    "created_at": "2030-01-02T03:04:05Z",
+    "kind": "say",
+    "seq": 4
+  },
+  "missed": {
+    "authors": [
+      {
+        "author": "bob",
+        "count": 1
+      }
+    ],
+    "new": 1,
+    "previews": [
+      {
+        "author": "bob",
+        "kind": "system",
+        "seq": 3,
+        "text": "bob joined"
+      }
+    ]
+  },
+  "standing": {
+    "conversation": "design",
+    "expected": true,
+    "line": "design: open; you: active, expected; unread: 1; next: read (read the new messages, then reply or wait)",
+    "namespace": "default",
+    "next": "read",
+    "replies_to_you": 0,
+    "status": "open",
+    "unread": 1,
+    "you": "active"
+  }
+}
+
+## POST /v1/namespaces/default/conversations/design/observe -> Created
+{
+  "author": "root",
+  "body": "mind the budget",
+  "created_at": "2030-01-02T03:04:05Z",
+  "kind": "observer",
+  "seq": 5
+}
+
+## POST /v1/namespaces/default/conversations/design/wait -> OK
+{
+  "after": 0,
+  "authors": [
+    {
+      "author": "alice",
+      "count": 3
+    },
+    {
+      "author": "root",
+      "count": 1
+    }
+  ],
+  "last_seq": 5,
+  "messages": [
+    {
+      "author": "alice",
+      "body": "alice started the conversation (end: agreement)",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "system",
+      "seq": 1
+    },
+    {
+      "author": "alice",
+      "body": "alice joined",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "system",
+      "seq": 2
+    },
+    {
+      "author": "alice",
+      "body": "LRU or LFU?",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "say",
+      "seq": 4
+    },
+    {
+      "author": "root",
+      "body": "mind the budget",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "observer",
+      "seq": 5
+    }
+  ],
+  "new": 4,
+  "previews": [],
+  "standing": {
+    "conversation": "design",
+    "expected": true,
+    "line": "design: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)",
+    "namespace": "default",
+    "next": "wait",
+    "replies_to_you": 0,
+    "status": "open",
+    "unread": 0,
+    "you": "active"
+  },
+  "timed_out": false
+}
+
+## POST /v1/namespaces/default/conversations/design/messages -> Created
+{
+  "message": {
+    "author": "bob",
+    "body": "LRU",
+    "created_at": "2030-01-02T03:04:05Z",
+    "kind": "say",
+    "reply_to": 3,
+    "seq": 6
+  },
+  "standing": {
+    "conversation": "design",
+    "expected": true,
+    "line": "design: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)",
+    "namespace": "default",
+    "next": "wait",
+    "replies_to_you": 0,
+    "status": "open",
+    "unread": 0,
+    "you": "active"
+  }
+}
+
+## POST /v1/namespaces/default/conversations/design/read -> OK
+{
+  "last_seq": 6,
+  "messages": [],
+  "more": false,
+  "standing": {
+    "conversation": "design",
+    "expected": true,
+    "line": "design: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)",
+    "namespace": "default",
+    "next": "wait",
+    "replies_to_you": 0,
+    "status": "open",
+    "unread": 0,
+    "you": "active"
+  }
+}
+
+## GET /v1/namespaces/default/conversations/design/messages?tail=2 -> OK
+{
+  "last_seq": 6,
+  "messages": [
+    {
+      "author": "root",
+      "body": "mind the budget",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "observer",
+      "seq": 5
+    },
+    {
+      "author": "bob",
+      "body": "LRU",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "say",
+      "reply_to": 3,
+      "seq": 6
+    }
+  ],
+  "more": false
+}
+
+## GET /v1/namespaces/default/conversations/design/follow?after=4&timeout=0 -> OK
+{
+  "conversation": {
+    "archived": false,
+    "created_at": "2030-01-02T03:04:05Z",
+    "created_by": "alice",
+    "end": "agreement",
+    "last_at": "2030-01-02T03:04:05Z",
+    "last_seq": 6,
+    "name": "design",
+    "namespace": "default",
+    "participants": [
+      {
+        "agent": "alice",
+        "joined_at": "2030-01-02T03:04:05Z",
+        "last_seen_at": "2030-01-02T03:04:05Z",
+        "presence": "working",
+        "read_seq": 0,
+        "stale": false,
+        "state": "active"
+      },
+      {
+        "agent": "bob",
+        "joined_at": "2030-01-02T03:04:05Z",
+        "last_seen_at": "2030-01-02T03:04:05Z",
+        "note": "reading",
+        "presence": "working",
+        "read_seq": 6,
+        "stale": false,
+        "state": "active"
+      }
+    ],
+    "status": "open",
+    "topic": "pick a cache"
+  },
+  "last_seq": 6,
+  "messages": [
+    {
+      "author": "root",
+      "body": "mind the budget",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "observer",
+      "seq": 5
+    },
+    {
+      "author": "bob",
+      "body": "LRU",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "say",
+      "reply_to": 3,
+      "seq": 6
+    }
+  ],
+  "more": false
+}
+
+## GET /v1/namespaces/default/status?agent=bob -> OK
+{
+  "standings": [
+    {
+      "conversation": "design",
+      "expected": true,
+      "line": "design: open; you: active, expected; unread: 0; next: wait (reply if needed, then wait; do not end your turn while you are expected)",
+      "namespace": "default",
+      "next": "wait",
+      "replies_to_you": 0,
+      "status": "open",
+      "unread": 0,
+      "you": "active"
+    }
+  ]
+}
+
+## POST /v1/namespaces/default/conversations/design/conclude -> OK
+{
+  "conversation": "design",
+  "expected": false,
+  "line": "design: open; you: concluded; unread: 0; next: wait (you concluded; wait in case someone replies or withdraws)",
+  "namespace": "default",
+  "next": "wait",
+  "replies_to_you": 0,
+  "status": "open",
+  "unread": 0,
+  "you": "concluded"
+}
+
+## POST /v1/namespaces/default/conversations/design/leave -> OK
+{
+  "conversation": "design",
+  "expected": false,
+  "line": "design: open; you: left; unread: 0; next: join (you left; rejoin to take part)",
+  "namespace": "default",
+  "next": "join",
+  "replies_to_you": 0,
+  "status": "open",
+  "unread": 0,
+  "you": "left"
+}
+
+## POST /v1/namespaces/default/conversations/design/conclude -> OK
+{
+  "conversation": "design",
+  "expected": false,
+  "line": "design: concluded; you: concluded; unread: 6; next: read (the conversation has concluded; read the remaining messages, then stop)",
+  "namespace": "default",
+  "next": "read",
+  "replies_to_you": 0,
+  "status": "concluded",
+  "unread": 6,
+  "you": "concluded"
+}
+
+## POST /v1/namespaces/default/conversations -> Created
+{
+  "archived": false,
+  "created_at": "2030-01-02T03:04:05Z",
+  "created_by": "lead",
+  "end": "coordinator",
+  "last_at": "2030-01-02T03:04:05Z",
+  "last_seq": 2,
+  "name": "led",
+  "namespace": "default",
+  "participants": [
+    {
+      "agent": "lead",
+      "joined_at": "2030-01-02T03:04:05Z",
+      "last_seen_at": "2030-01-02T03:04:05Z",
+      "presence": "working",
+      "read_seq": 0,
+      "stale": false,
+      "state": "active"
+    }
+  ],
+  "status": "open",
+  "topic": ""
+}
+
+## POST /v1/namespaces/default/conversations/led/close -> OK
+{
+  "conversation": "led",
+  "expected": false,
+  "line": "led: concluded; you: active; unread: 1; next: read (the conversation has concluded; read the remaining messages, then stop)",
+  "namespace": "default",
+  "next": "read",
+  "replies_to_you": 0,
+  "status": "concluded",
+  "unread": 1,
+  "you": "active"
+}
+
+## POST /v1/accounts/pat/tokens/revoke -> OK
+{
+  "revoked": 1
+}
+
+## DELETE /v1/namespaces/default/members/pat -> No Content
+
+## POST /v1/namespaces/default/conversations/design/messages -> Conflict
+{
+  "error": {
+    "code": "conversation_concluded",
+    "message": "conversation \"design\" has concluded"
+  }
+}
