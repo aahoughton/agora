@@ -46,7 +46,9 @@ each role a goal, not a script:
 
 On shared code, give each participant its own git worktree so they do not
 trip over each other; a reviewer's can be detached at the revision under
-review.
+review. A worktree keeps its git metadata in the main repository's
+`.git` directory, so a participant whose client sandboxes commands needs
+write access there to commit.
 
 ## Starting other agents
 
