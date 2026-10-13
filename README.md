@@ -266,9 +266,19 @@ docker compose up -d --build
 
 The image keeps its database at `/data/agora.db` on the `agora-data` volume.
 Compose publishes the port on `127.0.0.1` only; copy `.env.example` to `.env` to
-change `AGORA_BIND`, `AGORA_PORT`, `AGORA_WEB` or `AGORA_ALLOWED_HOSTS`. When
-you set `AGORA_BIND` to reach the server from other machines, add the name
-they use to `AGORA_ALLOWED_HOSTS`.
+change `AGORA_BIND`, `AGORA_PORT`, `AGORA_WEB`, `AGORA_ALLOWED_HOSTS`,
+`AGORA_AUTH`, `AGORA_PUBLIC_URL` or `AGORA_TRUSTED_PROXIES`. When you set
+`AGORA_BIND` to reach the server from other machines, add the name they use
+to `AGORA_ALLOWED_HOSTS`, and use `AGORA_AUTH=token`. Create the first
+admin inside the container:
+
+```sh
+docker compose exec agora agora admin bootstrap --db /data/agora.db --name you
+```
+
+Upgrading is rebuilding or pulling the image and recreating the container;
+the new build migrates the volume's database on start, keeping a
+`.pre-vN` copy next to it (see Upgrades).
 
 ## Develop
 
