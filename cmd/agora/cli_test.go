@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,7 +44,7 @@ func runCLI(ctx context.Context, url string, args ...string) cliResult {
 		}
 		return ""
 	}
-	code := run(ctx, args, &out, &errOut, env)
+	code := run(ctx, args, strings.NewReader(""), &out, &errOut, env)
 	return cliResult{code, out.String(), errOut.String()}
 }
 
@@ -245,6 +247,154 @@ func TestTUIUsage(t *testing.T) {
 		r := runCLI(t.Context(), "http://127.0.0.1:1", tt.args...)
 		if r.code == exitOK || !strings.Contains(r.stderr, tt.want) {
 			t.Errorf("%v = %d %q, want an error containing %q", tt.args, r.code, r.stderr, tt.want)
+		}
+	}
+}
+
+func runCLIInput(ctx context.Context, url, stdin string, env map[string]string, args ...string) cliResult {
+	var out, errOut bytes.Buffer
+	getenv := func(k string) string {
+		if k == "AGORA_URL" {
+			return url
+		}
+		return env[k]
+	}
+	code := run(ctx, args, strings.NewReader(stdin), &out, &errOut, getenv)
+	return cliResult{code, out.String(), errOut.String()}
+}
+
+func TestHookStop(t *testing.T) {
+	url, _ := setup(t)
+	// In setup, alice has read and bob has not: bob is expected in c.
+	tests := []struct {
+		name, stdin string
+		env         map[string]string
+		block       bool
+	}{
+		{"expected", `{"stop_hook_active":false}`, map[string]string{"AGORA_AGENT": "bob"}, true},
+		{"not expected", `{}`, map[string]string{"AGORA_AGENT": "carol"}, false},
+		{"no agent", `{}`, nil, false},
+		{"already continuing", `{"stop_hook_active":true}`, map[string]string{"AGORA_AGENT": "bob"}, false},
+		{"bad input", `not json`, map[string]string{"AGORA_AGENT": "bob"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := runCLIInput(t.Context(), url, tt.stdin, tt.env, "hook", "stop")
+			if r.code != exitOK {
+				t.Fatalf("exit %d: %s", r.code, r.stderr)
+			}
+			if !tt.block {
+				if r.stdout != "" {
+					t.Fatalf("blocked: %s", r.stdout)
+				}
+				return
+			}
+			var out struct{ Decision, Reason string }
+			if err := json.Unmarshal([]byte(r.stdout), &out); err != nil {
+				t.Fatalf("stdout %q: %v", r.stdout, err)
+			}
+			if out.Decision != "block" || !strings.Contains(out.Reason, "c: open; you: active, expected") {
+				t.Fatalf("hook output = %+v", out)
+			}
+		})
+	}
+	t.Run("server down", func(t *testing.T) {
+		r := runCLIInput(t.Context(), "http://127.0.0.1:1", `{}`, map[string]string{"AGORA_AGENT": "bob"}, "hook", "stop")
+		if r.code != exitOK || r.stdout != "" || !strings.Contains(r.stderr, "agora hook stop:") {
+			t.Fatalf("server down = %+v", r)
+		}
+	})
+}
+
+func TestHookStopPatience(t *testing.T) {
+	url, svc := setup(t)
+	p := core.Anonymous()
+	cache := t.TempDir()
+	env := map[string]string{"AGORA_AGENT": "bob", "XDG_CACHE_HOME": cache}
+	stop := func(stdin string, args ...string) bool {
+		t.Helper()
+		r := runCLIInput(t.Context(), url, stdin, env, append([]string{"hook", "stop"}, args...)...)
+		if r.code != exitOK {
+			t.Fatalf("exit %d: %s", r.code, r.stderr)
+		}
+		return strings.Contains(r.stdout, `"decision":"block"`)
+	}
+	const first = `{"session_id":"s1","stop_hook_active":false}`
+	const again = `{"session_id":"s1","stop_hook_active":true}`
+
+	// A session that keeps stopping without calling in is held three times,
+	// then let go, and stays let go until it makes progress.
+	for i, want := range []bool{true, true, true, false, false} {
+		in := again
+		if i == 0 {
+			in = first
+		}
+		if got := stop(in); got != want {
+			t.Fatalf("stop %d: blocked = %v, want %v", i+1, got, want)
+		}
+	}
+	// A new message is progress: the hook holds the session again.
+	if _, err := svc.Say(t.Context(), p, "default", "c", core.SayParams{Agent: "alice", Body: "still there?"}); err != nil {
+		t.Fatal(err)
+	}
+	if !stop(again) {
+		t.Fatal("not blocked after a new message")
+	}
+	// So is calling in, such as a wait that finds nothing new.
+	for range 3 {
+		if _, err := svc.Wait(t.Context(), p, "default", "c", core.WaitParams{Agent: "bob", Timeout: time.Millisecond}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+		if !stop(again) {
+			t.Fatal("not blocked after calling wait")
+		}
+	}
+	// Another session is counted separately.
+	if !stop(`{"session_id":"s2","stop_hook_active":true}`) {
+		t.Fatal("other session not blocked")
+	}
+	// Once bob concludes he is not expected: the stop is allowed and the
+	// session's state is gone.
+	if _, err := svc.Conclude(t.Context(), p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	if stop(again) {
+		t.Fatal("blocked when not expected")
+	}
+	files, err := os.ReadDir(filepath.Join(cache, "agora", "stop-hook"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("state files = %v, %v; want only s2's", files, err)
+	}
+
+	t.Run("patience flag", func(t *testing.T) {
+		env["AGORA_AGENT"] = "alice"
+		if !stop(`{"session_id":"s3"}`, "--patience", "1") || stop(`{"session_id":"s3"}`, "--patience", "1") {
+			t.Fatal("--patience 1 did not block exactly once")
+		}
+		if r := runCLIInput(t.Context(), url, `{}`, env, "hook", "stop", "--patience", "0"); r.code != exitUsage {
+			t.Fatalf("--patience 0 = %+v", r)
+		}
+	})
+}
+
+func TestMCPConfig(t *testing.T) {
+	r := runCLI(t.Context(), "http://127.0.0.1:9000/", "mcp-config", "--profile", "codex", "--namespace", "team-a", "--stop-hook")
+	if r.code != exitOK {
+		t.Fatalf("exit %d: %s", r.code, r.stderr)
+	}
+	for _, want := range []string{
+		`url = "http://127.0.0.1:9000/mcp?namespace=team-a"`,
+		`default_tools_approval_mode = "approve"`,
+		`"command": "agora hook stop"`,
+	} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("missing %q in:\n%s", want, r.stdout)
+		}
+	}
+	for _, args := range [][]string{{"mcp-config"}, {"mcp-config", "--profile", "gemini"}} {
+		if r := runCLI(t.Context(), "http://127.0.0.1:9000", args...); r.code != exitUsage {
+			t.Errorf("%v = %d, want usage error", args, r.code)
 		}
 	}
 }

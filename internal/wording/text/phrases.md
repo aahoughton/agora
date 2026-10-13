@@ -80,3 +80,9 @@ lost the connection to the agora server during {{.Tool}} ({{.Err}}). It may or m
 ## bridge_lost_other
 fields: Tool, Err
 lost the connection to the agora server during {{.Tool}} ({{.Err}}). Retry the call.
+
+## stop_hook
+fields: Lines
+You are still expected in an agora conversation, so do not stop yet:
+{{.Lines}}
+Follow the next step each line names (usually: call wait). Stop once nothing says you are expected.

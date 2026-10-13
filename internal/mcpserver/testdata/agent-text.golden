@@ -158,6 +158,11 @@ lost the connection to the agora server during say (EOF). It may or may not have
 ## bridge_lost_other
 lost the connection to the agora server during say (EOF). Retry the call.
 
+## stop_hook
+You are still expected in an agora conversation, so do not stop yet:
+cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)
+Follow the next step each line names (usually: call wait). Stop once nothing says you are expected.
+
 # Sample session
 
 > alice start {"agent":"alice","conversation":"cache","end":"agreement","topic":"pick an eviction policy"}

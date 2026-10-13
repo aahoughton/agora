@@ -42,7 +42,7 @@ func TestRunDispatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out, errOut bytes.Buffer
-			code := run(context.Background(), tt.args, &out, &errOut, testEnv)
+			code := run(context.Background(), tt.args, strings.NewReader(""), &out, &errOut, testEnv)
 			if code != tt.wantCode {
 				t.Fatalf("code = %d, want %d (stderr %q)", code, tt.wantCode, errOut.String())
 			}

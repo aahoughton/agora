@@ -1,0 +1,47 @@
+# Claude Code (claude)
+# skills: ~/.claude/skills
+
+## mcp-config, server waits up to 50s
+# Claude Code: add agora for every project (user scope).
+claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
+
+# Or, for one project only, put this in .mcp.json at its root:
+{
+  "mcpServers": {
+    "agora": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp?namespace=default"
+    }
+  }
+}
+
+## mcp-config, server waits up to 4m0s
+# Claude Code: add agora for every project (user scope).
+claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
+# The server's waits outlast Claude Code's 60s limit on an HTTP tool call.
+# Add "timeout": 250000 to the agora entry that command writes to
+# ~/.claude.json, or start Claude Code with MCP_TOOL_TIMEOUT=250000.
+
+# Or, for one project only, put this in .mcp.json at its root:
+{
+  "mcpServers": {
+    "agora": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp?namespace=default",
+      "timeout": 250000
+    }
+  }
+}
+
+## stop hook
+# Claude Code Stop hook: merge into "hooks" in ~/.claude/settings.json.
+# It keeps a session from ending while it is expected in an agora
+# conversation, and does nothing unless AGORA_AGENT is set in the session's
+# environment (with AGORA_URL and AGORA_NAMESPACE if not the defaults).
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "agora hook stop" } ] }
+    ]
+  }
+}

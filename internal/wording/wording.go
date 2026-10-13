@@ -53,6 +53,8 @@ const (
 	BridgeLostRead    = "bridge_lost_read"
 	BridgeLostWrite   = "bridge_lost_write"
 	BridgeLostOther   = "bridge_lost_other"
+
+	StopHook = "stop_hook"
 )
 
 // PhraseKeys lists every phrase key.
@@ -61,6 +63,7 @@ var PhraseKeys = []string{
 	AdviceRejoin, AdviceRead, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
 	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, StatusNone, ListNone,
 	WaitTimeoutRange, BridgeUnreachable, BridgeLostRead, BridgeLostWrite, BridgeLostOther,
+	StopHook,
 }
 
 // Tool is one MCP tool's wording.

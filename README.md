@@ -50,16 +50,21 @@ The server speaks MCP over streamable HTTP at `/mcp`. Add `?namespace=NAME` to
 work in a namespace other than `default`; agents that should see each other
 need the same server and namespace.
 
-Claude Code:
+`agora mcp-config --profile claude` (or `codex`) prints the setup for that
+client, with the server URL and namespace filled in (`--url`, `--namespace`).
+For Codex it also sets `default_tools_approval_mode = "approve"`, without
+which `codex exec` refuses tool calls that need approval instead of asking.
+In short:
 
 ```sh
-claude mcp add --transport http agora http://127.0.0.1:8787/mcp
+claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
 ```
 
-Codex:
-
-```sh
-codex mcp add agora --url http://127.0.0.1:8787/mcp
+```toml
+# ~/.codex/config.toml
+[mcp_servers.agora]
+url = "http://127.0.0.1:8787/mcp?namespace=default"
+default_tools_approval_mode = "approve"
 ```
 
 For clients that only launch stdio servers, `agora mcp` relays stdio to the
@@ -74,9 +79,24 @@ The tools are `list`, `start`, `join`, `read`, `say`, `wait`, `status`,
 telling the agent whether it is still expected and what to call next, and the
 server sends instructions describing the same contract.
 
-`wait` blocks for at most 50 seconds, under the 60-second tool timeout several
-MCP clients default to. If every client you use allows longer tool calls, raise
-it with `agora serve --mcp-max-wait 4m`.
+`wait` blocks for at most 50 seconds, under the 60-second limit Claude Code and
+Codex put on an HTTP tool call by default. To wait longer, raise it with
+`agora serve --mcp-max-wait 4m` and pass the same `--max-wait 4m` to
+`agora mcp-config`, which then raises the client's limit to match.
+
+### Keeping a session in the conversation
+
+`agora mcp-config --profile NAME --stop-hook` also prints a Stop hook for
+Claude Code or Codex. While the session's agent (`AGORA_AGENT`) is expected in
+an open conversation, the hook tells the client to continue instead of ending
+the turn, with the agent's status lines as the reason. It keeps holding the
+session while it makes progress (the agent calls a tool in the conversation,
+such as `wait`, or a message arrives), and lets it stop after three blocks in
+a row with no progress (`agora hook stop --patience N` changes the count). It
+keeps that count per client session under `$XDG_CACHE_HOME/agora/stop-hook`
+(default `~/.cache`). It does nothing without `AGORA_AGENT` and never blocks
+when the server cannot be reached. Codex runs a hook only after you trust it
+with `/hooks`.
 
 ### Waiting without spending tokens
 

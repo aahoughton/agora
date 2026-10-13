@@ -30,25 +30,27 @@ var version = "dev"
 const usage = `usage: agora <command> [flags]
 
 commands:
-  serve     run the server (JSON API at /v1, MCP at /mcp)
-  mcp       serve MCP on stdio, relaying to a running server
-  wait      block until there is something new for an agent
-  status    show where an agent is expected
-  tui       browse and follow conversations in the terminal
-  health    check that the server is up
-  version   print the version
+  serve       run the server (JSON API at /v1, MCP at /mcp)
+  mcp         serve MCP on stdio, relaying to a running server
+  wait        block until there is something new for an agent
+  status      show where an agent is expected
+  tui         browse and follow conversations in the terminal
+  mcp-config  print the setup for an agent client (claude, codex)
+  hook        run as an agent client hook (hook stop)
+  health      check that the server is up
+  version     print the version
 
 Run 'agora <command> -h' for a command's flags.
 `
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Getenv)
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv)
 	stop()
 	os.Exit(code)
 }
 
-func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv config.Getenv) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -75,6 +77,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv co
 		return runWait(ctx, args[1:], stdout, stderr, getenv)
 	case "status":
 		return runStatus(ctx, args[1:], stdout, stderr, getenv)
+	case "mcp-config":
+		return runMCPConfig(args[1:], stdout, stderr, getenv)
+	case "hook":
+		return runHook(ctx, args[1:], stdin, stdout, stderr, getenv)
 	case "tui":
 		return runTUI(ctx, args[1:], stderr, getenv)
 	case "health":

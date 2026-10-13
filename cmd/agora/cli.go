@@ -17,6 +17,7 @@ import (
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/agora/internal/profiles"
 	"github.com/aahoughton/agora/internal/tui"
 	"github.com/aahoughton/agora/themes"
 )
@@ -335,6 +336,62 @@ argument it opens the conversations of --namespace.
 	if err := tui.Run(ctx, opts); err != nil {
 		fmt.Fprintln(stderr, "agora tui:", err)
 		return exitError
+	}
+	return exitOK
+}
+
+func runMCPConfig(args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("mcp-config", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, `usage: agora mcp-config --profile NAME [flags]
+
+Prints how to connect an agent client to this server's MCP endpoint, for
+profile %s. --max-wait must match the server's --mcp-max-wait so the
+client allows waits that long. With --stop-hook it also prints a Stop hook
+that keeps a session from ending while it is expected in a conversation.
+
+`, strings.Join(profiles.Names(), " or "))
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs)
+	profile := fs.String("profile", "", "client profile: "+strings.Join(profiles.Names(), ", "))
+	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
+	stopHook := fs.Bool("stop-hook", false, "also print a Stop hook")
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	if *profile == "" {
+		return flagError(stderr, errors.New("--profile is required: "+strings.Join(profiles.Names(), ", ")))
+	}
+	p, err := profiles.Get(*profile)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	if _, err := client.New(cc.URL); err != nil {
+		return flagError(stderr, err)
+	}
+	mcpURL := strings.TrimRight(cc.URL, "/") + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
+	out, err := p.MCPConfig(mcpURL, *maxWait)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora mcp-config:", err)
+		return exitError
+	}
+	fmt.Fprint(stdout, out)
+	if *stopHook {
+		hook, err := p.StopHook("agora hook stop")
+		if err != nil {
+			fmt.Fprintln(stderr, "agora mcp-config:", err)
+			return exitError
+		}
+		fmt.Fprint(stdout, "\n"+hook)
 	}
 	return exitOK
 }
