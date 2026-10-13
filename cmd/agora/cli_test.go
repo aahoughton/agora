@@ -558,6 +558,16 @@ func TestAdminThroughTheServer(t *testing.T) {
 	}
 }
 
+func TestMCPConfigNeverPrintsTheToken(t *testing.T) {
+	env := map[string]string{"AGORA_TOKEN": "agora_supersecret"}
+	for _, profile := range []string{"claude", "codex"} {
+		r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "mcp-config", "--profile", profile, "--with-token", "--stop-hook")
+		if r.code != exitOK || strings.Contains(r.stdout, "supersecret") || !strings.Contains(r.stdout, "AGORA_TOKEN") {
+			t.Fatalf("%s: %+v", profile, r)
+		}
+	}
+}
+
 func TestTUIChecksItsToken(t *testing.T) {
 	url, _, _ := tokenServer(t)
 	r := runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": "agora_wrong"}, "tui")

@@ -10,10 +10,15 @@ OpenAI Codex CLI (codex)
 ~/.agents/skills
 
 ## mcp_config
-fields: MCPURL, MCPURLString (a quoted TOML string), TimeoutSeconds
+fields: MCPURL, MCPURLString (a quoted TOML string), TimeoutSeconds, TokenEnv, TokenEnvString (a quoted TOML string)
 # Codex: add this to ~/.codex/config.toml.
 [mcp_servers.agora]
 url = {{.MCPURLString}}
+{{- if .TokenEnv}}
+# Codex sends the token in {{.TokenEnv}} as a bearer token; set it in the
+# environment Codex runs in.
+bearer_token_env_var = {{.TokenEnvString}}
+{{- end}}
 # Without this, codex exec refuses tool calls that need approval (close,
 # for one) instead of asking.
 default_tools_approval_mode = "approve"

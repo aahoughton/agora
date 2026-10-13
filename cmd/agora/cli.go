@@ -377,6 +377,7 @@ that keeps a session from ending while it is expected in a conversation.
 	profile := fs.String("profile", "", "client profile: "+strings.Join(profiles.Names(), ", "))
 	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
 	stopHook := fs.Bool("stop-hook", false, "also print a Stop hook")
+	withToken := fs.Bool("with-token", false, "set the client up to send the token in "+config.EnvToken+", for a server with --auth token (the token itself is never printed)")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
@@ -398,7 +399,11 @@ that keeps a session from ending while it is expected in a conversation.
 		return flagError(stderr, err)
 	}
 	mcpURL := strings.TrimRight(cc.URL, "/") + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
-	out, err := p.MCPConfig(mcpURL, *maxWait)
+	tokenEnv := ""
+	if *withToken {
+		tokenEnv = config.EnvToken
+	}
+	out, err := p.MCPConfig(mcpURL, *maxWait, tokenEnv)
 	if err != nil {
 		fmt.Fprintln(stderr, "agora mcp-config:", err)
 		return exitError

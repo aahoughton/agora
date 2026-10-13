@@ -103,11 +103,13 @@ func Get(name string) (*Profile, error) {
 }
 
 // MCPConfig renders the client's setup for the MCP endpoint mcpURL, on a
-// server whose longest MCP wait is maxWait.
-func (p *Profile) MCPConfig(mcpURL string, maxWait time.Duration) (string, error) {
+// server whose longest MCP wait is maxWait. If tokenEnv is set, the client
+// is set up to send the token in that environment variable; the setup
+// never contains a token itself.
+func (p *Profile) MCPConfig(mcpURL string, maxWait time.Duration, tokenEnv string) (string, error) {
 	data := map[string]any{
 		"MCPURL": mcpURL, "MCPURLShell": shellQuote(mcpURL), "MCPURLString": quoteString(mcpURL),
-		"TimeoutMS": 0, "TimeoutSeconds": 0,
+		"TimeoutMS": 0, "TimeoutSeconds": 0, "TokenEnv": tokenEnv, "TokenEnvString": quoteString(tokenEnv),
 	}
 	// Raise the client's limit only when the server's waits would hit it.
 	if need := maxWait + waitMargin; need > clientRequestLimit {

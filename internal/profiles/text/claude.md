@@ -10,9 +10,13 @@ Claude Code (claude)
 ~/.claude/skills
 
 ## mcp_config
-fields: MCPURL, MCPURLShell (quoted for a shell), MCPURLString (a quoted JSON/TOML string), TimeoutMS
+fields: MCPURL, MCPURLShell (quoted for a shell), MCPURLString (a quoted JSON/TOML string), TimeoutMS, TokenEnv, TokenEnvString
 # Claude Code: add agora for every project (user scope).
-claude mcp add --transport http --scope user agora {{.MCPURLShell}}
+claude mcp add --transport http --scope user agora {{.MCPURLShell}}{{if .TokenEnv}} --header 'Authorization: Bearer ${ {{- .TokenEnv -}} }'{{end}}
+{{- if .TokenEnv}}
+# Claude Code expands ${ {{- .TokenEnv -}} } when it connects; set {{.TokenEnv}} in the
+# environment Claude Code runs in.
+{{- end}}
 {{- if .TimeoutMS}}
 # The server's waits outlast Claude Code's 60s limit on an HTTP tool call.
 # Add "timeout": {{.TimeoutMS}} to the agora entry that command writes to
@@ -24,7 +28,8 @@ claude mcp add --transport http --scope user agora {{.MCPURLShell}}
   "mcpServers": {
     "agora": {
       "type": "http",
-      "url": {{.MCPURLString}}{{if .TimeoutMS}},
+      "url": {{.MCPURLString}}{{if .TokenEnv}},
+      "headers": { "Authorization": "Bearer ${ {{- .TokenEnv -}} }" }{{end}}{{if .TimeoutMS}},
       "timeout": {{.TimeoutMS}}{{end}}
     }
   }

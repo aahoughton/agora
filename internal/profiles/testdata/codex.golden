@@ -19,6 +19,19 @@ default_tools_approval_mode = "approve"
 # The server's waits outlast Codex's default 60s tool timeout.
 tool_timeout_sec = 250
 
+## mcp-config with a token, server waits up to 4m0s
+# Codex: add this to ~/.codex/config.toml.
+[mcp_servers.agora]
+url = "http://127.0.0.1:8787/mcp?namespace=default"
+# Codex sends the token in AGORA_TOKEN as a bearer token; set it in the
+# environment Codex runs in.
+bearer_token_env_var = "AGORA_TOKEN"
+# Without this, codex exec refuses tool calls that need approval (close,
+# for one) instead of asking.
+default_tools_approval_mode = "approve"
+# The server's waits outlast Codex's default 60s tool timeout.
+tool_timeout_sec = 250
+
 ## stop hook
 # Codex Stop hook: merge into ~/.codex/hooks.json, then trust it with
 # /hooks in the Codex CLI (Codex skips hooks it has not been told to trust).

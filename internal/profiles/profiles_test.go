@@ -30,12 +30,17 @@ func TestProfiles(t *testing.T) {
 		var b strings.Builder
 		b.WriteString("# " + p.Description + "\n# skills: " + p.SkillsDir + "\n\n")
 		for _, wait := range []time.Duration{50 * time.Second, 4 * time.Minute} {
-			out, err := p.MCPConfig(url, wait)
+			out, err := p.MCPConfig(url, wait, "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			b.WriteString("## mcp-config, server waits up to " + wait.String() + "\n" + out + "\n")
 		}
+		out, err := p.MCPConfig(url, 4*time.Minute, "AGORA_TOKEN")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.WriteString("## mcp-config with a token, server waits up to 4m0s\n" + out + "\n")
 		hook, err := p.StopHook("agora hook stop")
 		if err != nil {
 			t.Fatal(err)
@@ -50,8 +55,8 @@ func TestTimeoutsOnlyWhenNeeded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	short, _ := p.MCPConfig("u", 50*time.Second)
-	long, _ := p.MCPConfig("u", 4*time.Minute)
+	short, _ := p.MCPConfig("u", 50*time.Second, "")
+	long, _ := p.MCPConfig("u", 4*time.Minute, "")
 	if strings.Contains(short, "tool_timeout_sec") || !strings.Contains(long, "tool_timeout_sec = 250") {
 		t.Fatalf("short:\n%s\nlong:\n%s", short, long)
 	}
@@ -92,7 +97,7 @@ func TestQuoting(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out, err := p.MCPConfig(url, 4*time.Minute)
+		out, err := p.MCPConfig(url, 4*time.Minute, "")
 		if err != nil {
 			t.Fatal(err)
 		}
