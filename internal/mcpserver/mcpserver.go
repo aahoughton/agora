@@ -387,6 +387,7 @@ type sayIn struct {
 	Body            string `json:"body"`
 	ReplyTo         *int64 `json:"reply_to,omitempty"`
 	ExpectedLastSeq *int64 `json:"expected_last_seq,omitempty"`
+	IdempotencyKey  string `json:"idempotency_key,omitempty"`
 }
 
 func (t *tools) say(ctx context.Context, req *mcp.CallToolRequest, in sayIn) (*mcp.CallToolResult, any, error) {
@@ -396,6 +397,7 @@ func (t *tools) say(ctx context.Context, req *mcp.CallToolRequest, in sayIn) (*m
 	}
 	r, err := t.svc.Say(ctx, p, t.ns, in.Conversation, core.SayParams{
 		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq, InlineBytes: InlineBytes,
+		IdempotencyKey: in.IdempotencyKey,
 	})
 	if err != nil {
 		return failure(ctx, err)

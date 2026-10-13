@@ -464,6 +464,13 @@ paths:
                 expected_last_seq:
                   type: integer
                   description: Reject with stale_context if the log has moved past this seq.
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: >
+                    Makes a retry safe: a post repeating a key already used in
+                    the conversation returns that message instead of posting
+                    again (idempotency_conflict if the message differs).
       responses:
         "400": { $ref: "#/components/responses/Error" }
         "201":
@@ -996,6 +1003,7 @@ components:
                 - last_admin
                 - rate_limited
                 - busy
+                - idempotency_conflict
             message: { type: string }
             last_seq:
               type: integer

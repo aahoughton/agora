@@ -45,6 +45,9 @@ const (
 	// CodeBusy is a write that could not get the database (held by another
 	// process) in time; retrying shortly is expected to succeed.
 	CodeBusy Code = "busy"
+	// CodeIdempotencyConflict is a post that reuses an idempotency key
+	// for a different message.
+	CodeIdempotencyConflict Code = "idempotency_conflict"
 )
 
 // Error is a failure the caller can act on. Message is short, ASCII, and

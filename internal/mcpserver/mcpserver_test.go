@@ -597,3 +597,13 @@ func TestSessionsAreCapped(t *testing.T) {
 		t.Fatalf("after closing a session: %v", err)
 	}
 }
+
+func TestSayRetriedWithAKeyPostsOnce(t *testing.T) {
+	s := connect(t, newService(t), mcpserver.Options{})
+	s.ok("start", map[string]any{"conversation": "c", "agent": "alice"})
+	args := map[string]any{"conversation": "c", "agent": "alice", "body": "once", "idempotency_key": "post-1"}
+	first, again := s.ok("say", args), s.ok("say", args)
+	if strings.SplitN(first, "\n", 2)[0] != strings.SplitN(again, "\n", 2)[0] {
+		t.Fatalf("first %q, retry %q", first, again)
+	}
+}

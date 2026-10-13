@@ -1326,3 +1326,31 @@ func TestWritesQueueAndBusyIsRetryable(t *testing.T) {
 		t.Fatalf("write under another process's lock: %v", err)
 	}
 }
+
+// A retried post with the same idempotency key returns the first instead of
+// posting twice.
+func TestSayIsIdempotentWithAKey(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice")
+	f.start(t, "d", core.EndNone, "alice")
+	say := func(conv, body, key string) (core.SayResult, error) {
+		return f.svc.Say(ctx, f.p, "default", conv, core.SayParams{Agent: "alice", Body: body, IdempotencyKey: key})
+	}
+	first := must[core.SayResult](t)(say("c", "hello", "k1"))
+	again := must[core.SayResult](t)(say("c", "hello", "k1"))
+	if again.Message.Seq != first.Message.Seq || f.get(t, "c").LastSeq != first.Message.Seq {
+		t.Fatalf("retry posted again: first #%d, retry #%d, last #%d", first.Message.Seq, again.Message.Seq, f.get(t, "c").LastSeq)
+	}
+	_, err := say("c", "something else", "k1")
+	wantCode(t, err, core.CodeIdempotencyConflict)
+	// Keys are per conversation, and posts without one are never merged.
+	must[core.SayResult](t)(say("d", "hello", "k1"))
+	a := must[core.SayResult](t)(say("c", "same", ""))
+	b := must[core.SayResult](t)(say("c", "same", ""))
+	if a.Message.Seq == b.Message.Seq {
+		t.Fatal("posts without a key were merged")
+	}
+	_, err = say("c", "x", strings.Repeat("k", 200))
+	wantCode(t, err, core.CodeInvalid)
+}

@@ -82,7 +82,7 @@ lost the connection to the agora server during {{.Tool}} ({{.Err}}). The server 
 
 ## bridge_lost_write
 fields: Tool, Err
-lost the connection to the agora server during {{.Tool}} ({{.Err}}). It may or may not have been applied. Call read with after set to the last seq you saw to check before retrying.
+lost the connection to the agora server during {{.Tool}} ({{.Err}}). It may or may not have been applied. If you passed an idempotency_key, retry with the same key; otherwise call read with after set to the last seq you saw to check before retrying.
 
 ## bridge_lost_other
 fields: Tool, Err

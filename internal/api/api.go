@@ -148,7 +148,8 @@ func StatusFor(code core.Code) int {
 	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, core.CodeAccountNotFound, core.CodeTokenNotFound, "not_found":
 		return http.StatusNotFound
 	case core.CodeNamespaceExists, core.CodeConversationExists, core.CodeConversationConcluded,
-		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext, core.CodeAccountExists, core.CodeLastAdmin:
+		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext, core.CodeAccountExists, core.CodeLastAdmin,
+		core.CodeIdempotencyConflict:
 		return http.StatusConflict
 	case core.CodeMessageTooLarge:
 		return http.StatusRequestEntityTooLarge
@@ -450,12 +451,14 @@ func (h *handler) say(w http.ResponseWriter, r *http.Request, p core.Principal) 
 		Body            string `json:"body"`
 		ReplyTo         *int64 `json:"reply_to"`
 		ExpectedLastSeq *int64 `json:"expected_last_seq"`
+		IdempotencyKey  string `json:"idempotency_key"`
 	}
 	if err := h.decode(w, r, &req); err != nil {
 		return err
 	}
 	res, err := h.svc.Say(r.Context(), p, r.PathValue("ns"), r.PathValue("conv"), core.SayParams{
 		Agent: req.Agent, Body: req.Body, ReplyTo: req.ReplyTo, ExpectedLastSeq: req.ExpectedLastSeq,
+		IdempotencyKey: req.IdempotencyKey,
 	})
 	if err != nil {
 		return err

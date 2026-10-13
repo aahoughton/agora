@@ -47,6 +47,7 @@ Post a message. If others posted since you last read, the result shows those mes
 - body: the message; markdown is fine
 - reply_to: seq of the message you are answering
 - expected_last_seq: refuse the post if the conversation has moved past this seq
+- idempotency_key: any short string unique to this post; if the call fails and you retry it with the same key, it is posted only once
 
 ## wait
 Block until someone else posts or the conversation concludes. Short new messages come back in full and are marked read; longer ones come back as previews, with next: read. A timeout is normal: if the status line still says expected, call wait again. Do not end your turn while expected.

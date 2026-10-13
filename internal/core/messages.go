@@ -27,6 +27,10 @@ type SayParams struct {
 	// ExpectedLastSeq, if set, rejects the post with CodeStaleContext when
 	// another message has landed since.
 	ExpectedLastSeq *int64
+	// IdempotencyKey, if set, makes a retry safe: a post repeating a key
+	// already used in the conversation returns that message instead of
+	// posting again. At most 128 bytes.
+	IdempotencyKey string
 	// InlineBytes, if positive, returns the messages the agent had not read
 	// in full when their bodies total at most this many bytes, and marks
 	// them read. Otherwise they come back as previews and stay unread.
@@ -66,6 +70,9 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 	if err := s.checkBody(sp.Body, false); err != nil {
 		return SayResult{}, err
 	}
+	if len(sp.IdempotencyKey) > maxIdempotencyKey {
+		return SayResult{}, errorf(CodeInvalid, "idempotency_key is longer than %d bytes", maxIdempotencyKey)
+	}
 	var out SayResult
 	if err := s.settle(ctx, ns, name); err != nil {
 		return SayResult{}, err
@@ -77,6 +84,22 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 		}
 		if err := s.checkOwner(ctx, tx, c, p, sp.Agent); err != nil {
 			return err
+		}
+		// A retry of a post that went through returns it, before any check
+		// that the first post itself would now fail (expected_last_seq).
+		if sp.IdempotencyKey != "" {
+			prior, err := s.messageByKey(ctx, tx, c, sp.IdempotencyKey)
+			if err != nil {
+				return err
+			}
+			if prior != nil {
+				if prior.Author != sp.Agent || prior.Kind != KindSay || prior.Body != sp.Body || !sameReply(prior.ReplyTo, sp.ReplyTo) {
+					return errorf(CodeIdempotencyConflict, "idempotency_key %q was used for a different message (#%d)", sp.IdempotencyKey, prior.Seq)
+				}
+				out.Message = *prior
+				out.Standing, err = s.standing(ctx, tx, c, sp.Agent)
+				return err
+			}
 		}
 		if err := openOrError(c); err != nil {
 			return err
@@ -105,6 +128,12 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 		m, err := s.appendMsg(ctx, tx, c, KindSay, sp.Agent, sp.Body, sp.ReplyTo)
 		if err != nil {
 			return err
+		}
+		if sp.IdempotencyKey != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE messages SET idempotency_key = ? WHERE conversation_id = ? AND seq = ?`,
+				sp.IdempotencyKey, c.id, m.Seq); err != nil {
+				return err
+			}
 		}
 		if err := s.setState(ctx, tx, c, sp.Agent, StateActive, PresenceWorking); err != nil {
 			return err
@@ -157,6 +186,25 @@ func (s *Service) missed(ctx context.Context, tx *wtx, c *conv, after int64, age
 	}
 	m.Previews, err = s.previews(ctx, tx, c, after, agent)
 	return m, err
+}
+
+// maxIdempotencyKey bounds a post's idempotency key.
+const maxIdempotencyKey = 128
+
+// messageByKey returns the message posted with key in c, or nil.
+func (s *Service) messageByKey(ctx context.Context, q querier, c *conv, key string) (*Message, error) {
+	var m Message
+	var created int64
+	err := q.QueryRowContext(ctx, `SELECT seq, kind, author, body, reply_to, created_at FROM messages
+		WHERE conversation_id = ? AND idempotency_key = ?`, c.id, key).Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created)
+	if isNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.CreatedAt = fromMS(created)
+	return &m, nil
 }
 
 // ObserveParams describe a comment from someone watching, not participating.
@@ -374,6 +422,11 @@ func (s *Service) page(ctx context.Context, q querier, c *conv, after int64, lim
 		covered = msgs[limit-1].Seq
 	}
 	return out, covered, nil
+}
+
+// sameReply reports whether two optional reply targets are the same.
+func sameReply(a, b *int64) bool {
+	return (a == nil) == (b == nil) && (a == nil || *a == *b)
 }
 
 // capBytes ends a page before the message that takes its bodies past
