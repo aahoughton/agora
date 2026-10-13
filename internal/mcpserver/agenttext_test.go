@@ -36,8 +36,11 @@ func TestAgentText(t *testing.T) {
 			t.Fatal(err)
 		}
 		ro := ""
-		if tool.Annotations != nil && tool.Annotations.ReadOnlyHint {
+		switch a := tool.Annotations; {
+		case a != nil && a.ReadOnlyHint:
 			ro = " (read-only)"
+		case a != nil && a.DestructiveHint != nil && *a.DestructiveHint:
+			ro = " (destructive)"
 		}
 		fmt.Fprintf(&b, "\n## %s%s\n%s\n", tool.Name, ro, tool.Description)
 		raw, err := json.Marshal(tool.InputSchema)

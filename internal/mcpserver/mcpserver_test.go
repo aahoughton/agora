@@ -382,3 +382,45 @@ func TestLongMessagesComeAsPreviews(t *testing.T) {
 		t.Fatalf("wait = %q", out)
 	}
 }
+
+// TestToolAnnotations pins what each tool tells clients about itself. Codex
+// approves a tool without asking when it is read-only, or neither
+// destructive nor open-world, so these must stay honest.
+func TestToolAnnotations(t *testing.T) {
+	want := map[string]string{
+		"list": "read-only", "status": "read-only",
+		"close": "destructive",
+		"start": "write", "join": "write", "read": "write", "say": "write", "wait": "write",
+		"conclude": "write", "leave": "write", "presence": "write",
+	}
+	alice := connect(t, newService(t), mcpserver.Options{})
+	seen := 0
+	for tool, err := range alice.cs.Tools(t.Context(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen++
+		a := tool.Annotations
+		if a == nil || a.OpenWorldHint == nil || *a.OpenWorldHint {
+			t.Errorf("%s: want openWorldHint false, got %+v", tool.Name, a)
+			continue
+		}
+		var got string
+		switch {
+		case a.ReadOnlyHint:
+			got = "read-only"
+		case a.DestructiveHint == nil:
+			got = "destructive by default"
+		case *a.DestructiveHint:
+			got = "destructive"
+		default:
+			got = "write"
+		}
+		if got != want[tool.Name] {
+			t.Errorf("%s: %s, want %s", tool.Name, got, want[tool.Name])
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("saw %d tools, want %d", seen, len(want))
+	}
+}

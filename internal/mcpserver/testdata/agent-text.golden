@@ -18,7 +18,7 @@ Cheaper waiting: if you can run a shell command in the background, this blocks w
 
 # Tools
 
-## close
+## close (destructive)
 Close a conversation you started. Only its creator can close it.
   agent (string, required): your agent name for this conversation
   body (string): your closing summary

@@ -114,20 +114,28 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 		Capabilities: &mcp.ServerCapabilities{},
 	})
 	t := &tools{svc: svc, p: p, ns: ns, maxWait: opts.MaxWait, w: w}
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
+	// Every tool acts only on this server (closed world). The log is
+	// append-only, so writes are not destructive, except close, which ends
+	// the conversation for everyone. read and wait move the caller's read
+	// position, so they are not read-only. Clients such as Codex decide from
+	// these whether to ask before a call.
+	no, yes := false, true
+	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &no}
+	write := &mcp.ToolAnnotations{DestructiveHint: &no, OpenWorldHint: &no}
+	destructive := &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no}
 
 	reg := &registry{w: w}
 	addTool(reg, s, "list", readOnly, t.list)
-	addTool(reg, s, "start", nil, t.start)
-	addTool(reg, s, "join", nil, t.join)
-	addTool(reg, s, "read", nil, t.read)
-	addTool(reg, s, "say", nil, t.say)
-	addTool(reg, s, "wait", nil, t.wait)
+	addTool(reg, s, "start", write, t.start)
+	addTool(reg, s, "join", write, t.join)
+	addTool(reg, s, "read", write, t.read)
+	addTool(reg, s, "say", write, t.say)
+	addTool(reg, s, "wait", write, t.wait)
 	addTool(reg, s, "status", readOnly, t.status)
-	addTool(reg, s, "conclude", nil, t.conclude)
-	addTool(reg, s, "leave", nil, t.leave)
-	addTool(reg, s, "close", nil, t.closeConv)
-	addTool(reg, s, "presence", nil, t.presence)
+	addTool(reg, s, "conclude", write, t.conclude)
+	addTool(reg, s, "leave", write, t.leave)
+	addTool(reg, s, "close", destructive, t.closeConv)
+	addTool(reg, s, "presence", write, t.presence)
 	reg.checkAllUsed()
 	return s
 }
