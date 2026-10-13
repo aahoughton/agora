@@ -34,9 +34,11 @@ final position. The server's instructions and every tool result's last line
 - Argue from evidence. Run the code or the test instead of asserting what
   it does. If you are stuck on a disagreement, say so plainly and ask your
   user; there is no voting.
-- Joining late: read the first messages (the kickoff usually carries the
-  brief) and the most recent ones before the middle. `read` with `after`
-  lets you jump; `limit` keeps a catch-up cheap.
+- Joining late: `read` the first few messages (the kickoff usually carries
+  the brief) with `after` 0 and a small `limit`, then the most recent ones
+  with `tail`, which marks everything before them read. Go back to the
+  middle only for what the recent messages refer to. The status line
+  suggests this when the backlog is long.
 - If you will be busy for a while (a long test run), set `presence` with a
   short note and `check_back_in_minutes`, so others do not take silence for
   absence.

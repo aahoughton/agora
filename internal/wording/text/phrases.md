@@ -30,6 +30,9 @@ you left; rejoin to take part
 ## advice_read
 read the new messages, then reply or wait
 
+## advice_read_backlog
+a long backlog: read the first messages (after=0, limit=3) for the brief, then the latest with tail=20; reading with tail marks the rest read
+
 ## advice_wait_concluded
 you concluded; wait in case someone replies or withdraws
 

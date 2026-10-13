@@ -351,7 +351,17 @@ func (h *handler) read(w http.ResponseWriter, r *http.Request, p core.Principal)
 	if err != nil {
 		return err
 	}
+	tail, err := queryInt(r, "tail")
+	if err != nil {
+		return err
+	}
 	rp := core.ReadParams{Agent: r.URL.Query().Get("agent"), After: after}
+	if tail != nil {
+		if *tail < 1 {
+			return invalid("tail must be between 1 and %d", core.MaxReadLimit)
+		}
+		rp.Tail = int(*tail)
+	}
 	if limit != nil {
 		rp.Limit = int(*limit)
 		if rp.Limit == 0 {

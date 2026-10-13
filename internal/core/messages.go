@@ -141,6 +141,14 @@ type ReadParams struct {
 	Agent string
 	After *int64
 	Limit int
+	// Tail, if set, reads only the last Tail messages and, for an agent,
+	// marks everything before them read too: a late joiner skips the middle
+	// on purpose. It cannot be combined with After.
+	Tail int
+	// MaxBytes, if set, ends the page early once message bodies total more
+	// than this; the page always holds at least one message, and an
+	// agent's read position moves only past what was returned.
+	MaxBytes int
 }
 
 // ReadResult is a page of the log.
@@ -171,6 +179,14 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 	if rp.After != nil && *rp.After < 0 {
 		return ReadResult{}, errorf(CodeInvalid, "after must not be negative")
 	}
+	switch {
+	case rp.Tail < 0 || rp.Tail > MaxReadLimit:
+		return ReadResult{}, errorf(CodeInvalid, "tail must be between 1 and %d", MaxReadLimit)
+	case rp.Tail > 0 && rp.After != nil:
+		return ReadResult{}, errorf(CodeInvalid, "use tail or after, not both")
+	case rp.Tail > 0:
+		rp.Limit = rp.Tail
+	}
 
 	if rp.Agent == "" {
 		c, err := s.loadConvRead(ctx, ns, name)
@@ -181,7 +197,15 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		if rp.After != nil {
 			after = *rp.After
 		}
+		if rp.Tail > 0 {
+			tailAfter, err := s.tailStart(ctx, s.db, c, rp.Tail, "")
+			if err != nil {
+				return ReadResult{}, err
+			}
+			after = max(after, tailAfter)
+		}
 		out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
+		out, _ = capBytes(out, 0, rp.MaxBytes)
 		return out, err
 	}
 
@@ -205,11 +229,19 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 			}
 			after, skip = *rp.After, ""
 		}
+		if rp.Tail > 0 {
+			tailAfter, err := s.tailStart(ctx, tx, c, rp.Tail, skip)
+			if err != nil {
+				return err
+			}
+			after = max(after, tailAfter)
+		}
 		var covered int64
 		out, covered, err = s.page(ctx, tx, c, after, rp.Limit, skip)
 		if err != nil {
 			return err
 		}
+		out, covered = capBytes(out, covered, rp.MaxBytes)
 		if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?)
 			WHERE conversation_id = ? AND agent = ?`, covered, c.id, rp.Agent); err != nil {
 			return err
@@ -222,6 +254,19 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		return err
 	})
 	return out, err
+}
+
+// tailStart returns the seq to read after so that a page holds the last n
+// messages not by skipAuthor.
+func (s *Service) tailStart(ctx context.Context, q querier, c *conv, n int, skipAuthor string) (int64, error) {
+	var first sql.NullInt64
+	err := q.QueryRowContext(ctx, `SELECT min(seq) FROM (SELECT seq FROM messages
+		WHERE conversation_id = ? AND seq <= ? AND author != ? ORDER BY seq DESC LIMIT ?)`,
+		c.id, c.LastSeq, skipAuthor, n).Scan(&first)
+	if err != nil || !first.Valid {
+		return 0, err
+	}
+	return first.Int64 - 1, nil
 }
 
 // page returns up to limit messages in (after, c.LastSeq], skipping those
@@ -239,6 +284,24 @@ func (s *Service) page(ctx context.Context, q querier, c *conv, after int64, lim
 		covered = msgs[limit-1].Seq
 	}
 	return out, covered, nil
+}
+
+// capBytes ends a page before the message that takes its bodies past
+// maxBytes, keeping at least one; covered moves back to the last message
+// kept. maxBytes 0 keeps the page as it is.
+func capBytes(out ReadResult, covered int64, maxBytes int) (ReadResult, int64) {
+	if maxBytes <= 0 {
+		return out, covered
+	}
+	total := 0
+	for i, m := range out.Messages {
+		total += len(m.Body)
+		if total > maxBytes && i > 0 {
+			out.Messages, out.More = out.Messages[:i], true
+			return out, out.Messages[i-1].Seq
+		}
+	}
+	return out, covered
 }
 
 // messages returns up to limit messages with after < seq <= upto, skipping

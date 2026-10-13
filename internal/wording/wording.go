@@ -36,6 +36,7 @@ const (
 	AdviceJoin                = "advice_join"
 	AdviceRejoin              = "advice_rejoin"
 	AdviceRead                = "advice_read"
+	AdviceReadBacklog         = "advice_read_backlog"
 	AdviceWaitConcluded       = "advice_wait_concluded"
 	AdviceWaitExpected        = "advice_wait_expected"
 	AdviceWaitFree            = "advice_wait_free"
@@ -61,7 +62,7 @@ const (
 // PhraseKeys lists every phrase key.
 var PhraseKeys = []string{
 	StandingLine, AdviceReadAfterConclusion, AdviceDone, AdviceClose, AdviceCoordinatorAway, AdviceJoin,
-	AdviceRejoin, AdviceRead, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
+	AdviceRejoin, AdviceRead, AdviceReadBacklog, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
 	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, StatusNone, ListNone, ListMore,
 	WaitTimeoutRange, BridgeUnreachable, BridgeLostRead, BridgeLostWrite, BridgeLostOther,
 	StopHook,

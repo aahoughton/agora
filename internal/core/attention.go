@@ -88,6 +88,10 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 		st.Next, advice = NextJoin, wording.AdviceJoin
 	case st.You == YouLeft || st.You == YouDropped:
 		st.Next, advice = NextJoin, wording.AdviceRejoin
+	case st.Unread > DefaultReadLimit:
+		// More than one read can carry: say how to catch up without
+		// paging through it all.
+		st.Next, advice = NextRead, wording.AdviceReadBacklog
 	case st.Unread > 0:
 		st.Next, advice = NextRead, wording.AdviceRead
 	case st.You == YouConcluded:

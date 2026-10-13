@@ -26,6 +26,11 @@ const InlineBytes = 4000
 // MCP clients use by default.
 const DefaultMaxWait = 50 * time.Second
 
+// MaxReadBytes ends a read page early once its message bodies pass it, so
+// a page stays well under the 16 MiB a stdio bridge accepts per message;
+// the result says more follow.
+const MaxReadBytes = 4 << 20
+
 // Options configure the MCP endpoint. Zero values select the defaults.
 type Options struct {
 	Logger *slog.Logger
@@ -285,10 +290,13 @@ type readIn struct {
 	Agent        string `json:"agent"`
 	After        *int64 `json:"after,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
+	Tail         int    `json:"tail,omitempty"`
 }
 
 func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*mcp.CallToolResult, any, error) {
-	r, err := t.svc.Read(ctx, t.p, t.ns, in.Conversation, core.ReadParams{Agent: in.Agent, After: in.After, Limit: in.Limit})
+	r, err := t.svc.Read(ctx, t.p, t.ns, in.Conversation, core.ReadParams{
+		Agent: in.Agent, After: in.After, Limit: in.Limit, Tail: in.Tail, MaxBytes: MaxReadBytes,
+	})
 	if err != nil {
 		return failure(err)
 	}

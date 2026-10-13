@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -518,4 +519,19 @@ func TestListPagesAndFilters(t *testing.T) {
 	c.wantError("GET", "/v1/namespaces/default/conversations?status=done", nil, 400, "invalid")
 	c.wantError("GET", "/v1/namespaces/default/conversations?limit=0", nil, 400, "invalid")
 	c.wantError("GET", "/v1/namespaces/default/conversations?before=x", nil, 400, "invalid")
+}
+
+func TestReadTail(t *testing.T) {
+	c := newServer(t, auth.None{}, core.Options{})
+	c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "design", "agent": "alice"}, 201, nil)
+	for i := range 5 {
+		c.ok("POST", conv+"/messages", map[string]any{"agent": "alice", "body": fmt.Sprintf("m%d", i)}, 201, nil)
+	}
+	var res core.ReadResult
+	c.ok("GET", conv+"/messages?tail=2", nil, 200, &res)
+	if len(res.Messages) != 2 || res.Messages[1].Body != "m4" {
+		t.Fatalf("tail = %+v", res.Messages)
+	}
+	c.wantError("GET", conv+"/messages?tail=0", nil, 400, "invalid")
+	c.wantError("GET", conv+"/messages?tail=2&after=1", nil, 400, "invalid")
 }

@@ -1145,6 +1145,48 @@ func TestFollowWakesAtTimeboxDeadline(t *testing.T) {
 	}
 }
 
+func TestJoiningLate(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "long", core.EndAgreement, "alice")
+	for i := range 120 {
+		f.say(t, "long", "alice", fmt.Sprintf("message %d", i))
+	}
+	st := must[core.Standing](t)(f.svc.Join(ctx, f.p, "default", "long", core.JoinParams{Agent: "late"}))
+	if st.Next != core.NextRead || !strings.Contains(st.Line, "tail") {
+		t.Fatalf("late joiner's standing = %q", st.Line)
+	}
+
+	// The brief, then the latest, and the middle is skipped on purpose.
+	kick := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "long", core.ReadParams{Agent: "late", After: ptr[int64](0), Limit: 3}))
+	if len(kick.Messages) != 3 || kick.Messages[0].Seq != 1 {
+		t.Fatalf("kickoff = %+v", kick.Messages)
+	}
+	tail := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "long", core.ReadParams{Agent: "late", Tail: 5}))
+	if len(tail.Messages) != 5 || tail.Messages[4].Body != "message 119" || tail.More {
+		t.Fatalf("tail = %+v", tail.Messages)
+	}
+	if tail.Standing.Unread != 0 || tail.Standing.Next == core.NextRead {
+		t.Fatalf("after the tail, standing = %q", tail.Standing.Line)
+	}
+
+	// A short backlog gets the ordinary advice.
+	f.say(t, "long", "alice", "one more")
+	st = must[core.Standing](t)(f.svc.StandingOf(ctx, f.p, "default", "long", "late"))
+	if strings.Contains(st.Line, "tail") {
+		t.Fatalf("short backlog standing = %q", st.Line)
+	}
+
+	for _, bad := range []core.ReadParams{
+		{Agent: "late", Tail: 5, After: ptr[int64](3)},
+		{Agent: "late", Tail: -1},
+		{Agent: "late", Tail: core.MaxReadLimit + 1},
+	} {
+		_, err := f.svc.Read(ctx, f.p, "default", "long", bad)
+		wantCode(t, err, core.CodeInvalid)
+	}
+}
+
 // A cursor past the end of the log is refused instead of moving the read
 // position beyond messages that have not been written yet.
 func TestReadCursorCannotPassTheLog(t *testing.T) {

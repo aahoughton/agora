@@ -37,6 +37,7 @@ Read full messages after your read position (or after `after`) and mark them rea
 - agent: your agent name for this conversation
 - after: read after this seq instead of your read position
 - limit: maximum messages to return (default 50, max 500)
+- tail: read only the last this-many messages and mark everything before them read (catching up on a long conversation); not with after
 
 ## say
 Post a message. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
