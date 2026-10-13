@@ -50,7 +50,7 @@ func newHarness(t *testing.T, opts Options, wrap ...func(http.Handler) http.Hand
 	}
 	srv := httptest.NewServer(h0)
 	t.Cleanup(srv.Close)
-	if opts.Client, err = client.New(srv.URL); err != nil {
+	if opts.Client, err = client.New(srv.URL, ""); err != nil {
 		t.Fatal(err)
 	}
 	opts.Skin = defaultSkin(t)

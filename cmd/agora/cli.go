@@ -100,7 +100,7 @@ the server is unreachable.
 	if err != nil {
 		return flagError(stderr, err)
 	}
-	cl, err := client.New(cc.URL)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		return flagError(stderr, err)
 	}
@@ -196,7 +196,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	if err != nil {
 		return flagError(stderr, err)
 	}
-	cl, err := client.New(cc.URL)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		return flagError(stderr, err)
 	}
@@ -225,7 +225,7 @@ func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	if err != nil {
 		return flagError(stderr, err)
 	}
-	cl, err := client.New(cc.URL)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		return flagError(stderr, err)
 	}
@@ -263,13 +263,13 @@ stderr; stdout carries protocol frames only.
 	if err != nil {
 		return flagError(stderr, err)
 	}
-	cl, err := client.New(cc.URL)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		return flagError(stderr, err)
 	}
 	endpoint := cl.URL() + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
-	if err := mcpserver.Bridge(ctx, endpoint, &mcp.StdioTransport{}, version, logger); err != nil && ctx.Err() == nil {
+	if err := mcpserver.Bridge(ctx, endpoint, cc.Token, &mcp.StdioTransport{}, version, logger); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(stderr, "agora mcp:", err)
 		return exitError
 	}
@@ -290,7 +290,7 @@ argument it opens the conversations of --namespace.
 		fs.PrintDefaults()
 	}
 	resolveClient := config.ClientFlags(fs)
-	as := fs.String("as", "", "name to post observer comments under (env "+config.EnvObserver+"; asked on first comment if unset)")
+	as := fs.String("as", "", "name to post observer comments under (env "+config.EnvObserver+"; asked on first comment if unset; with a token, the token's account name)")
 	themeDir := fs.String("theme-dir", "", "directory of theme files overriding the default theme's tui/ files (env "+config.EnvThemeDir+")")
 	var target string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -323,8 +323,22 @@ argument it opens the conversations of --namespace.
 		}
 		opts.Namespace, opts.Conversation = ns, conv
 	}
-	if opts.Client, err = client.New(cc.URL); err != nil {
+	if opts.Client, err = client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
+	}
+	if cc.Token != "" {
+		// With a token the server posts comments under its account, so
+		// show that name, and fail now if the token does not work.
+		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		w, err := opts.Client.Whoami(wctx)
+		cancel()
+		if err != nil {
+			fmt.Fprintln(stderr, "agora tui:", err)
+			return exitError
+		}
+		if w.Account != nil {
+			opts.Observer = w.Account.Name
+		}
 	}
 	if *themeDir == "" {
 		*themeDir = getenv(config.EnvThemeDir)
@@ -380,7 +394,7 @@ that keeps a session from ending while it is expected in a conversation.
 	if err != nil {
 		return flagError(stderr, err)
 	}
-	if _, err := client.New(cc.URL); err != nil {
+	if _, err := client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
 	}
 	mcpURL := strings.TrimRight(cc.URL, "/") + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
@@ -519,4 +533,61 @@ func installSkills(src fs.FS, dir string, force bool, out io.Writer) error {
 		fmt.Fprintln(out, "skills in", dir, "are up to date")
 	}
 	return nil
+}
+
+func runWhoami(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("whoami", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora whoami [flags]
+
+Prints the server, its version and auth mode, and who the token (if any)
+belongs to, with its role in each namespace.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	cl, err := client.New(cc.URL, cc.Token)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	w, err := cl.Whoami(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora whoami:", err)
+		return exitError
+	}
+	fmt.Fprintf(stdout, "server:  %s (version %s, auth %s)\n", cl.URL(), w.Version, w.AuthMode)
+	switch {
+	case w.Account == nil:
+		fmt.Fprintln(stdout, "account: none (auth is off; everyone has full access)")
+		return exitOK
+	case w.Account.ServerAdmin:
+		fmt.Fprintf(stdout, "account: %s (server admin)\n", w.Account.Name)
+	default:
+		fmt.Fprintf(stdout, "account: %s\n", w.Account.Name)
+	}
+	if len(w.Memberships) == 0 {
+		fmt.Fprintln(stdout, "roles:   none")
+	}
+	for i, m := range w.Memberships {
+		label := "         "
+		if i == 0 {
+			label = "roles:   "
+		}
+		fmt.Fprintf(stdout, "%s%s in %s\n", label, m.Role, m.Namespace)
+	}
+	return exitOK
 }

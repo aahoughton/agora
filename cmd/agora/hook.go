@@ -104,7 +104,7 @@ never traps a session.
 		fmt.Fprintln(stderr, "agora hook stop:", err)
 		return exitOK
 	}
-	cl, err := client.New(cc.URL)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		fmt.Fprintln(stderr, "agora hook stop:", err)
 		return exitOK

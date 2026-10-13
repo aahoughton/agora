@@ -20,20 +20,28 @@ import (
 
 // Client talks to one agora server.
 type Client struct {
-	base *url.URL
-	http *http.Client
+	base  *url.URL
+	http  *http.Client
+	token string
 }
 
 // New returns a client for the server at baseURL (for example
-// http://127.0.0.1:8787).
-func New(baseURL string) (*Client, error) {
+// http://127.0.0.1:8787). token, if set, is sent as a bearer token.
+func New(baseURL, token string) (*Client, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("client: invalid server URL %q: want http(s)://host[:port]", baseURL)
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
 	// No client timeout: waits are long by design and bounded by ctx.
-	return &Client{base: u, http: &http.Client{}}, nil
+	// Redirects must stay on the server, which the token is for.
+	hc := &http.Client{CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+		if !strings.EqualFold(req.URL.Scheme, u.Scheme) || !strings.EqualFold(req.URL.Host, u.Host) {
+			return fmt.Errorf("client: refusing a redirect from %s to %s://%s", u.Host, req.URL.Scheme, req.URL.Host)
+		}
+		return nil
+	}}
+	return &Client{base: u, http: hc, token: token}, nil
 }
 
 // URL returns the server base URL.
@@ -87,6 +95,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -152,6 +163,21 @@ func (c *Client) Status(ctx context.Context, ns, agent string) ([]core.Standing,
 	}
 	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/status", url.Values{"agent": {agent}}, nil, &out)
 	return out.Standings, err
+}
+
+// Whoami describes the caller and the server.
+type Whoami struct {
+	AuthMode    string            `json:"auth_mode"`
+	Version     string            `json:"version"`
+	Account     *core.Account     `json:"account"`
+	Memberships []core.Membership `json:"memberships"`
+}
+
+// Whoami returns GET /v1/whoami.
+func (c *Client) Whoami(ctx context.Context) (Whoami, error) {
+	var out Whoami
+	err := c.do(ctx, http.MethodGet, "/v1/whoami", nil, nil, &out)
+	return out, err
 }
 
 // ListNamespaces returns the namespaces the caller can read.

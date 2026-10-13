@@ -10,7 +10,7 @@ import (
 
 func TestNewRejectsBadURLs(t *testing.T) {
 	for _, u := range []string{"", "127.0.0.1:8787", "ftp://h", "http://"} {
-		if _, err := New(u); err == nil {
+		if _, err := New(u, ""); err == nil {
 			t.Errorf("New(%q) succeeded", u)
 		}
 	}
@@ -28,7 +28,7 @@ func TestErrorDecoding(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	c, err := New(srv.URL + "/")
+	c, err := New(srv.URL+"/", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,5 +47,25 @@ func TestErrorDecoding(t *testing.T) {
 
 	if IsTemporary(context.Canceled) {
 		t.Fatal("cancellation is not temporary")
+	}
+}
+
+func TestRedirectsStayOnTheServer(t *testing.T) {
+	leaked := false
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = leaked || r.Header.Get("Authorization") != ""
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(other.Close)
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirect.Close)
+	c, err := New(redirect.URL, "agora_secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ListNamespaces(t.Context()); err == nil || leaked {
+		t.Fatalf("err = %v, token sent elsewhere: %v", err, leaked)
 	}
 }

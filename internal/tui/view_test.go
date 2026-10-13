@@ -55,7 +55,7 @@ func sampleMessages() []core.Message {
 func newTestModel(t *testing.T, opts Options, width, height int) *Model {
 	t.Helper()
 	if opts.Client == nil {
-		c, err := client.New("http://127.0.0.1:1")
+		c, err := client.New("http://127.0.0.1:1", "")
 		if err != nil {
 			t.Fatal(err)
 		}

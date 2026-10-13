@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,8 +21,10 @@ import (
 // If a call fails because the connection to the server is lost, the bridge
 // reconnects for later calls but does not replay the failed one: a lost
 // `say` may already have been applied. The agent is told to retry instead.
-func Bridge(ctx context.Context, endpoint string, local mcp.Transport, version string, logger *slog.Logger) error {
-	r := &remote{endpoint: endpoint, version: version, logger: logger}
+//
+// token, if set, is sent to the server as a bearer token.
+func Bridge(ctx context.Context, endpoint, token string, local mcp.Transport, version string, logger *slog.Logger) error {
+	r := &remote{endpoint: endpoint, token: token, version: version, logger: logger}
 	sess, err := r.session(ctx)
 	if err != nil {
 		return err
@@ -42,6 +47,7 @@ func Bridge(ctx context.Context, endpoint string, local mcp.Transport, version s
 
 type remote struct {
 	endpoint string
+	token    string
 	version  string
 	logger   *slog.Logger
 
@@ -56,13 +62,50 @@ func (r *remote) session(ctx context.Context) (*mcp.ClientSession, error) {
 		return r.sess, nil
 	}
 	c := mcp.NewClient(&mcp.Implementation{Name: "agora-bridge", Version: r.version}, nil)
-	sess, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: r.endpoint}, nil)
+	t := &mcp.StreamableClientTransport{Endpoint: r.endpoint}
+	if r.token != "" {
+		u, err := url.Parse(r.endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("connect to %s: %w", r.endpoint, err)
+		}
+		t.HTTPClient = &http.Client{
+			Transport: bearer{token: r.token, origin: origin(u), next: http.DefaultTransport},
+			// The token is for this server only: refuse to follow a
+			// redirect anywhere else.
+			CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+				if origin(req.URL) != origin(u) {
+					return fmt.Errorf("refusing a redirect from %s to %s", origin(u), origin(req.URL))
+				}
+				return nil
+			},
+		}
+	}
+	sess, err := c.Connect(ctx, t, nil)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", r.endpoint, err)
 	}
 	r.sess = sess
 	return sess, nil
 }
+
+// bearer adds a bearer token to requests for its server's origin.
+type bearer struct {
+	token  string
+	origin string
+	next   http.RoundTripper
+}
+
+func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
+	if origin(r.URL) != b.origin {
+		return b.next.RoundTrip(r)
+	}
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+b.token)
+	return b.next.RoundTrip(r)
+}
+
+// origin is a URL's scheme and host, which a token is bound to.
+func origin(u *url.URL) string { return strings.ToLower(u.Scheme + "://" + u.Host) }
 
 // drop discards sess if it is still current, so the next call reconnects.
 func (r *remote) drop(sess *mcp.ClientSession) {

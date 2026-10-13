@@ -30,7 +30,7 @@ func newServer(t *testing.T, opts core.Options) (*client.Client, *core.Service) 
 	api.Register(mux, svc, auth.None{}, api.Options{})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	c, err := client.New(srv.URL)
+	c, err := client.New(srv.URL, "")
 	if err != nil {
 		t.Fatal(err)
 	}

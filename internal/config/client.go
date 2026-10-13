@@ -12,6 +12,7 @@ const (
 	EnvNamespace = "AGORA_NAMESPACE"
 	EnvAgent     = "AGORA_AGENT"
 	EnvObserver  = "AGORA_OBSERVER"
+	EnvToken     = "AGORA_TOKEN"
 )
 
 // DefaultURL is where client commands look for the server.
@@ -21,19 +22,23 @@ const DefaultURL = "http://127.0.0.1:8787"
 type Client struct {
 	URL       string
 	Namespace string
+	// Token is the bearer token for a server in auth mode token.
+	Token string
 }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// ClientFlags registers --url and --namespace on fs. Call the returned
-// function after fs.Parse to resolve flag > env > default.
+// ClientFlags registers --url, --namespace and --token on fs. Call the
+// returned function after fs.Parse to resolve flag > env > default.
 func ClientFlags(fs *flag.FlagSet) func(Getenv) (Client, error) {
 	u := fs.String("url", "", "server URL (env "+EnvURL+", default "+DefaultURL+")")
 	ns := fs.String("namespace", "", "namespace (env "+EnvNamespace+", default default)")
+	tok := fs.String("token", "", "bearer token for a server with --auth token (env "+EnvToken+"; prefer the env var, since flags show in process listings)")
 	return func(getenv Getenv) (Client, error) {
 		c := Client{
 			URL:       firstNonEmpty(*u, getenv(EnvURL), DefaultURL),
 			Namespace: firstNonEmpty(*ns, getenv(EnvNamespace), "default"),
+			Token:     firstNonEmpty(*tok, getenv(EnvToken)),
 		}
 		if !nameRE.MatchString(c.Namespace) {
 			return Client{}, fmt.Errorf("invalid namespace %q", c.Namespace)

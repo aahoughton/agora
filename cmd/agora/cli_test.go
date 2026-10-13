@@ -438,3 +438,61 @@ func TestSkillsInstall(t *testing.T) {
 		t.Fatalf("no client = %+v", r)
 	}
 }
+
+// tokenServer serves agora in auth mode token and returns its URL and the
+// bootstrapped server admin's token.
+func tokenServer(t *testing.T) (string, string, *core.Service) {
+	t.Helper()
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	tok, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(server.New(server.Deps{
+		Service: svc, Authenticator: auth.Bearer{Service: svc}, Logger: slog.New(slog.DiscardHandler),
+		AuthMode: "token", Version: "test",
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL, tok.Secret, svc
+}
+
+func TestClientsSendTheToken(t *testing.T) {
+	url, token, _ := tokenServer(t)
+	with := map[string]string{"AGORA_TOKEN": token}
+
+	r := runCLIInput(t.Context(), url, "", with, "whoami")
+	if r.code != exitOK || !strings.Contains(r.stdout, "auth token") || !strings.Contains(r.stdout, "account: root (server admin)") {
+		t.Fatalf("whoami = %+v", r)
+	}
+	if r := runCLIInput(t.Context(), url, "", nil, "whoami"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
+		t.Fatalf("whoami without a token = %+v", r)
+	}
+	if r := runCLIInput(t.Context(), url, "", with, "status", "--agent", "a"); r.code != exitOK {
+		t.Fatalf("status = %+v", r)
+	}
+	// --token beats the environment.
+	if r := runCLIInput(t.Context(), url, "", with, "whoami", "--token", "agora_wrong"); r.code != exitError {
+		t.Fatalf("whoami with a bad --token = %+v", r)
+	}
+}
+
+func TestWhoamiWithAuthOff(t *testing.T) {
+	url, _ := setup(t)
+	r := runCLI(t.Context(), url, "whoami")
+	if r.code != exitOK || !strings.Contains(r.stdout, "account: none (auth is off") {
+		t.Fatalf("whoami = %+v", r)
+	}
+}
+
+func TestTUIChecksItsToken(t *testing.T) {
+	url, _, _ := tokenServer(t)
+	r := runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": "agora_wrong"}, "tui")
+	if r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
+		t.Fatalf("tui with a bad token = %+v", r)
+	}
+}

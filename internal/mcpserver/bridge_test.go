@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/aahoughton/agora/internal/auth"
+	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/agora/internal/store"
 	"github.com/aahoughton/agora/internal/wording"
 )
 
@@ -45,7 +49,7 @@ func TestBridge(t *testing.T) {
 	defer cancel()
 	errc := make(chan error, 1)
 	go func() {
-		errc <- mcpserver.Bridge(ctx, "http://"+addr+"/?namespace=default", local, "test", slog.New(slog.DiscardHandler))
+		errc <- mcpserver.Bridge(ctx, "http://"+addr+"/?namespace=default", "", local, "test", slog.New(slog.DiscardHandler))
 	}()
 
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(), peer, nil)
@@ -102,8 +106,65 @@ func TestBridge(t *testing.T) {
 
 func TestBridgeFailsFastWhenServerIsDown(t *testing.T) {
 	local, _ := mcp.NewInMemoryTransports()
-	err := mcpserver.Bridge(t.Context(), "http://127.0.0.1:1/", local, "test", slog.New(slog.DiscardHandler))
+	err := mcpserver.Bridge(t.Context(), "http://127.0.0.1:1/", "", local, "test", slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "connect to") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBridgeSendsTheToken(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	tok, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr, _ := serveAt(t, mcpserver.Handler(svc, auth.Bearer{Service: svc}, mcpserver.Options{}), "")
+	endpoint := "http://" + addr + "/?namespace=default"
+
+	// Without the token the bridge cannot even start.
+	local, _ := mcp.NewInMemoryTransports()
+	if err := mcpserver.Bridge(t.Context(), endpoint, "", local, "test", slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("bridge started without a token")
+	}
+
+	local, peer := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { _ = mcpserver.Bridge(ctx, endpoint, tok.Secret, local, "test", slog.New(slog.DiscardHandler)) }()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(), peer, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	(&session{t: t, cs: cs}).ok("start", map[string]any{"conversation": "c", "agent": "root-agent"})
+}
+
+func TestBridgeKeepsTheTokenOnItsServer(t *testing.T) {
+	leaked := make(chan string, 16)
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := r.Header.Get("Authorization"); h != "" {
+			leaked <- h
+		}
+		http.Error(w, "no", http.StatusNotFound)
+	}))
+	t.Cleanup(other.Close)
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/mcp", http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirect.Close)
+
+	local, _ := mcp.NewInMemoryTransports()
+	if err := mcpserver.Bridge(t.Context(), redirect.URL+"/mcp", "agora_secret", local, "test", slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("bridge followed a redirect to another server")
+	}
+	select {
+	case h := <-leaked:
+		t.Fatalf("the other server received %q", h)
+	default:
 	}
 }
