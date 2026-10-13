@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +148,7 @@ func TestLoadRefusesBadDumps(t *testing.T) {
 	}{
 		{"not a dump", "hello\n", "not an agora dump"},
 		{"future format", strings.Replace(header, `"version":1`, `"version":9`, 1) + "\n", "format version 9"},
-		{"future schema", strings.Replace(header, `"schema":2`, `"schema":99`, 1) + "\n", "schema version 99"},
+		{"future schema", regexp.MustCompile(`"schema":\d+`).ReplaceAllString(header, `"schema":99`) + "\n", "schema version 99"},
 		{"unknown column", header + "\n" + `{"table":"namespaces","row":{"id":7,"name":"x","created_at":1,"evil":1}}` + "\n", `no column "evil"`},
 		{"unknown table", header + "\n" + `{"table":"sqlite_master","row":{}}` + "\n", "does not belong"},
 		{"dangling reference", header + "\n" + `{"table":"messages","row":{"conversation_id":42,"seq":1,"kind":"say","author":"a","body":"b","created_at":1}}` + "\n", "FOREIGN KEY"},
