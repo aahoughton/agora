@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,4 +195,91 @@ func TestOpenExistingRefusesMissingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = db.Close()
+}
+
+func TestSnapshotBeforeMigrating(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agora.db")
+	ms, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sql.Open("sqlite", "file:"+path+"?"+dsnOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := apply(t.Context(), raw, ms[0]); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	if v, err := Inspect(t.Context(), path); err != nil || v != 1 {
+		t.Fatalf("inspect = %d, %v", v, err)
+	}
+
+	var logs strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	db, err := OpenWith(t.Context(), path, Options{Logger: logger, Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	info, err := os.Stat(path + ".pre-v1")
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("snapshot: %v %v", info, err)
+	}
+	if v, err := Inspect(t.Context(), path+".pre-v1"); err != nil || v != 1 {
+		t.Fatalf("snapshot schema = %d, %v", v, err)
+	}
+	for _, want := range []string{"database snapshot before migrating", `msg="migrated database" migration=0002_accounts.sql schema=2`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("logs lack %q:\n%s", want, logs.String())
+		}
+	}
+	// Nothing pending: no new snapshot. A new database needs none either.
+	db, err = OpenWith(t.Context(), path, Options{Logger: logger, Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if matches, _ := filepath.Glob(path + ".pre-v*"); len(matches) != 1 {
+		t.Fatalf("snapshots = %v", matches)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".agora-snapshot-*")); len(left) != 0 {
+		t.Fatalf("temporary snapshot files left: %v", left)
+	}
+	fresh := filepath.Join(t.TempDir(), "fresh.db")
+	db, err = OpenWith(t.Context(), fresh, Options{Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if matches, _ := filepath.Glob(fresh + ".pre-v*"); len(matches) != 0 {
+		t.Fatalf("a new database got snapshots: %v", matches)
+	}
+	if _, err := Inspect(t.Context(), filepath.Join(t.TempDir(), "missing.db")); err == nil {
+		t.Fatal("inspected a missing file")
+	}
+}
+
+// A second upgrade from the same version keeps the first snapshot.
+func TestSnapshotNeverReplacesAnother(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agora.db")
+	if err := os.WriteFile(path+".pre-v1", []byte("earlier"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenAt(t.Context(), path, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	db, err = OpenWith(t.Context(), path, Options{Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if b, _ := os.ReadFile(path + ".pre-v1"); string(b) != "earlier" {
+		t.Fatal("the earlier snapshot was replaced")
+	}
+	if matches, _ := filepath.Glob(path + ".pre-v1-*"); len(matches) != 1 {
+		t.Fatalf("snapshots = %v", matches)
+	}
 }

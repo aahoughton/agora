@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
@@ -31,9 +33,29 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	return OpenAt(ctx, path, 0)
 }
 
+// Options configure OpenWith.
+type Options struct {
+	// Logger, if set, gets a line for each migration applied and for the
+	// snapshot.
+	Logger *slog.Logger
+	// Snapshot copies an existing database to PATH.pre-vN (N its schema
+	// version) before applying pending migrations, so an upgrade can be
+	// undone by putting the copy back and running the older build.
+	Snapshot bool
+}
+
+// OpenWith is Open with options; agora serve and agora migrate use it.
+func OpenWith(ctx context.Context, path string, opts Options) (*sql.DB, error) {
+	return openAt(ctx, path, 0, opts)
+}
+
 // OpenAt is Open, migrating only up to schema version (0 for the latest).
 // Loading a dump uses it to create a database at the dump's schema.
 func OpenAt(ctx context.Context, path string, version int) (*sql.DB, error) {
+	return openAt(ctx, path, version, Options{})
+}
+
+func openAt(ctx context.Context, path string, version int, opts Options) (*sql.DB, error) {
 	if path == "" {
 		return nil, errors.New("store: empty database path")
 	}
@@ -51,11 +73,67 @@ func OpenAt(ctx context.Context, path string, version int) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
-	if err := migrate(ctx, db, version); err != nil {
+	if err := migrate(ctx, db, path, version, opts); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// Inspect returns the schema version of the existing database at path
+// without changing it.
+func Inspect(ctx context.Context, path string) (int, error) {
+	if strings.ContainsAny(path, "?#") {
+		return 0, fmt.Errorf("store: database path %q must not contain '?' or '#'", path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+	db, err := sql.Open("sqlite", fileURI(path, "mode=ro&_busy_timeout=5000"))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = db.Close() }()
+	return SchemaVersion(ctx, db)
+}
+
+// Pending reports the database's schema version and how many migrations
+// this build would apply to it.
+func Pending(ctx context.Context, db *sql.DB) (current, pending int, err error) {
+	current, err = SchemaVersion(ctx, db)
+	if err != nil {
+		return 0, 0, err
+	}
+	return current, max(LatestVersion()-current, 0), nil
+}
+
+// snapshot copies the database to path.pre-vN (or with a timestamp if that
+// exists), mode 0600. The copy is made in a private directory beside the
+// database and only then published, never over an existing file; nothing is
+// left behind if it fails.
+func snapshot(ctx context.Context, db *sql.DB, path string, version int) (string, error) {
+	dir, err := os.MkdirTemp(filepath.Dir(path), ".agora-snapshot-")
+	if err != nil {
+		return "", fmt.Errorf("store: snapshot before migrating: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	tmp := filepath.Join(dir, "agora.db")
+	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", tmp); err != nil {
+		return "", fmt.Errorf("store: snapshot before migrating: %w", err)
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		return "", err
+	}
+	dst := fmt.Sprintf("%s.pre-v%d", path, version)
+	if err := os.Link(tmp, dst); errors.Is(err, os.ErrExist) {
+		dst = fmt.Sprintf("%s.pre-v%d-%d", path, version, time.Now().UnixNano())
+		if err := os.Link(tmp, dst); err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 // LatestVersion is the schema version this build migrates to.
@@ -67,9 +145,11 @@ func LatestVersion() int {
 	return len(ms)
 }
 
-// OpenExisting opens the database at path like Open, but refuses a path
-// that does not name an existing regular file, so a mistyped path is an
-// error instead of a new, empty database.
+// OpenExisting opens the existing database at path without changing its
+// schema. It refuses a path that does not name an existing regular file, so
+// a mistyped path is an error instead of a new, empty database, and a
+// database whose schema is not this build's: only agora serve and agora
+// migrate migrate.
 func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -77,6 +157,13 @@ func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
 	}
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("store: %s is not a database file", path)
+	}
+	v, err := Inspect(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if latest := LatestVersion(); v != latest {
+		return nil, fmt.Errorf("store: %s is at schema %d and this build needs %d; run agora migrate --db %s (or use the matching build)", path, v, latest, path)
 	}
 	return Open(ctx, path)
 }
@@ -124,7 +211,7 @@ func SchemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 	return v, err
 }
 
-func migrate(ctx context.Context, db *sql.DB, target int) error {
+func migrate(ctx context.Context, db *sql.DB, path string, target int, opts Options) error {
 	ms, err := loadMigrations()
 	if err != nil {
 		return err
@@ -142,9 +229,21 @@ func migrate(ctx context.Context, db *sql.DB, target int) error {
 	if current > len(ms) {
 		return fmt.Errorf("store: database schema version %d is newer than this binary supports (%d)", current, len(ms))
 	}
+	if opts.Snapshot && current > 0 && current < len(ms) {
+		dst, err := snapshot(ctx, db, path, current)
+		if err != nil {
+			return err
+		}
+		if opts.Logger != nil {
+			opts.Logger.Info("database snapshot before migrating", "path", dst, "schema", current)
+		}
+	}
 	for _, m := range ms[current:] {
 		if err := apply(ctx, db, m); err != nil {
 			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		}
+		if opts.Logger != nil {
+			opts.Logger.Info("migrated database", "migration", m.name, "schema", m.version)
 		}
 	}
 	return nil

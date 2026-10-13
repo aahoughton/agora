@@ -656,3 +656,47 @@ func TestBackupDumpAndLoad(t *testing.T) {
 		t.Fatalf("a failed load left %s: %v", target, err)
 	}
 }
+
+func TestMigrate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agora.db")
+	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitError {
+		t.Fatalf("migrate on a missing file = %+v", r)
+	}
+	// An old database: schema 1.
+	db, err := store.OpenAt(t.Context(), path, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitPending || !strings.Contains(r.stdout, "pending") {
+		t.Fatalf("check = %+v", r)
+	}
+	if r := runCLI(t.Context(), "", "migrate", "--db", path); r.code != exitOK || !strings.Contains(r.stdout, "migrated from schema 1") {
+		t.Fatalf("migrate = %+v", r)
+	}
+	if _, err := os.Stat(path + ".pre-v1"); err != nil {
+		t.Fatalf("no snapshot: %v", err)
+	}
+	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitOK || !strings.Contains(r.stdout, "current") {
+		t.Fatalf("check after = %+v", r)
+	}
+}
+
+// Only serve and migrate change a database's schema; admin commands refuse
+// an out-of-date database instead of migrating it unseen.
+func TestAdminRefusesAnOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agora.db")
+	db, err := store.OpenAt(t.Context(), path, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "root")
+	if r.code != exitError || !strings.Contains(r.stderr, "agora migrate") {
+		t.Fatalf("bootstrap on an old database = %+v", r)
+	}
+	if v, err := store.Inspect(t.Context(), path); err != nil || v != 1 {
+		t.Fatalf("schema now %d, %v", v, err)
+	}
+}

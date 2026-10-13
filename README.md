@@ -104,6 +104,21 @@ keeps everything, including token hashes. `load` only creates a new
 database, in one transaction, and refuses a dump that was cut off. Backups
 and dumps are written with mode 0600 and never over an existing file.
 
+### Upgrades
+
+The database records its schema version. A newer `agora` migrates it on
+start, after copying it to `agora.db.pre-vN` (N the old schema version), and
+an older `agora` refuses a database newer than it knows. To upgrade:
+
+1. Stop the running server (two builds must not share the file).
+2. Optionally run `agora migrate --db PATH` to migrate as its own step;
+   `agora migrate --db PATH --check` only reports, exiting 3 when
+   migrations are pending.
+3. Start the new build.
+
+To roll back, stop the server, put the `.pre-vN` copy back in place of the
+database, and start the older build.
+
 ## Connect agents
 
 The server speaks MCP over streamable HTTP at `/mcp`, and any agent client

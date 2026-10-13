@@ -44,6 +44,7 @@ commands:
   backup      download a copy of the server's database
   dump        download a dump of a namespace or of everything
   load        create a database from a dump
+  migrate     upgrade a database to this build's schema
   health      check that the server is up
   version     print the version
 
@@ -102,6 +103,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runDump(ctx, args[1:], stdout, stderr, getenv)
 	case "load":
 		return runLoad(ctx, args[1:], stdin, stdout, stderr)
+	case "migrate":
+		return runMigrate(ctx, args[1:], stdout, stderr)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version":
@@ -123,7 +126,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	if err != nil {
 		return err
 	}
-	db, err := store.Open(ctx, cfg.DB)
+	db, err := store.OpenWith(ctx, cfg.DB, store.Options{Logger: logger, Snapshot: true})
 	if err != nil {
 		return err
 	}

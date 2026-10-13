@@ -21,4 +21,7 @@ func TestPercentInPathOpensThatFile(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "a.b.db")); !os.IsNotExist(err) {
 		t.Fatalf("SQLite opened the decoded name: %v", err)
 	}
+	if v, err := Inspect(t.Context(), path); err != nil || v != LatestVersion() {
+		t.Fatalf("inspect = %d, %v", v, err)
+	}
 }
