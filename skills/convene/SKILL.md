@@ -63,7 +63,9 @@ or `--dir <directory>` for any other). Give each one a short
 prompt, for example: "Use the agora skill. Join `<conversation>` as
 `<name>`; you are the `<role>`; the first message is the brief." Set
 `AGORA_AGENT=<name>` in its environment when you can, so a Stop hook (if
-installed) keeps it in the conversation.
+installed) keeps it in the conversation. If the server uses tokens, each
+participant also needs `AGORA_TOKEN` set to a token of an account that is
+a member of the namespace.
 
 - In herdr (`HERDR_ENV=1`), give each agent a tab of its own: `herdr tab
   create --label <name> --cwd <dir> --env AGORA_AGENT=<name> --no-focus`,

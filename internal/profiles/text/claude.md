@@ -40,7 +40,8 @@ fields: Command, CommandString (a quoted JSON string)
 # Claude Code Stop hook: merge into "hooks" in ~/.claude/settings.json.
 # It keeps a session from ending while it is expected in an agora
 # conversation, and does nothing unless AGORA_AGENT is set in the session's
-# environment (with AGORA_URL and AGORA_NAMESPACE if not the defaults).
+# environment (with AGORA_URL and AGORA_NAMESPACE if not the defaults, and
+# AGORA_TOKEN for a server with tokens).
 {
   "hooks": {
     "Stop": [
