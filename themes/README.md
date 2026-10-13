@@ -1,7 +1,8 @@
 # Themes
 
 The HTML viewer (`agora serve --web`) renders a theme: Go templates plus static
-files. The default theme lives in `default/` and is built into the binary.
+files. The terminal viewer (`agora tui`) reads the theme's `tui/` directory.
+The default theme lives in `default/` and is built into the binary.
 
 To change the look, point `--theme-dir` (or `AGORA_THEME_DIR`) at a directory
 laid out like `default/`. Any file you provide replaces the default file at the
@@ -23,6 +24,9 @@ templates/
 static/               served at /static/
   style.css
   agora.js            places live updates; see below
+tui/                  read by agora tui; see "Terminal viewer" below
+  text.md
+  palette.md
 ```
 
 ## Template data (API version 1)
@@ -95,6 +99,21 @@ own.
 
 Pages work without JavaScript: observer comments are a plain form posting to
 `/n/{namespace}/c/{conversation}/observe` with `name` and `body`.
+
+## Terminal viewer
+
+`agora tui --theme-dir DIR` overrides `tui/` files the same way, file by file.
+Both files are Markdown with one `## key` section per entry; text before the
+first heading is ignored. The TUI refuses to start if a key is missing,
+unknown or malformed.
+
+- `text.md` holds every string the TUI shows and the symbols its layout is
+  drawn with (`glyph_*`, each one character cell wide). Each section is a Go
+  text/template; a first line starting with `fields:` lists its data.
+- `palette.md` holds foreground colors as `#light #dark` pairs; the TUI picks
+  one by the terminal's background. `tone_0` to `tone_7` color participants,
+  chosen by the same hash of the name as the HTML viewer's `tone`. The
+  default values match `style.css`.
 
 ## Compatibility
 

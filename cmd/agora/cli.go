@@ -17,6 +17,8 @@ import (
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/agora/internal/tui"
+	"github.com/aahoughton/agora/themes"
 )
 
 // Exit codes for client commands.
@@ -263,6 +265,75 @@ stderr; stdout carries protocol frames only.
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 	if err := mcpserver.Bridge(ctx, endpoint, &mcp.StdioTransport{}, version, logger); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(stderr, "agora mcp:", err)
+		return exitError
+	}
+	return exitOK
+}
+
+func runTUI(ctx context.Context, args []string, stderr io.Writer, getenv config.Getenv) int {
+	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora tui [namespace[/conversation]] [flags]
+
+Browses namespaces and conversations on a running server and follows a
+conversation live, with a composer for observer comments. Without an
+argument it opens the conversations of --namespace.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs)
+	as := fs.String("as", "", "name to post observer comments under (env "+config.EnvObserver+"; asked on first comment if unset)")
+	themeDir := fs.String("theme-dir", "", "directory of theme files overriding the default theme's tui/ files (env "+config.EnvThemeDir+")")
+	var target string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		target, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return flagError(stderr, err)
+	}
+	switch {
+	case target == "" && fs.NArg() == 1:
+		target = fs.Arg(0)
+	case fs.NArg() > 0:
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	cc, err := resolveClient(getenv)
+	if err != nil {
+		return flagError(stderr, err)
+	}
+	opts := tui.Options{Namespace: cc.Namespace, Observer: *as}
+	if opts.Observer == "" {
+		opts.Observer = getenv(config.EnvObserver)
+	}
+	if opts.Observer != "" && !core.ValidName(opts.Observer) {
+		return flagError(stderr, fmt.Errorf("invalid observer name %q", opts.Observer))
+	}
+	if target != "" {
+		ns, conv, _ := strings.Cut(target, "/")
+		if !core.ValidName(ns) || (conv != "" && !core.ValidName(conv)) {
+			return flagError(stderr, fmt.Errorf("invalid target %q: want namespace or namespace/conversation", target))
+		}
+		opts.Namespace, opts.Conversation = ns, conv
+	}
+	if opts.Client, err = client.New(cc.URL); err != nil {
+		return flagError(stderr, err)
+	}
+	if *themeDir == "" {
+		*themeDir = getenv(config.EnvThemeDir)
+	}
+	theme, err := themes.Open(*themeDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora tui:", err)
+		return exitError
+	}
+	if opts.Skin, err = tui.LoadSkin(theme); err != nil {
+		fmt.Fprintln(stderr, "agora tui:", err)
+		return exitError
+	}
+	if err := tui.Run(ctx, opts); err != nil {
+		fmt.Fprintln(stderr, "agora tui:", err)
 		return exitError
 	}
 	return exitOK

@@ -11,6 +11,7 @@ const (
 	EnvURL       = "AGORA_URL"
 	EnvNamespace = "AGORA_NAMESPACE"
 	EnvAgent     = "AGORA_AGENT"
+	EnvObserver  = "AGORA_OBSERVER"
 )
 
 // DefaultURL is where client commands look for the server.

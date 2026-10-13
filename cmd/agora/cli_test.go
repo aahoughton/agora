@@ -230,3 +230,21 @@ func TestWaitShortTimeoutStillChecksOnce(t *testing.T) {
 		t.Fatalf("wait = %+v", r)
 	}
 }
+
+func TestTUIUsage(t *testing.T) {
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"tui", "bad name"}, "invalid target"},
+		{[]string{"tui", "default/bad name"}, "invalid target"},
+		{[]string{"tui", "a", "b"}, `unexpected argument "b"`},
+		{[]string{"tui", "--as", "bad name"}, "invalid observer name"},
+		{[]string{"tui", "--theme-dir", "/does/not/exist"}, "theme dir"},
+	} {
+		r := runCLI(t.Context(), "http://127.0.0.1:1", tt.args...)
+		if r.code == exitOK || !strings.Contains(r.stderr, tt.want) {
+			t.Errorf("%v = %d %q, want an error containing %q", tt.args, r.code, r.stderr, tt.want)
+		}
+	}
+}

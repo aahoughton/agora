@@ -34,6 +34,7 @@ commands:
   mcp       serve MCP on stdio, relaying to a running server
   wait      block until there is something new for an agent
   status    show where an agent is expected
+  tui       browse and follow conversations in the terminal
   health    check that the server is up
   version   print the version
 
@@ -74,6 +75,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv co
 		return runWait(ctx, args[1:], stdout, stderr, getenv)
 	case "status":
 		return runStatus(ctx, args[1:], stdout, stderr, getenv)
+	case "tui":
+		return runTUI(ctx, args[1:], stderr, getenv)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version":

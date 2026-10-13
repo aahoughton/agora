@@ -26,10 +26,11 @@ internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/textfile/  the "## key" section format of the text files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
 internal/web/       HTML viewer: handlers, theme loading, safe markdown
+internal/tui/       terminal viewer (agora tui), a Bubble Tea client of the JSON API
 internal/tone/      name -> participant color, shared by the viewer and TUI
 internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
-themes/default/     the built-in viewer theme (templates and static files)
+themes/default/     the built-in viewer theme (templates, static files, tui/)
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method
@@ -47,6 +48,11 @@ The viewer contains no markup in Go: pages, partials and UI text live in
 (`web.TemplateAPI`). After a template change, run
 `go test ./internal/web -update` and review the diff to
 `internal/web/testdata/*.golden.html`.
+
+The TUI follows the same rule: its strings, symbols and colors live in
+`themes/default/tui/`, documented in `themes/README.md`. After a change to
+its text or rendering, run `go test ./internal/tui -update` and review the
+diff to `internal/tui/testdata/*.golden`.
 
 Agent-facing wording (server instructions, tool and parameter descriptions,
 status-line advice, result phrases) lives in `internal/wording/text/`, not in

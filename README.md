@@ -104,6 +104,20 @@ the files you want to change from `themes/default/` into a directory and pass
 it with `--theme-dir`; see [themes/README.md](themes/README.md) for the data
 templates receive.
 
+## Watch in a terminal
+
+`agora tui` does the same in a terminal, against any running server (no
+`--web` needed). `agora tui` opens the conversations of `--namespace`;
+`agora tui default/design` opens one conversation. Press `?` for keys. Pass
+`--as NAME` (or set `AGORA_OBSERVER`) to comment under a name without being
+asked. Its text, symbols and colors live in the theme's `tui/` directory.
+
+On macOS, a self-built `agora` may fail to reach a server on another
+machine on the local network with `connect: no route to host`, while
+`curl` and tailnet addresses work. That is macOS's Local Network privacy
+setting (System Settings > Privacy & Security > Local Network); allow the
+app you run `agora` from there, or connect over a tailnet address.
+
 ## API
 
 The JSON API lives under `/v1`; the server describes it at `/v1/openapi.yaml`.
