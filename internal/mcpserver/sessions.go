@@ -1,11 +1,13 @@
 package mcpserver
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -179,6 +181,43 @@ func (g *guard) record(sid string, p core.Principal, srv *mcp.Server) {
 	now := time.Now()
 	g.prune(now)
 	g.owners[sid] = owner{account: p.AccountID, seen: now, srv: srv}
+}
+
+// SessionUse is one account's open MCP sessions.
+type SessionUse struct {
+	AccountID int64
+	Sessions  int
+	// LastUsed is the latest request on any of them.
+	LastUsed time.Time
+}
+
+// Sessions reports the open MCP sessions per account, most recently used
+// first.
+func (e *Endpoint) Sessions() []SessionUse {
+	g := e.guard
+	g.mu.Lock()
+	g.prune(time.Now())
+	by := map[int64]*SessionUse{}
+	for _, o := range g.owners {
+		u := by[o.account]
+		if u == nil {
+			u = &SessionUse{AccountID: o.account}
+			by[o.account] = u
+		}
+		u.Sessions++
+		if o.seen.After(u.LastUsed) {
+			u.LastUsed = o.seen
+		}
+	}
+	g.mu.Unlock()
+	out := make([]SessionUse, 0, len(by))
+	for _, u := range by {
+		out = append(out, *u)
+	}
+	slices.SortFunc(out, func(x, y SessionUse) int {
+		return cmp.Or(y.LastUsed.Compare(x.LastUsed), cmp.Compare(x.AccountID, y.AccountID))
+	})
+	return out
 }
 
 func (g *guard) forget(sid string) {

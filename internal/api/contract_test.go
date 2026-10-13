@@ -18,6 +18,7 @@ import (
 	"github.com/aahoughton/agora/internal/api"
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/mcpserver"
 	"github.com/aahoughton/agora/internal/store"
 )
 
@@ -41,8 +42,20 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rootP, err := svc.AuthenticateToken(t.Context(), root.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := func() time.Time { return clock }
+	activity := auth.NewActivity(nil, now)
+	activity.Failed(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 	mux := http.NewServeMux()
-	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{Logger: slog.New(slog.DiscardHandler), AuthMode: "token", Version: "test"})
+	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{
+		Logger: slog.New(slog.DiscardHandler), AuthMode: "token", Version: "test", Now: now, Activity: activity,
+		MCPSessions: func() []mcpserver.SessionUse {
+			return []mcpserver.SessionUse{{AccountID: rootP.AccountID, Sessions: 2, LastUsed: clock}}
+		},
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -118,6 +131,10 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call("POST", c+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: LRU"})
 	call("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "led", "agent": "lead", "end": "coordinator"})
 	call("POST", "/v1/namespaces/default/conversations/led/close", map[string]any{"agent": "lead", "body": "done"})
+	token = issued["secret"].(string)
+	call("GET", "/v1/server", nil)
+	token = root.Secret
+	call("GET", "/v1/server", nil)
 	call("POST", "/v1/accounts/pat/tokens/revoke", map[string]any{})
 	call("DELETE", "/v1/namespaces/default/members/pat", nil)
 	call("POST", c+"/messages", map[string]any{"agent": "alice", "body": "late"})

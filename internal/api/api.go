@@ -16,6 +16,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/mcpserver"
 )
 
 // Wait timeout bounds, in seconds.
@@ -40,8 +41,13 @@ type Options struct {
 	// AuthMode and Version are reported by GET /v1/whoami.
 	AuthMode string
 	Version  string
-	// Activity, if set, records each authenticated caller.
+	// Activity, if set, records each authenticated caller; GET /v1/server
+	// reports it.
 	Activity *auth.Activity
+	// MCPSessions, if set, reports open MCP sessions for GET /v1/server.
+	MCPSessions func() []mcpserver.SessionUse
+	// Now defaults to time.Now.
+	Now func() time.Time
 }
 
 type handler struct {
@@ -52,6 +58,8 @@ type handler struct {
 	authMode    string
 	version     string
 	activity    *auth.Activity
+	mcpSessions func() []mcpserver.SessionUse
+	now         func() time.Time
 }
 
 type route struct {
@@ -93,6 +101,7 @@ var routes = []route{
 	{"GET", "/v1/namespaces/{ns}/members", (*handler).listMembers},
 	{"PUT", "/v1/namespaces/{ns}/members/{account}", (*handler).setMember},
 	{"DELETE", "/v1/namespaces/{ns}/members/{account}", (*handler).removeMember},
+	{"GET", "/v1/server", (*handler).serverStatus},
 	{"GET", "/v1/backup", (*handler).backup},
 	{"GET", "/v1/dump", (*handler).dump},
 }
@@ -108,6 +117,10 @@ func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, o
 	h := &handler{
 		svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout,
 		authMode: opts.AuthMode, version: opts.Version, activity: opts.Activity,
+		mcpSessions: opts.MCPSessions, now: opts.Now,
+	}
+	if h.now == nil {
+		h.now = time.Now
 	}
 	for _, rt := range routes {
 		mux.HandleFunc(rt.method+" "+rt.pattern, func(w http.ResponseWriter, r *http.Request) {

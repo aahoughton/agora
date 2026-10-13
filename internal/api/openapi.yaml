@@ -186,6 +186,96 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /v1/server:
+    get:
+      operationId: serverStatus
+      description: >-
+        Who is using the server, for deciding whether a restart would
+        interrupt anyone. Server admins only. Callers, failed sign-ins and
+        MCP sessions are kept in memory and start empty when the server
+        starts; callers are capped at 512 and failed sign-ins at 256, the
+        longest unseen dropped first. Times are relative to `now`, the
+        server's clock.
+      responses:
+        "200":
+          description: The server's current use.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, auth_mode, started_at, now, last_message, conversations, mcp_sessions, callers, failed_sign_ins]
+                properties:
+                  version: { type: string }
+                  auth_mode: { type: string, enum: [none, token] }
+                  started_at: { type: string, format: date-time }
+                  now: { type: string, format: date-time }
+                  last_message:
+                    description: The newest entry in any conversation's log, or null.
+                    type: [object, "null"]
+                    required: [namespace, conversation, seq, kind, author, at]
+                    properties:
+                      namespace: { type: string }
+                      conversation: { type: string }
+                      seq: { type: integer, format: int64 }
+                      kind: { type: string }
+                      author: { type: string }
+                      at: { type: string, format: date-time }
+                  conversations:
+                    description: >-
+                      Open conversations with activity in the last 24 hours, and any
+                      conversation with agents waiting or viewers following; most
+                      recent first, at most 100.
+                    type: array
+                    items:
+                      type: object
+                      required: [namespace, name, status, last_at, active, waiting, viewing]
+                      properties:
+                        namespace: { type: string }
+                        name: { type: string }
+                        status: { type: string, enum: [open, concluded] }
+                        last_at: { type: string, format: date-time }
+                        active: { type: integer, description: Participants that have not concluded or left. }
+                        waiting: { type: integer, description: Agents blocked in wait now. }
+                        viewing: { type: integer, description: Viewers following now. }
+                  mcp_sessions:
+                    description: Open MCP sessions per account, most recently used first.
+                    type: array
+                    items:
+                      type: object
+                      required: [account, sessions, last_used]
+                      properties:
+                        account: { type: string, description: Empty for the anonymous caller (auth mode none). }
+                        sessions: { type: integer }
+                        last_used: { type: string, format: date-time }
+                  callers:
+                    description: >-
+                      Authenticated requests since the server started, one entry per
+                      account, surface, client address and User-Agent; most recent first.
+                    type: array
+                    items:
+                      type: object
+                      required: [account, surface, address, client, first_seen, last_seen, requests]
+                      properties:
+                        account: { type: string, description: Empty for the anonymous caller (auth mode none). }
+                        surface: { type: string, enum: [api, mcp, web] }
+                        address: { type: string }
+                        client: { type: string, description: The User-Agent, cut to 64 printable ASCII bytes. }
+                        first_seen: { type: string, format: date-time }
+                        last_seen: { type: string, format: date-time }
+                        requests: { type: integer, format: int64 }
+                  failed_sign_ins:
+                    description: Rejected credentials per client address, most recent first.
+                    type: array
+                    items:
+                      type: object
+                      required: [address, count, last_at]
+                      properties:
+                        address: { type: string }
+                        count: { type: integer, format: int64 }
+                        last_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
   /v1/backup:
     get:
       operationId: backup

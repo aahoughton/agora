@@ -60,7 +60,7 @@ type Options struct {
 // each session gets a server bound to the principal that created it and to
 // the namespace named by the `namespace` query parameter (default
 // "default"), and only that principal may use the session.
-func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Handler {
+func Handler(svc *core.Service, authn auth.Authenticator, opts Options) *Endpoint {
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -100,11 +100,14 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Han
 		Logger:         quiet(opts.Logger),
 		SessionTimeout: SessionTimeout,
 	})
-	return &guard{
+	return &Endpoint{&guard{
 		authn: authn, next: sdk, ttl: SessionTimeout, owners: map[string]owner{}, activity: opts.Activity,
 		perAccount: opts.MaxSessionsPerAccount, total: opts.MaxSessions,
-	}
+	}}
 }
+
+// Endpoint is the MCP HTTP handler.
+type Endpoint struct{ *guard }
 
 // Session limits. A session idle for SessionTimeout is closed; a client
 // that comes back starts a new one.

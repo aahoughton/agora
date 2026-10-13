@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
 )
 
@@ -212,3 +213,57 @@ func (h *handler) dump(w http.ResponseWriter, r *http.Request, p core.Principal)
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(b []byte) (int, error) { return f(b) }
+
+// StatusWindow is how far back GET /v1/server lists quiet open
+// conversations.
+const StatusWindow = 24 * time.Hour
+
+type callerJSON struct {
+	Account string `json:"account"`
+	auth.Caller
+}
+
+type mcpSessionsJSON struct {
+	Account  string    `json:"account"`
+	Sessions int       `json:"sessions"`
+	LastUsed time.Time `json:"last_used"`
+}
+
+// serverStatus reports who is using the server, for an operator deciding
+// whether to restart it. Server admins only. Callers, failures and MCP
+// sessions are kept in memory since the server started.
+func (h *handler) serverStatus(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	now := h.now().UTC()
+	act, err := h.svc.ServerActivity(r.Context(), p, now.Add(-StatusWindow))
+	if err != nil {
+		return err
+	}
+	accounts, err := h.svc.ListAccounts(r.Context(), p)
+	if err != nil {
+		return err
+	}
+	names := make(map[int64]string, len(accounts))
+	for _, a := range accounts {
+		names[a.ID] = a.Name
+	}
+	callers, failures := h.activity.Snapshot()
+	cs := make([]callerJSON, 0, len(callers))
+	for _, c := range callers {
+		cs = append(cs, callerJSON{Account: names[c.AccountID], Caller: c})
+	}
+	ms := []mcpSessionsJSON{}
+	if h.mcpSessions != nil {
+		for _, u := range h.mcpSessions() {
+			ms = append(ms, mcpSessionsJSON{Account: names[u.AccountID], Sessions: u.Sessions, LastUsed: u.LastUsed.UTC()})
+		}
+	}
+	if failures == nil {
+		failures = []auth.Failure{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": h.version, "auth_mode": h.authMode, "started_at": h.activity.Started(), "now": now,
+		"last_message": act.LastMessage, "conversations": act.Conversations,
+		"mcp_sessions": ms, "callers": cs, "failed_sign_ins": failures,
+	})
+	return nil
+}

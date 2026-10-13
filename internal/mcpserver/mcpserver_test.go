@@ -565,7 +565,8 @@ func TestBodiesCannotForgeMessages(t *testing.T) {
 // Sessions are capped per account; closing one frees its place.
 func TestSessionsAreCapped(t *testing.T) {
 	svc := newService(t)
-	srv := httptest.NewServer(mcpserver.Handler(svc, headerAuth{}, mcpserver.Options{MaxSessionsPerAccount: 2}))
+	h := mcpserver.Handler(svc, headerAuth{}, mcpserver.Options{MaxSessionsPerAccount: 2})
+	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	open := func(user string) (*mcp.ClientSession, error) {
 		httpc := &http.Client{Transport: addHeader{user: user, rt: http.DefaultTransport}}
@@ -589,6 +590,13 @@ func TestSessionsAreCapped(t *testing.T) {
 	// Another account has its own allowance.
 	if _, err := open("2"); err != nil {
 		t.Fatal(err)
+	}
+	use := map[int64]int{}
+	for _, u := range h.Sessions() {
+		use[u.AccountID] = u.Sessions
+	}
+	if len(use) != 2 || use[1] != 2 || use[2] != 1 {
+		t.Fatalf("sessions per account = %v", use)
 	}
 	if err := a.Close(); err != nil {
 		t.Fatal(err)

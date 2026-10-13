@@ -538,6 +538,65 @@
   "you": "active"
 }
 
+## GET /v1/server -> Forbidden
+{
+  "error": {
+    "code": "forbidden",
+    "message": "only a server admin can do that"
+  }
+}
+
+## GET /v1/server -> OK
+{
+  "auth_mode": "token",
+  "callers": [
+    {
+      "account": "root",
+      "address": "127.0.0.1",
+      "client": "Go-http-client/1.1",
+      "first_seen": "2030-01-02T03:04:05Z",
+      "last_seen": "2030-01-02T03:04:05Z",
+      "requests": 19,
+      "surface": "api"
+    },
+    {
+      "account": "pat",
+      "address": "127.0.0.1",
+      "client": "Go-http-client/1.1",
+      "first_seen": "2030-01-02T03:04:05Z",
+      "last_seen": "2030-01-02T03:04:05Z",
+      "requests": 11,
+      "surface": "api"
+    }
+  ],
+  "conversations": [],
+  "failed_sign_ins": [
+    {
+      "address": "192.0.2.1",
+      "count": 1,
+      "last_at": "2030-01-02T03:04:05Z"
+    }
+  ],
+  "last_message": {
+    "at": "2030-01-02T03:04:05Z",
+    "author": "agora",
+    "conversation": "led",
+    "kind": "system",
+    "namespace": "default",
+    "seq": 4
+  },
+  "mcp_sessions": [
+    {
+      "account": "root",
+      "last_used": "2030-01-02T03:04:05Z",
+      "sessions": 2
+    }
+  ],
+  "now": "2030-01-02T03:04:05Z",
+  "started_at": "2030-01-02T03:04:05Z",
+  "version": "test"
+}
+
 ## POST /v1/accounts/pat/tokens/revoke -> OK
 {
   "revoked": 1
