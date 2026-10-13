@@ -123,3 +123,51 @@ func TestOpenRejectsBadPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestMigratesAVersionOneDatabase upgrades a database written by the first
+// schema and checks that its rows survive with NULL accounts.
+func TestMigratesAVersionOneDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agora.db")
+	ms, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sql.Open("sqlite", "file:"+path+"?"+dsnOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := apply(t.Context(), raw, ms[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(t.Context(), `
+		INSERT INTO conversations (namespace_id, name, end_condition, created_by, created_at, last_seq, last_at)
+			VALUES (1, 'c', 'none', 'alice', 1, 1, 1);
+		INSERT INTO participants (conversation_id, agent, state, joined_at, last_seen_at) VALUES (1, 'alice', 'active', 1, 1);
+		INSERT INTO messages (conversation_id, seq, kind, author, body, created_at) VALUES (1, 1, 'system', 'alice', 'alice joined', 1);
+		INSERT INTO accounts (name, created_at) VALUES ('Pat', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeOnCleanup(t, db)
+	if v, err := SchemaVersion(t.Context(), db); err != nil || v != len(ms) {
+		t.Fatalf("schema version = %d, %v; want %d", v, err, len(ms))
+	}
+	var owner, creator, author sql.NullInt64
+	var admin int
+	err = db.QueryRowContext(t.Context(), `SELECT p.account_id, c.created_by_account, m.account_id, a.server_admin
+		FROM participants p, conversations c, messages m, accounts a`).Scan(&owner, &creator, &author, &admin)
+	if err != nil || owner.Valid || creator.Valid || author.Valid || admin != 0 {
+		t.Fatalf("migrated row = %v %v %v %d, %v", owner, creator, author, admin, err)
+	}
+	// Account names are unique regardless of case.
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO accounts (name, created_at) VALUES ('pat', 2)`); err == nil {
+		t.Fatal("a second account named pat was accepted")
+	}
+}
