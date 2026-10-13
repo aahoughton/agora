@@ -5,6 +5,7 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
@@ -22,12 +23,45 @@ type None struct{}
 // Authenticate always returns the anonymous principal.
 func (None) Authenticate(*http.Request) (core.Principal, error) { return core.Anonymous(), nil }
 
-// ForMode returns the authenticator and policy for an auth mode.
-func ForMode(mode config.AuthMode) (Authenticator, core.Policy, error) {
+// Bearer authenticates `Authorization: Bearer <token>`. The JSON API and
+// MCP use it in auth mode token; browsers use session cookies instead.
+type Bearer struct {
+	Service *core.Service
+}
+
+// Authenticate implements Authenticator.
+func (b Bearer) Authenticate(r *http.Request) (core.Principal, error) {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
+		return core.Principal{}, &core.Error{
+			Code:    core.CodeUnauthorized,
+			Message: "send Authorization: Bearer <token> (agora clients read --token or AGORA_TOKEN)",
+		}
+	}
+	return b.Service.AuthenticateToken(r.Context(), strings.TrimSpace(token))
+}
+
+// PolicyFor returns the core policy for an auth mode.
+func PolicyFor(mode config.AuthMode) (core.Policy, error) {
 	switch mode {
 	case config.AuthNone:
-		return None{}, core.AllowAll{}, nil
+		return core.AllowAll{}, nil
+	case config.AuthToken:
+		return core.RolePolicy(), nil
 	default:
-		return nil, nil, fmt.Errorf("auth: mode %q is not implemented", mode)
+		return nil, fmt.Errorf("auth: mode %q is not implemented", mode)
+	}
+}
+
+// For returns the authenticator for the JSON API and MCP in an auth mode,
+// over a Service built with PolicyFor's policy.
+func For(mode config.AuthMode, svc *core.Service) (Authenticator, error) {
+	switch mode {
+	case config.AuthNone:
+		return None{}, nil
+	case config.AuthToken:
+		return Bearer{Service: svc}, nil
+	default:
+		return nil, fmt.Errorf("auth: mode %q is not implemented", mode)
 	}
 }

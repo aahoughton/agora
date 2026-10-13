@@ -42,6 +42,10 @@ type Options struct {
 	URL string
 	// Wording supplies instructions, tool descriptions and result phrases.
 	Wording *wording.Wording
+	// Authenticator, if set, authenticates each tool call from its HTTP
+	// headers, so a call uses the credential it carries rather than the
+	// one that opened the session. Handler sets it.
+	Authenticator auth.Authenticator
 }
 
 // Handler serves MCP over streamable HTTP. Every request is authenticated;
@@ -73,6 +77,7 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) http.Han
 		}
 		o := opts
 		o.URL = baseURL(r)
+		o.Authenticator = authn
 		return NewServer(svc, p, ns, o)
 	}, &mcp.StreamableHTTPOptions{
 		Logger:         quiet(opts.Logger),
@@ -93,6 +98,7 @@ func baseURL(r *http.Request) string {
 
 type tools struct {
 	svc     *core.Service
+	authn   auth.Authenticator
 	p       core.Principal
 	ns      string
 	maxWait time.Duration
@@ -118,7 +124,7 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 		Logger:       quiet(opts.Logger),
 		Capabilities: &mcp.ServerCapabilities{},
 	})
-	t := &tools{svc: svc, p: p, ns: ns, maxWait: opts.MaxWait, w: w}
+	t := &tools{svc: svc, authn: opts.Authenticator, p: p, ns: ns, maxWait: opts.MaxWait, w: w}
 	s.AddReceivingMiddleware(logCalls(opts.Logger, p, ns))
 	// Every tool acts only on this server (closed world). The log is
 	// append-only, so writes are not destructive, except close, which ends
@@ -187,6 +193,27 @@ func addTool[In any](r *registry, s *mcp.Server, name string, ann *mcp.ToolAnnot
 	mcp.AddTool(s, &mcp.Tool{Name: name, Description: tw.Description, Annotations: ann, InputSchema: schema}, h)
 }
 
+// caller is the principal of one tool call: authenticated from the call's
+// own headers when it came over HTTP, and always the session's account.
+func (t *tools) caller(ctx context.Context, req *mcp.CallToolRequest) (core.Principal, error) {
+	if t.authn == nil || req == nil || req.Extra == nil || req.Extra.Header == nil {
+		return t.p, nil
+	}
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, "/", nil)
+	if err != nil {
+		return core.Principal{}, err
+	}
+	r.Header = req.Extra.Header
+	p, err := t.authn.Authenticate(r)
+	if err != nil {
+		return core.Principal{}, err
+	}
+	if p.AccountID != t.p.AccountID {
+		return core.Principal{}, &core.Error{Code: core.CodeForbidden, Message: "this MCP session belongs to another caller"}
+	}
+	return p, nil
+}
+
 func text(s string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}
 }
@@ -217,7 +244,11 @@ const (
 	maxListLimit     = 100
 )
 
-func (t *tools) list(ctx context.Context, _ *mcp.CallToolRequest, in listIn) (*mcp.CallToolResult, any, error) {
+func (t *tools) list(ctx context.Context, req *mcp.CallToolRequest, in listIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
 	lp := core.ListParams{IncludeArchived: in.IncludeArchived, Limit: in.Limit, Before: in.Before}
 	switch in.Status {
 	case "":
@@ -232,7 +263,7 @@ func (t *tools) list(ctx context.Context, _ *mcp.CallToolRequest, in listIn) (*m
 	case lp.Limit < 0 || lp.Limit > maxListLimit:
 		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: fmt.Sprintf("limit must be between 1 and %d", maxListLimit)})
 	}
-	page, err := t.svc.ListConversations(ctx, t.p, t.ns, lp)
+	page, err := t.svc.ListConversations(ctx, p, t.ns, lp)
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -248,7 +279,11 @@ type startIn struct {
 	EndsInMinutes int    `json:"ends_in_minutes,omitempty"`
 }
 
-func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, any, error) {
+func (t *tools) start(ctx context.Context, req *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
 	ns := t.ns
 	sp := core.StartParams{Name: in.Conversation, Topic: in.Topic, End: core.EndCondition(in.End), Agent: in.Agent, Join: true}
 	switch {
@@ -258,11 +293,11 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 		ends := time.Now().Add(time.Duration(in.EndsInMinutes) * time.Minute)
 		sp.EndsAt = &ends
 	}
-	c, err := t.svc.Start(ctx, t.p, ns, sp)
+	c, err := t.svc.Start(ctx, p, ns, sp)
 	if err != nil {
 		return failure(ctx, err)
 	}
-	st, err := t.svc.StandingOf(ctx, t.p, ns, c.Name, in.Agent)
+	st, err := t.svc.StandingOf(ctx, p, ns, c.Name, in.Agent)
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -276,13 +311,17 @@ type joinIn struct {
 	Resume       bool   `json:"resume,omitempty"`
 }
 
-func (t *tools) join(ctx context.Context, _ *mcp.CallToolRequest, in joinIn) (*mcp.CallToolResult, any, error) {
+func (t *tools) join(ctx context.Context, req *mcp.CallToolRequest, in joinIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
 	ns := t.ns
-	st, err := t.svc.Join(ctx, t.p, ns, in.Conversation, core.JoinParams{Agent: in.Agent, Resume: in.Resume})
+	st, err := t.svc.Join(ctx, p, ns, in.Conversation, core.JoinParams{Agent: in.Agent, Resume: in.Resume})
 	if err != nil {
 		return failure(ctx, err)
 	}
-	c, err := t.svc.GetConversation(ctx, t.p, ns, in.Conversation)
+	c, err := t.svc.GetConversation(ctx, p, ns, in.Conversation)
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -298,8 +337,12 @@ type readIn struct {
 	Tail         int    `json:"tail,omitempty"`
 }
 
-func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*mcp.CallToolResult, any, error) {
-	r, err := t.svc.Read(ctx, t.p, t.ns, in.Conversation, core.ReadParams{
+func (t *tools) read(ctx context.Context, req *mcp.CallToolRequest, in readIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	r, err := t.svc.Read(ctx, p, t.ns, in.Conversation, core.ReadParams{
 		Agent: in.Agent, After: in.After, Limit: in.Limit, Tail: in.Tail, MaxBytes: MaxReadBytes,
 	})
 	if err != nil {
@@ -320,8 +363,12 @@ type sayIn struct {
 	ExpectedLastSeq *int64 `json:"expected_last_seq,omitempty"`
 }
 
-func (t *tools) say(ctx context.Context, _ *mcp.CallToolRequest, in sayIn) (*mcp.CallToolResult, any, error) {
-	r, err := t.svc.Say(ctx, t.p, t.ns, in.Conversation, core.SayParams{
+func (t *tools) say(ctx context.Context, req *mcp.CallToolRequest, in sayIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	r, err := t.svc.Say(ctx, p, t.ns, in.Conversation, core.SayParams{
 		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq, InlineBytes: InlineBytes,
 	})
 	if err != nil {
@@ -341,7 +388,11 @@ type waitIn struct {
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 }
 
-func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, any, error) {
+func (t *tools) wait(ctx context.Context, req *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
 	timeout := t.maxWait
 	if in.TimeoutSeconds < 0 || time.Duration(in.TimeoutSeconds)*time.Second > t.maxWait {
 		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: t.w.Phrase(wording.WaitTimeoutRange,
@@ -350,7 +401,7 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	if in.TimeoutSeconds > 0 {
 		timeout = time.Duration(in.TimeoutSeconds) * time.Second
 	}
-	d, err := t.svc.Wait(ctx, t.p, t.ns, in.Conversation, core.WaitParams{Agent: in.Agent, Timeout: timeout, InlineBytes: InlineBytes})
+	d, err := t.svc.Wait(ctx, p, t.ns, in.Conversation, core.WaitParams{Agent: in.Agent, Timeout: timeout, InlineBytes: InlineBytes})
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -363,8 +414,12 @@ type statusIn struct {
 	Agent string `json:"agent"`
 }
 
-func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, any, error) {
-	sts, err := t.svc.Status(ctx, t.p, t.ns, in.Agent)
+func (t *tools) status(ctx context.Context, req *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	sts, err := t.svc.Status(ctx, p, t.ns, in.Agent)
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -378,8 +433,12 @@ type concludeIn struct {
 	Body         string `json:"body"`
 }
 
-func (t *tools) conclude(ctx context.Context, _ *mcp.CallToolRequest, in concludeIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Conclude(ctx, t.p, t.ns, in.Conversation, core.ConcludeParams{Agent: in.Agent, Body: in.Body})
+func (t *tools) conclude(ctx context.Context, req *mcp.CallToolRequest, in concludeIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	st, err := t.svc.Conclude(ctx, p, t.ns, in.Conversation, core.ConcludeParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -393,8 +452,12 @@ type leaveIn struct {
 	Body         string `json:"body,omitempty"`
 }
 
-func (t *tools) leave(ctx context.Context, _ *mcp.CallToolRequest, in leaveIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Leave(ctx, t.p, t.ns, in.Conversation, core.LeaveParams{Agent: in.Agent, Body: in.Body})
+func (t *tools) leave(ctx context.Context, req *mcp.CallToolRequest, in leaveIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	st, err := t.svc.Leave(ctx, p, t.ns, in.Conversation, core.LeaveParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -408,8 +471,12 @@ type closeIn struct {
 	Body         string `json:"body,omitempty"`
 }
 
-func (t *tools) closeConv(ctx context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, any, error) {
-	st, err := t.svc.Close(ctx, t.p, t.ns, in.Conversation, core.CloseParams{Agent: in.Agent, Body: in.Body})
+func (t *tools) closeConv(ctx context.Context, req *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	st, err := t.svc.Close(ctx, p, t.ns, in.Conversation, core.CloseParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
 		return failure(ctx, err)
 	}
@@ -425,7 +492,11 @@ type presenceIn struct {
 	CheckBackInMinutes int    `json:"check_back_in_minutes,omitempty"`
 }
 
-func (t *tools) presence(ctx context.Context, _ *mcp.CallToolRequest, in presenceIn) (*mcp.CallToolResult, any, error) {
+func (t *tools) presence(ctx context.Context, req *mcp.CallToolRequest, in presenceIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
 	pp := core.PresenceParams{Agent: in.Agent, Presence: in.Presence, Note: in.Note}
 	switch {
 	case in.CheckBackInMinutes < 0:
@@ -435,10 +506,10 @@ func (t *tools) presence(ctx context.Context, _ *mcp.CallToolRequest, in presenc
 		pp.CheckBackBy = &at
 	}
 	ns := t.ns
-	if _, err := t.svc.SetPresence(ctx, t.p, ns, in.Conversation, pp); err != nil {
+	if _, err := t.svc.SetPresence(ctx, p, ns, in.Conversation, pp); err != nil {
 		return failure(ctx, err)
 	}
-	st, err := t.svc.StandingOf(ctx, t.p, ns, in.Conversation, in.Agent)
+	st, err := t.svc.StandingOf(ctx, p, ns, in.Conversation, in.Agent)
 	if err != nil {
 		return failure(ctx, err)
 	}

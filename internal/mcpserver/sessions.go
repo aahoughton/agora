@@ -28,9 +28,13 @@ type guard struct {
 }
 
 type owner struct {
-	p    core.Principal
-	seen time.Time
+	account int64
+	seen    time.Time
 }
+
+// ownerMargin keeps an owner entry past the SDK's own session timeout, so
+// the SDK always forgets a session before the guard does.
+const ownerMargin = time.Hour
 
 func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p, err := g.authn.Authenticate(r)
@@ -39,7 +43,14 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sid := r.Header.Get(sessionHeader); sid != "" {
-		if !g.owns(sid, p) {
+		switch g.check(sid, p) {
+		case sessionUnknown:
+			// The SDK may still hold a session the guard has forgotten;
+			// refusing it keeps any other caller from taking it over. The
+			// client starts a new session on 404.
+			writeError(w, http.StatusNotFound, "session_not_found", "unknown MCP session; initialize a new one")
+			return
+		case sessionOther:
 			writeAuthError(w, &core.Error{Code: core.CodeForbidden, Message: "this MCP session belongs to another caller"})
 			return
 		}
@@ -56,21 +67,30 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// owns reports whether p may use sid. Unknown sessions pass through so the
-// SDK can answer them (normally 404 after a restart).
-func (g *guard) owns(sid string, p core.Principal) bool {
+type sessionCheck int
+
+const (
+	sessionMine sessionCheck = iota
+	sessionUnknown
+	sessionOther
+)
+
+// check reports whether p may use sid. A session belongs to an account, not
+// to the credential that created it, so another valid token of the same
+// account may continue it.
+func (g *guard) check(sid string, p core.Principal) sessionCheck {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	o, ok := g.owners[sid]
-	if !ok {
-		return true
-	}
-	if o.p != p {
-		return false
+	switch {
+	case !ok:
+		return sessionUnknown
+	case o.account != p.AccountID:
+		return sessionOther
 	}
 	o.seen = time.Now()
 	g.owners[sid] = o
-	return true
+	return sessionMine
 }
 
 func (g *guard) record(sid string, p core.Principal) {
@@ -78,11 +98,11 @@ func (g *guard) record(sid string, p core.Principal) {
 	defer g.mu.Unlock()
 	now := time.Now()
 	for id, o := range g.owners {
-		if now.Sub(o.seen) > g.ttl {
+		if now.Sub(o.seen) > g.ttl+ownerMargin {
 			delete(g.owners, id)
 		}
 	}
-	g.owners[sid] = owner{p: p, seen: now}
+	g.owners[sid] = owner{account: p.AccountID, seen: now}
 }
 
 func (g *guard) forget(sid string) {
@@ -126,6 +146,13 @@ func writeAuthError(w http.ResponseWriter, err error) {
 			status = http.StatusForbidden
 		}
 	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="agora"`)
+	}
+	writeError(w, status, code, msg)
+}
+
+func writeError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": msg}})

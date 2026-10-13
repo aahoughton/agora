@@ -103,7 +103,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 // serve runs the HTTP server until ctx is done. If ready is non-nil it
 // receives the bound address once the listener is open.
 func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready chan<- string) error {
-	authn, policy, err := auth.ForMode(cfg.Auth)
+	policy, err := auth.PolicyFor(cfg.Auth)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,14 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	}
 	defer func() { _ = db.Close() }()
 	svc := core.New(db, core.Options{Policy: policy})
+	authn, err := auth.For(cfg.Auth, svc)
+	if err != nil {
+		return err
+	}
 	var viewer http.Handler
+	if cfg.Web && cfg.Auth == config.AuthToken {
+		return errors.New("--web does not support --auth token yet")
+	}
 	if cfg.Web {
 		viewer, err = web.Handler(svc, authn, web.Options{ThemeDir: cfg.ThemeDir, Logger: logger, Version: version})
 		if err != nil {

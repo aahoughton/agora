@@ -155,6 +155,9 @@ func (h *handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	}
 	body.Error.Code = ce.Code
 	body.Error.Message = ce.Message
+	if ce.Code == core.CodeUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="agora"`)
+	}
 	if ce.Code == core.CodeStaleContext {
 		body.Error.LastSeq = &ce.LastSeq
 	}

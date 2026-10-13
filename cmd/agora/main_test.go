@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/aahoughton/agora/internal/config"
+	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/server"
+	"github.com/aahoughton/agora/internal/store"
 )
 
 func testEnv(k string) string {
@@ -191,5 +193,66 @@ func TestAllowedHostsResolution(t *testing.T) {
 		if got := allowedHosts(tt.cfg, tt.addr); !slices.Equal(got, tt.want) {
 			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestServeWithTokens(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	dbPath := filepath.Join(t.TempDir(), "agora.db")
+	db, err := store.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := core.New(db, core.Options{Policy: core.RolePolicy()}).Bootstrap(ctx, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Serve{DB: dbPath, Addr: "127.0.0.1:0", Auth: config.AuthToken}
+	ready, done := make(chan string, 1), make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, slog.New(slog.DiscardHandler), ready) }()
+	var addr string
+	select {
+	case addr = <-ready:
+	case err := <-done:
+		t.Fatalf("serve exited early: %v", err)
+	}
+	get := func(path, token string) (int, http.Header) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return resp.StatusCode, resp.Header
+	}
+	if code, _ := get("/healthz", ""); code != http.StatusOK {
+		t.Fatalf("healthz = %d", code)
+	}
+	code, h := get("/v1/namespaces", "")
+	if code != http.StatusUnauthorized || !strings.HasPrefix(h.Get("WWW-Authenticate"), "Bearer") {
+		t.Fatalf("no token: %d %v", code, h)
+	}
+	if code, _ := get("/v1/namespaces", tok.Secret); code != http.StatusOK {
+		t.Fatalf("with token: %d", code)
+	}
+	if code, _ := get("/mcp", ""); code != http.StatusUnauthorized {
+		t.Fatalf("mcp without token: %d", code)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

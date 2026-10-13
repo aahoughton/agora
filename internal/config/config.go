@@ -43,8 +43,15 @@ const DefaultAddr = "127.0.0.1:8787"
 // AuthMode selects how requests are authenticated.
 type AuthMode string
 
-// AuthNone accepts every request as an anonymous principal with full access.
-const AuthNone AuthMode = "none"
+// Auth modes.
+const (
+	// AuthNone accepts every request as an anonymous principal with full
+	// access.
+	AuthNone AuthMode = "none"
+	// AuthToken requires a bearer token (API, MCP) or a browser session
+	// (viewer) and applies per-namespace roles.
+	AuthToken AuthMode = "token"
+)
 
 // Serve holds the settings for `agora serve`.
 type Serve struct {
@@ -89,7 +96,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	fs.StringVar(&cfg.DB, "db", "", "SQLite database path (env "+EnvDB+")")
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
-	auth := fs.String("auth", "", "auth mode: none (env "+EnvAuth+", default none)")
+	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
 	logLevel := fs.String("log-level", "", "least severe level logged: debug, info, warn or error (env "+EnvLogLevel+", default info)")
@@ -185,12 +192,12 @@ func DefaultDBPath(getenv Getenv) (string, error) {
 
 func parseAuth(s string) (AuthMode, error) {
 	switch AuthMode(s) {
-	case AuthNone:
-		return AuthNone, nil
-	case "token", "email":
+	case AuthNone, AuthToken:
+		return AuthMode(s), nil
+	case "email":
 		return "", fmt.Errorf("serve: auth mode %q is not implemented yet", s)
 	default:
-		return "", fmt.Errorf("serve: unknown auth mode %q: want none", s)
+		return "", fmt.Errorf("serve: unknown auth mode %q: want none or token", s)
 	}
 }
 

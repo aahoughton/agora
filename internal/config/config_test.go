@@ -114,7 +114,7 @@ func TestParseServeErrors(t *testing.T) {
 		{"bad web", []string{"--web=maybe"}, nil, "invalid boolean value"},
 		{"bad web env", nil, map[string]string{EnvWeb: "yes please"}, "invalid AGORA_WEB value"},
 		{"unknown auth", []string{"--auth", "ldap"}, nil, `unknown auth mode "ldap"`},
-		{"token not yet", []string{"--auth", "token"}, nil, "not implemented yet"},
+		{"email not yet", []string{"--auth", "email"}, nil, "not implemented yet"},
 		{"stray arg", []string{"extra"}, nil, "unexpected argument"},
 		{"bad mcp wait", []string{"--mcp-max-wait", "soon"}, nil, "invalid mcp-max-wait"},
 		{"mcp wait too short", []string{"--mcp-max-wait", "10ms"}, nil, "invalid mcp-max-wait"},

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -287,8 +288,8 @@ func TestSDKInfoLogsAreQuiet(t *testing.T) {
 	}
 }
 
-// headerAuth authenticates X-Test-User as an account id; no header is
-// rejected.
+// headerAuth authenticates X-Test-User as an account id, and X-Test-Cred
+// as the id of the token used; no user header is rejected.
 type headerAuth struct{}
 
 func (headerAuth) Authenticate(r *http.Request) (core.Principal, error) {
@@ -296,7 +297,8 @@ func (headerAuth) Authenticate(r *http.Request) (core.Principal, error) {
 	if err != nil || id <= 0 {
 		return core.Principal{}, errors.New("no credentials")
 	}
-	return core.Principal{AccountID: id}, nil
+	cred, _ := strconv.ParseInt(r.Header.Get("X-Test-Cred"), 10, 64)
+	return core.Principal{AccountID: id, Credential: core.Credential{Kind: core.CredentialToken, ID: cred}}, nil
 }
 
 type addHeader struct {
@@ -324,7 +326,7 @@ func TestSessionsAreBoundToTheirPrincipal(t *testing.T) {
 	t.Cleanup(func() { _ = cs.Close() })
 	(&session{t: t, cs: cs}).ok("list", map[string]any{})
 
-	call := func(user string) int {
+	call := func(user string, header ...string) int {
 		t.Helper()
 		body := `{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"list","arguments":{}}}`
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader(body))
@@ -336,6 +338,9 @@ func TestSessionsAreBoundToTheirPrincipal(t *testing.T) {
 		req.Header.Set("Mcp-Session-Id", cs.ID())
 		if user != "" {
 			req.Header.Set("X-Test-User", user)
+		}
+		for i := 0; i+1 < len(header); i += 2 {
+			req.Header.Set(header[i], header[i+1])
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -350,6 +355,15 @@ func TestSessionsAreBoundToTheirPrincipal(t *testing.T) {
 	}
 	if got := call(""); got != http.StatusUnauthorized {
 		t.Fatalf("no credentials on the session: %d", got)
+	}
+	// Another token of the same account continues the session.
+	if got := call("1", "X-Test-Cred", "7"); got != http.StatusOK {
+		t.Fatalf("same account, another token: %d", got)
+	}
+	// A session id the guard does not know is refused, so the client starts
+	// a new session instead of reaching one the SDK may still hold.
+	if got := call("1", "Mcp-Session-Id", "not-a-session"); got != http.StatusNotFound {
+		t.Fatalf("unknown session: %d", got)
 	}
 	// The owner still works.
 	(&session{t: t, cs: cs}).ok("list", map[string]any{})
@@ -461,4 +475,62 @@ func TestListShowsLiveConversationsInPages(t *testing.T) {
 	if out, isErr := alice.call("list", map[string]any{"status": "done"}); !isErr || !strings.Contains(out, "invalid") {
 		t.Fatalf("bad status = %q", out)
 	}
+}
+
+// swapToken sends whatever token it currently holds.
+type swapToken struct {
+	mu    sync.Mutex
+	token string
+}
+
+func (s *swapToken) set(tok string) { s.mu.Lock(); s.token = tok; s.mu.Unlock() }
+
+func (s *swapToken) RoundTrip(r *http.Request) (*http.Response, error) {
+	s.mu.Lock()
+	tok := s.token
+	s.mu.Unlock()
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+tok)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// TestSessionsSurviveTokenRotation: a session started with one token keeps
+// working with another token of the same account after the first is
+// revoked; each call is authorized with the token it carries.
+func TestSessionsSurviveTokenRotation(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	first, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := svc.AuthenticateToken(t.Context(), first.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(mcpserver.Handler(svc, auth.Bearer{Service: svc}, mcpserver.Options{}))
+	t.Cleanup(srv.Close)
+	tok := &swapToken{token: first.Secret}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
+		&mcp.StreamableClientTransport{Endpoint: srv.URL, HTTPClient: &http.Client{Transport: tok}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	s := &session{t: t, cs: cs}
+	s.ok("start", map[string]any{"conversation": "c", "agent": "root-agent"})
+
+	second, err := svc.IssueToken(t.Context(), admin, "root", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RevokeToken(t.Context(), admin, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	tok.set(second.Secret)
+	s.ok("say", map[string]any{"conversation": "c", "agent": "root-agent", "body": "after rotation"})
 }
