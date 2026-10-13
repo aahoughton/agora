@@ -283,3 +283,51 @@ func TestSnapshotNeverReplacesAnother(t *testing.T) {
 		t.Fatalf("snapshots = %v", matches)
 	}
 }
+
+// A new database is private even in a directory others can read, and so
+// are SQLite's files beside it.
+func TestNewDatabaseIsPrivate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "agora.db")
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(t.Context(), "INSERT INTO namespaces (name, created_at) VALUES ('x', 1)"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := os.Stat(f)
+		if err != nil {
+			continue // a sidecar may not exist
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("%s: mode %o", filepath.Base(f), perm)
+		}
+	}
+}
+
+func TestReadableDatabaseIsReported(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agora.db")
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var logs strings.Builder
+	db, err = OpenWith(t.Context(), path, Options{Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if !strings.Contains(logs.String(), "readable by other users") {
+		t.Fatalf("no warning: %s", logs.String())
+	}
+}

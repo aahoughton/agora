@@ -65,6 +65,22 @@ func openAt(ctx context.Context, path string, version int, opts Options) (*sql.D
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("store: create database directory: %w", err)
 	}
+	// SQLite would create the file with the process umask (often 0644) and
+	// give its -wal and -shm files the same mode; create it private first.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	switch {
+	case err == nil:
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
+	case errors.Is(err, os.ErrExist):
+		if info, err := os.Stat(path); err == nil && info.Mode().Perm()&0o077 != 0 && opts.Logger != nil {
+			opts.Logger.Warn("database file is readable by other users; chmod 600 it and its -wal and -shm files",
+				"path", path, "mode", fmt.Sprintf("%o", info.Mode().Perm()))
+		}
+	default:
+		return nil, fmt.Errorf("store: create %s: %w", path, err)
+	}
 	db, err := sql.Open("sqlite", fileURI(path, dsnOptions))
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
