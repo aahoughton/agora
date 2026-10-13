@@ -575,3 +575,84 @@ func TestTUIChecksItsToken(t *testing.T) {
 		t.Fatalf("tui with a bad token = %+v", r)
 	}
 }
+
+func TestBackupDumpAndLoad(t *testing.T) {
+	url, token, svc := tokenServer(t)
+	admin, err := svc.AuthenticateToken(t.Context(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(t.Context(), admin, "default", core.StartParams{Name: "c", Agent: "a", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	with := map[string]string{"AGORA_TOKEN": token}
+	dir := t.TempDir()
+	cli := func(env map[string]string, args ...string) cliResult {
+		return runCLIInput(t.Context(), url, "", env, args...)
+	}
+
+	backup := filepath.Join(dir, "backup.db")
+	if r := cli(nil, "backup", "-o", backup); r.code != exitError {
+		t.Fatalf("backup without a token = %+v", r)
+	}
+	if r := cli(with, "backup", "-o", backup); r.code != exitOK {
+		t.Fatalf("backup = %+v", r)
+	}
+	if info, err := os.Stat(backup); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("backup file: %v %v", info, err)
+	}
+	if r := cli(with, "backup", "-o", backup); r.code != exitError || !strings.Contains(r.stderr, "exists") {
+		t.Fatalf("backup over an existing file = %+v", r)
+	}
+	db, err := store.Open(t.Context(), backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var convs int
+	if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM conversations").Scan(&convs); err != nil || convs != 1 {
+		t.Fatalf("backup holds %d conversations, %v", convs, err)
+	}
+	_ = db.Close()
+
+	for _, bad := range [][]string{{"dump", "-o", "x"}, {"dump", "--all", "--namespace", "default", "-o", "x"}, {"dump", "--all"}} {
+		if r := cli(with, bad...); r.code != exitUsage {
+			t.Fatalf("%v = %+v", bad, r)
+		}
+	}
+	full, part := filepath.Join(dir, "full.jsonl"), filepath.Join(dir, "default.jsonl")
+	if r := cli(with, "dump", "--all", "-o", full); r.code != exitOK {
+		t.Fatalf("dump --all = %+v", r)
+	}
+	if r := cli(with, "dump", "--namespace", "default", "-o", part); r.code != exitOK {
+		t.Fatalf("dump --namespace = %+v", r)
+	}
+
+	loaded := filepath.Join(dir, "loaded.db")
+	if r := cli(nil, "load", "--db", loaded, "-i", full); r.code != exitOK || !strings.Contains(r.stdout, "loaded") {
+		t.Fatalf("load = %+v", r)
+	}
+	if r := cli(nil, "load", "--db", loaded, "-i", part); r.code != exitError || !strings.Contains(r.stderr, "exists") {
+		t.Fatalf("load over an existing database = %+v", r)
+	}
+	if r := cli(nil, "load", "--db", filepath.Join(dir, "ns.db"), "-i", part); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
+		t.Fatalf("load namespace dump = %+v", r)
+	}
+
+	// A cut-off dump is refused, and no database is left behind.
+	raw, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitAfter(strings.TrimRight(string(raw), "\n"), "\n")
+	cut := filepath.Join(dir, "cut.jsonl")
+	if err := os.WriteFile(cut, []byte(strings.Join(lines[:len(lines)-1], "")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "cut.db")
+	if r := cli(nil, "load", "--db", target, "-i", cut); r.code != exitError || !strings.Contains(r.stderr, "cut off") {
+		t.Fatalf("load of a cut-off dump = %+v", r)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("a failed load left %s: %v", target, err)
+	}
+}

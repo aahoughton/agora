@@ -3,6 +3,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -334,4 +335,119 @@ func (c *Client) CreateNamespace(ctx context.Context, name string) (core.Namespa
 	var out core.Namespace
 	err := c.do(ctx, http.MethodPost, "/v1/namespaces", nil, map[string]any{"name": name}, &out)
 	return out, err
+}
+
+// stream sends a GET and returns the response for the caller to read and
+// close, or the server's error.
+func (c *Client) stream(ctx context.Context, path string, query url.Values) (*http.Response, error) {
+	u := *c.base
+	u.Path += path
+	u.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		defer func() { _ = resp.Body.Close() }()
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		var eb struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(raw, &eb) != nil || eb.Error.Code == "" {
+			return nil, &Error{Status: resp.StatusCode, Code: "http_" + strconv.Itoa(resp.StatusCode), Message: http.StatusText(resp.StatusCode)}
+		}
+		return nil, &Error{Status: resp.StatusCode, Code: eb.Error.Code, Message: eb.Error.Message}
+	}
+	return resp, nil
+}
+
+// Backup writes a copy of the server's database to w and checks that all
+// of it arrived.
+func (c *Client) Backup(ctx context.Context, w io.Writer) error {
+	resp, err := c.stream(ctx, "/v1/backup", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	n, err := io.Copy(w, resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.ContentLength >= 0 && n != resp.ContentLength {
+		return fmt.Errorf("client: backup cut off at %d of %d bytes", n, resp.ContentLength)
+	}
+	return nil
+}
+
+// Dump writes a dump of namespace ns (or, with ns empty, of everything) to
+// w.
+func (c *Client) Dump(ctx context.Context, ns string, w io.Writer) error {
+	q := url.Values{}
+	if ns != "" {
+		q.Set("namespace", ns)
+	}
+	resp, err := c.stream(ctx, "/v1/dump", q)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return copyDump(w, resp.Body)
+}
+
+// copyDump copies a dump line by line, checking that it starts with a dump
+// header and ends with an end record that counts the rows before it: the
+// server cannot report a failure once it has started sending.
+func copyDump(w io.Writer, body io.Reader) error {
+	r := bufio.NewReaderSize(body, 1<<20)
+	rows, ended := 0, false
+	for first := true; ; first = false {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 0 {
+			var rec struct {
+				Format string `json:"format"`
+				Table  string `json:"table"`
+				End    bool   `json:"end"`
+				Rows   int    `json:"rows"`
+			}
+			if jerr := json.Unmarshal(line, &rec); jerr != nil {
+				return fmt.Errorf("client: the dump has a malformed line: %w", jerr)
+			}
+			switch {
+			case first && rec.Format != core.DumpFormat:
+				return errors.New("client: the server did not send an agora dump")
+			case ended:
+				return errors.New("client: the dump continues after its end record")
+			case rec.End:
+				if rec.Rows != rows {
+					return fmt.Errorf("client: the dump ends claiming %d rows after %d", rec.Rows, rows)
+				}
+				ended = true
+			case rec.Table != "":
+				rows++
+			}
+			if _, werr := w.Write(line); werr != nil {
+				return werr
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if !ended {
+		return errors.New("client: the dump was cut off (no end record); the server may have failed")
+	}
+	return nil
 }

@@ -166,3 +166,21 @@ func TestTokenLifetimesAreBounded(t *testing.T) {
 		t.Fatal("a one-hour token has no expiry")
 	}
 }
+
+func TestBackupAndDumpNeedAdmins(t *testing.T) {
+	root := newTokenServer(t)
+	root.ok("POST", "/v1/accounts", map[string]any{"name": "pat"}, http.StatusCreated, nil)
+	var issued struct {
+		Secret string `json:"secret"`
+	}
+	root.ok("POST", "/v1/accounts/pat/tokens", map[string]any{}, http.StatusCreated, &issued)
+	root.ok("PUT", "/v1/namespaces/default/members/pat", map[string]any{"role": "member"}, http.StatusOK, nil)
+	pat := root.as(issued.Secret)
+	pat.wantError("GET", "/v1/backup", nil, http.StatusForbidden, "forbidden")
+	pat.wantError("GET", "/v1/dump", nil, http.StatusForbidden, "forbidden")
+	pat.wantError("GET", "/v1/dump?namespace=default", nil, http.StatusForbidden, "forbidden")
+	root.ok("PUT", "/v1/namespaces/default/members/pat", map[string]any{"role": "admin"}, http.StatusOK, nil)
+	if got := pat.do("GET", "/v1/dump?namespace=default", nil, nil); got != http.StatusOK {
+		t.Fatalf("namespace admin dump = %d", got)
+	}
+}

@@ -186,6 +186,41 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /v1/backup:
+    get:
+      operationId: backup
+      description: >
+        Server admins only. A consistent copy of the whole database, an
+        SQLite file, with its Content-Length. To restore: stop the server,
+        replace its database file with the copy, start it.
+      responses:
+        "200":
+          description: The database file.
+          content:
+            application/vnd.sqlite3: {}
+        "403": { $ref: "#/components/responses/Error" }
+
+  /v1/dump:
+    get:
+      operationId: dump
+      description: >
+        JSON Lines: a header (format agora-dump, version, schema version),
+        one record per table row, and an end record counting the rows; a
+        dump without its end record was cut off. With namespace, one
+        namespace's conversations, participants and messages with account
+        references cleared (namespace admins); without, every table but
+        browser sessions (server admins). Load with agora load.
+      parameters:
+        - name: namespace
+          in: query
+          schema: { $ref: "#/components/schemas/Name" }
+      responses:
+        "200":
+          description: The dump.
+          content:
+            application/jsonl: {}
+        "403": { $ref: "#/components/responses/Error" }
+
   /v1/namespaces/{ns}/members:
     parameters:
       - $ref: "#/components/parameters/ns"

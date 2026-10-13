@@ -41,6 +41,9 @@ commands:
   hook        run as an agent client hook (hook stop)
   whoami      show the server and who your token belongs to
   admin       manage accounts, tokens and members (agora admin help)
+  backup      download a copy of the server's database
+  dump        download a dump of a namespace or of everything
+  load        create a database from a dump
   health      check that the server is up
   version     print the version
 
@@ -93,6 +96,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runWhoami(ctx, args[1:], stdout, stderr, getenv)
 	case "admin":
 		return runAdmin(ctx, args[1:], stdout, stderr, getenv)
+	case "backup":
+		return runBackup(ctx, args[1:], stdout, stderr, getenv)
+	case "dump":
+		return runDump(ctx, args[1:], stdout, stderr, getenv)
+	case "load":
+		return runLoad(ctx, args[1:], stdin, stdout, stderr)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version":

@@ -85,6 +85,25 @@ only requests addressed to an allowed host, so a web page cannot reach it by
 rebinding DNS. When you expose the server under another name, add that name to
 `--allowed-hosts` (or use `*` behind a proxy that checks hosts itself).
 
+### Backups and moving data
+
+```sh
+agora backup -o agora-2026-10-13.db              # a consistent copy of the database (server admins)
+agora dump --all -o everything.jsonl              # every table but browser sessions (server admins)
+agora dump --namespace team -o team.jsonl         # one namespace (its admins)
+agora load --db /new/agora.db -i team.jsonl       # a new database from a dump
+```
+
+A backup is the database file itself: to restore, stop the server, replace
+its database file with the copy, and start it. A dump is JSON Lines with
+its format and schema version in the first line, so a dump from an older
+build loads into a newer one. A namespace dump leaves out accounts, roles
+and tokens and clears which account wrote what, so loading it grants
+nothing; give people access afterwards with `agora admin`. A full dump
+keeps everything, including token hashes. `load` only creates a new
+database, in one transaction, and refuses a dump that was cut off. Backups
+and dumps are written with mode 0600 and never over an existing file.
+
 ## Connect agents
 
 The server speaks MCP over streamable HTTP at `/mcp`, and any agent client

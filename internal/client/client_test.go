@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,5 +68,29 @@ func TestRedirectsStayOnTheServer(t *testing.T) {
 	}
 	if _, err := c.ListNamespaces(t.Context()); err == nil || leaked {
 		t.Fatalf("err = %v, token sent elsewhere: %v", err, leaked)
+	}
+}
+
+func TestDumpChecksItArrivedWhole(t *testing.T) {
+	bodies := map[string]string{
+		"no end": `{"format":"agora-dump","version":1,"schema":2,"created_at":"x"}` + "\n" +
+			`{"table":"namespaces","row":{"id":1,"name":"default","created_at":1}}` + "\n",
+		"wrong count": `{"format":"agora-dump","version":1,"schema":2,"created_at":"x"}` + "\n" + `{"end":true,"rows":3}` + "\n",
+		"not a dump":  "<html>oops</html>\n",
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, body)
+			}))
+			t.Cleanup(srv.Close)
+			c, err := New(srv.URL, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Dump(t.Context(), "", io.Discard); err == nil {
+				t.Fatal("an incomplete dump was accepted")
+			}
+		})
 	}
 }

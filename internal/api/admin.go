@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -161,3 +162,53 @@ func (h *handler) removeMember(w http.ResponseWriter, r *http.Request, p core.Pr
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
+
+// backup streams a copy of the database (server admins).
+func (h *handler) backup(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	err := h.svc.Backup(r.Context(), p, func(size int64, body io.Reader) error {
+		w.Header().Set("Content-Type", "application/vnd.sqlite3")
+		w.Header().Set("Content-Disposition", `attachment; filename="agora.db"`)
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+		w.Header().Set("Cache-Control", "no-store")
+		_, err := io.Copy(w, body)
+		return err
+	})
+	if err == nil {
+		h.audit(r, p, "backup", "database")
+	}
+	return err
+}
+
+// dump streams a dump: of one namespace with ?namespace=, else of everything.
+func (h *handler) dump(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	ns := r.URL.Query().Get("namespace")
+	started := false
+	sw := writerFunc(func(b []byte) (int, error) {
+		if !started {
+			started = true
+			w.Header().Set("Content-Type", "application/jsonl")
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		return w.Write(b)
+	})
+	err := h.svc.Dump(r.Context(), p, ns, sw)
+	switch {
+	case err == nil:
+		target := ns
+		if target == "" {
+			target = "all"
+		}
+		h.audit(r, p, "dump", target)
+		return nil
+	case started:
+		// The status is sent; the missing end record tells the reader.
+		h.logger.Error("dump cut off", "err", err)
+		return nil
+	default:
+		return err
+	}
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(b []byte) (int, error) { return f(b) }

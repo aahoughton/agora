@@ -89,6 +89,8 @@ var routes = []route{
 	{"GET", "/v1/namespaces/{ns}/members", (*handler).listMembers},
 	{"PUT", "/v1/namespaces/{ns}/members/{account}", (*handler).setMember},
 	{"DELETE", "/v1/namespaces/{ns}/members/{account}", (*handler).removeMember},
+	{"GET", "/v1/backup", (*handler).backup},
+	{"GET", "/v1/dump", (*handler).dump},
 }
 
 // Register adds the API routes and GET /v1/openapi.yaml to mux.
