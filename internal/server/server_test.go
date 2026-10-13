@@ -148,3 +148,24 @@ func TestLoopbackServerRefusesReboundHosts(t *testing.T) {
 		t.Fatalf("open server = %d", got)
 	}
 }
+
+func TestRequestsAreLogged(t *testing.T) {
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	srv := httptest.NewServer(New(Deps{Authenticator: auth.None{}, Logger: logger}))
+	defer srv.Close()
+
+	do(t, http.MethodGet, srv.URL+"/healthz?x=secret")
+	do(t, http.MethodGet, srv.URL+"/v1/nowhere")
+	for _, want := range []string{
+		"level=DEBUG msg=http method=GET path=/healthz status=200 bytes=16 dur=",
+		"level=INFO msg=http method=GET path=/v1/nowhere status=404",
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("log lacks %q:\n%s", want, buf.String())
+		}
+	}
+	if strings.Contains(buf.String(), "secret") {
+		t.Errorf("query string logged:\n%s", buf.String())
+	}
+}

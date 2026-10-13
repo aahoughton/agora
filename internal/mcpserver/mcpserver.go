@@ -119,6 +119,7 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 		Capabilities: &mcp.ServerCapabilities{},
 	})
 	t := &tools{svc: svc, p: p, ns: ns, maxWait: opts.MaxWait, w: w}
+	s.AddReceivingMiddleware(logCalls(opts.Logger, p, ns))
 	// Every tool acts only on this server (closed world). The log is
 	// append-only, so writes are not destructive, except close, which ends
 	// the conversation for everyone. read and wait move the caller's read
@@ -191,7 +192,8 @@ func text(s string) *mcp.CallToolResult {
 }
 
 // failure reports an error to the agent as a tool result it can act on.
-func failure(err error) (*mcp.CallToolResult, any, error) {
+func failure(ctx context.Context, err error) (*mcp.CallToolResult, any, error) {
+	noteFailure(ctx, err)
 	msg := err.Error()
 	if core.CodeOf(err) == "" {
 		msg = "internal error"
@@ -228,12 +230,13 @@ func (t *tools) list(ctx context.Context, _ *mcp.CallToolRequest, in listIn) (*m
 	case lp.Limit == 0:
 		lp.Limit = defaultListLimit
 	case lp.Limit < 0 || lp.Limit > maxListLimit:
-		return failure(&core.Error{Code: core.CodeInvalid, Message: fmt.Sprintf("limit must be between 1 and %d", maxListLimit)})
+		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: fmt.Sprintf("limit must be between 1 and %d", maxListLimit)})
 	}
 	page, err := t.svc.ListConversations(ctx, t.p, t.ns, lp)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	note(ctx, slog.Int("conversations", len(page.Conversations)), slog.Bool("more", page.Next != ""))
 	return text(renderList(t.w, page)), nil, nil
 }
 
@@ -250,19 +253,20 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 	sp := core.StartParams{Name: in.Conversation, Topic: in.Topic, End: core.EndCondition(in.End), Agent: in.Agent, Join: true}
 	switch {
 	case in.EndsInMinutes < 0:
-		return failure(&core.Error{Code: core.CodeInvalid, Message: "ends_in_minutes must be positive"})
+		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: "ends_in_minutes must be positive"})
 	case in.EndsInMinutes > 0:
 		ends := time.Now().Add(time.Duration(in.EndsInMinutes) * time.Minute)
 		sp.EndsAt = &ends
 	}
 	c, err := t.svc.Start(ctx, t.p, ns, sp)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
 	st, err := t.svc.StandingOf(ctx, t.p, ns, c.Name, in.Agent)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	noteStanding(ctx, st)
 	return text(fmt.Sprintf("started %s (end: %s)\n%s", c.Name, c.End, renderStanding(st))), nil, nil
 }
 
@@ -276,12 +280,13 @@ func (t *tools) join(ctx context.Context, _ *mcp.CallToolRequest, in joinIn) (*m
 	ns := t.ns
 	st, err := t.svc.Join(ctx, t.p, ns, in.Conversation, core.JoinParams{Agent: in.Agent, Resume: in.Resume})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
 	c, err := t.svc.GetConversation(ctx, t.p, ns, in.Conversation)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	noteStanding(ctx, st)
 	return text(renderConversation(t.w, c) + "\n" + renderStanding(st)), nil, nil
 }
 
@@ -298,7 +303,11 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 		Agent: in.Agent, After: in.After, Limit: in.Limit, Tail: in.Tail, MaxBytes: MaxReadBytes,
 	})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
+	}
+	note(ctx, slog.Int("messages", len(r.Messages)), slog.Bool("more", r.More))
+	if r.Standing != nil {
+		noteStanding(ctx, *r.Standing)
 	}
 	return text(renderRead(t.w, r)), nil, nil
 }
@@ -316,8 +325,10 @@ func (t *tools) say(ctx context.Context, _ *mcp.CallToolRequest, in sayIn) (*mcp
 		Agent: in.Agent, Body: in.Body, ReplyTo: in.ReplyTo, ExpectedLastSeq: in.ExpectedLastSeq,
 	})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	note(ctx, slog.Int64("seq", r.Message.Seq), slog.Int("body_bytes", len(in.Body)))
+	noteStanding(ctx, r.Standing)
 	return text(fmt.Sprintf("posted #%d\n%s", r.Message.Seq, renderStanding(r.Standing))), nil, nil
 }
 
@@ -330,7 +341,7 @@ type waitIn struct {
 func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, any, error) {
 	timeout := t.maxWait
 	if in.TimeoutSeconds < 0 || time.Duration(in.TimeoutSeconds)*time.Second > t.maxWait {
-		return failure(&core.Error{Code: core.CodeInvalid, Message: t.w.Phrase(wording.WaitTimeoutRange,
+		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: t.w.Phrase(wording.WaitTimeoutRange,
 			map[string]any{"Max": int(t.maxWait.Seconds())})})
 	}
 	if in.TimeoutSeconds > 0 {
@@ -338,8 +349,10 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	}
 	d, err := t.svc.Wait(ctx, t.p, t.ns, in.Conversation, core.WaitParams{Agent: in.Agent, Timeout: timeout, InlineBytes: InlineBytes})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	note(ctx, slog.Duration("timeout", timeout), slog.Int("new", d.New), slog.Bool("timed_out", d.TimedOut))
+	noteStanding(ctx, d.Standing)
 	return text(renderDigest(t.w, d)), nil, nil
 }
 
@@ -350,8 +363,9 @@ type statusIn struct {
 func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, in statusIn) (*mcp.CallToolResult, any, error) {
 	sts, err := t.svc.Status(ctx, t.p, t.ns, in.Agent)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	note(ctx, slog.Int("conversations", len(sts)))
 	return text(renderStatus(t.w, sts)), nil, nil
 }
 
@@ -364,8 +378,9 @@ type concludeIn struct {
 func (t *tools) conclude(ctx context.Context, _ *mcp.CallToolRequest, in concludeIn) (*mcp.CallToolResult, any, error) {
 	st, err := t.svc.Conclude(ctx, t.p, t.ns, in.Conversation, core.ConcludeParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	noteStanding(ctx, st)
 	return text(renderStanding(st)), nil, nil
 }
 
@@ -378,8 +393,9 @@ type leaveIn struct {
 func (t *tools) leave(ctx context.Context, _ *mcp.CallToolRequest, in leaveIn) (*mcp.CallToolResult, any, error) {
 	st, err := t.svc.Leave(ctx, t.p, t.ns, in.Conversation, core.LeaveParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	noteStanding(ctx, st)
 	return text(renderStanding(st)), nil, nil
 }
 
@@ -392,8 +408,9 @@ type closeIn struct {
 func (t *tools) closeConv(ctx context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, any, error) {
 	st, err := t.svc.Close(ctx, t.p, t.ns, in.Conversation, core.CloseParams{Agent: in.Agent, Body: in.Body})
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	noteStanding(ctx, st)
 	return text(renderStanding(st)), nil, nil
 }
 
@@ -409,19 +426,21 @@ func (t *tools) presence(ctx context.Context, _ *mcp.CallToolRequest, in presenc
 	pp := core.PresenceParams{Agent: in.Agent, Presence: in.Presence, Note: in.Note}
 	switch {
 	case in.CheckBackInMinutes < 0:
-		return failure(&core.Error{Code: core.CodeInvalid, Message: "check_back_in_minutes must be positive"})
+		return failure(ctx, &core.Error{Code: core.CodeInvalid, Message: "check_back_in_minutes must be positive"})
 	case in.CheckBackInMinutes > 0:
 		at := time.Now().Add(time.Duration(in.CheckBackInMinutes) * time.Minute)
 		pp.CheckBackBy = &at
 	}
 	ns := t.ns
 	if _, err := t.svc.SetPresence(ctx, t.p, ns, in.Conversation, pp); err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
 	st, err := t.svc.StandingOf(ctx, t.p, ns, in.Conversation, in.Agent)
 	if err != nil {
-		return failure(err)
+		return failure(ctx, err)
 	}
+	note(ctx, slog.String("presence", in.Presence))
+	noteStanding(ctx, st)
 	return text("presence: " + in.Presence + "\n" + renderStanding(st)), nil, nil
 }
 

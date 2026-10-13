@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,6 +27,9 @@ const (
 	EnvThemeDir     = "AGORA_THEME_DIR"
 
 	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
+
+	EnvLogLevel  = "AGORA_LOG_LEVEL"
+	EnvLogFormat = "AGORA_LOG_FORMAT"
 )
 
 // DefaultMCPMaxWait keeps MCP waits under the 60s tool-call timeout several
@@ -58,6 +62,20 @@ type Serve struct {
 	AnyHost      bool
 	// ThemeDir holds HTML theme files that replace the default theme's.
 	ThemeDir string
+	// LogLevel is the least severe level logged. At info the server logs
+	// each MCP tool call; at debug, each HTTP request too.
+	LogLevel slog.Level
+	// LogFormat is "text" (logfmt) or "json".
+	LogFormat string
+}
+
+// NewLogger returns the logger cfg describes, writing to w.
+func (cfg Serve) NewLogger(w io.Writer) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
+	if cfg.LogFormat == "json" {
+		return slog.New(slog.NewJSONHandler(w, opts))
+	}
+	return slog.New(slog.NewTextHandler(w, opts))
 }
 
 // Getenv looks up an environment variable; os.Getenv satisfies it.
@@ -74,6 +92,8 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	auth := fs.String("auth", "", "auth mode: none (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
+	logLevel := fs.String("log-level", "", "least severe level logged: debug, info, warn or error (env "+EnvLogLevel+", default info)")
+	logFormat := fs.String("log-format", "", "log format: text or json (env "+EnvLogFormat+", default text)")
 	mcpMaxWait := fs.String("mcp-max-wait", "", "longest MCP wait, e.g. 50s; keep it under your MCP clients' tool timeout (env "+EnvMCPMaxWait+", default 50s)")
 	if err := fs.Parse(args); err != nil {
 		return Serve{}, err
@@ -119,6 +139,18 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 		return Serve{}, fmt.Errorf("serve: invalid mcp-max-wait %q: want a duration between 1s and 10m", waitStr)
 	}
 	cfg.MCPMaxWait = d
+
+	lvl := firstNonEmpty(*logLevel, getenv(EnvLogLevel), "info")
+	switch strings.ToLower(lvl) {
+	case "debug", "info", "warn", "error":
+		_ = cfg.LogLevel.UnmarshalText([]byte(lvl))
+	default:
+		return Serve{}, fmt.Errorf("serve: invalid log-level %q: want debug, info, warn or error", lvl)
+	}
+	cfg.LogFormat = firstNonEmpty(*logFormat, getenv(EnvLogFormat), "text")
+	if cfg.LogFormat != "text" && cfg.LogFormat != "json" {
+		return Serve{}, fmt.Errorf("serve: invalid log-format %q: want text or json", cfg.LogFormat)
+	}
 
 	switch hosts := strings.TrimSpace(firstNonEmpty(*allowed, getenv(EnvAllowedHosts))); hosts {
 	case "":

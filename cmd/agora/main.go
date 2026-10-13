@@ -66,7 +66,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		logger := slog.New(slog.NewTextHandler(stderr, nil))
+		logger := cfg.NewLogger(stderr)
 		if err := serve(ctx, cfg, logger, nil); err != nil {
 			logger.Error("serve failed", "err", err)
 			return 1

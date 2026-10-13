@@ -276,8 +276,14 @@ func TestSDKInfoLogsAreQuiet(t *testing.T) {
 	if err := cs.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(buf.String(), "level=INFO") {
-		t.Fatalf("info logs leaked: %s", buf.String())
+	// The only info lines are the server's own session and call lines.
+	for line := range strings.Lines(buf.String()) {
+		if strings.Contains(line, "level=INFO") && !strings.Contains(line, `msg="mcp session"`) && !strings.Contains(line, `msg="mcp call"`) {
+			t.Fatalf("SDK info log leaked: %s", line)
+		}
+	}
+	if !strings.Contains(buf.String(), `msg="mcp session" ns=default account=0 session=`) || !strings.Contains(buf.String(), "client=test") {
+		t.Fatalf("no session line: %s", buf.String())
 	}
 }
 

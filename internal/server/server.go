@@ -52,6 +52,9 @@ func New(d Deps) http.Handler {
 	if len(d.AllowedHosts) > 0 {
 		h = allowHosts(d.AllowedHosts, h)
 	}
+	if d.Logger != nil {
+		h = logRequests(d.Logger, h)
+	}
 	return h
 }
 

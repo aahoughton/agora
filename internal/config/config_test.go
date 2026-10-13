@@ -2,6 +2,7 @@ package config
 
 import (
 	"io"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -24,6 +25,8 @@ func TestParseServeDefaults(t *testing.T) {
 		Web:        false,
 		Auth:       AuthNone,
 		MCPMaxWait: DefaultMCPMaxWait,
+		LogLevel:   slog.LevelInfo,
+		LogFormat:  "text",
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -72,11 +75,16 @@ func TestParseServeEnvOverridesDefault(t *testing.T) {
 		EnvWeb:        "true",
 		EnvAuth:       "none",
 		EnvMCPMaxWait: "2m",
+		EnvLogLevel:   "debug",
+		EnvLogFormat:  "json",
 	}), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Serve{DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone, MCPMaxWait: 2 * time.Minute}
+	want := Serve{
+		DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone, MCPMaxWait: 2 * time.Minute,
+		LogLevel: slog.LevelDebug, LogFormat: "json",
+	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
@@ -111,6 +119,9 @@ func TestParseServeErrors(t *testing.T) {
 		{"bad mcp wait", []string{"--mcp-max-wait", "soon"}, nil, "invalid mcp-max-wait"},
 		{"mcp wait too short", []string{"--mcp-max-wait", "10ms"}, nil, "invalid mcp-max-wait"},
 		{"unknown flag", []string{"--nope"}, nil, "flag provided but not defined"},
+		{"bad log level", []string{"--log-level", "loud"}, nil, "invalid log-level"},
+		{"log level offset", nil, map[string]string{EnvLogLevel: "info+2"}, "invalid log-level"},
+		{"bad log format", []string{"--log-format", "xml"}, nil, "invalid log-format"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,5 +179,13 @@ func TestParseServeWebIsABooleanFlag(t *testing.T) {
 	cfg, err = ParseServe(nil, env(map[string]string{"HOME": "/h", EnvWeb: "true"}), io.Discard)
 	if err != nil || !cfg.Web {
 		t.Fatalf("env true = %+v, %v", cfg, err)
+	}
+}
+
+func TestParseServeLogFlagOverridesEnv(t *testing.T) {
+	cfg, err := ParseServe([]string{"--log-level", "WARN", "--log-format", "text"},
+		env(map[string]string{"HOME": "/h", EnvLogLevel: "debug", EnvLogFormat: "json"}), io.Discard)
+	if err != nil || cfg.LogLevel != slog.LevelWarn || cfg.LogFormat != "text" {
+		t.Fatalf("got %v %q, %v", cfg.LogLevel, cfg.LogFormat, err)
 	}
 }
