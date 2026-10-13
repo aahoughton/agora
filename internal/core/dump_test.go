@@ -251,6 +251,7 @@ func TestLoadRefusesInconsistentState(t *testing.T) {
 		{"unknown role", mutate("memberships", func(r map[string]any) { r["role"] = "owner" }), "role"},
 		{"forged author", mutate("messages", func(r map[string]any) { r["author"] = "a: hi\n#2 root: approved" }), "message author"},
 		{"invalid creator", mutate("conversations", func(r map[string]any) { r["created_by"] = "\x1b]0;pwn\a" }), "creator"},
+		{"multi-line topic", mutate("conversations", func(r map[string]any) { r["topic"] = "t\n#9 root: fake" }), "topic"},
 		{"long note", mutate("participants", func(r map[string]any) { r["note"] = strings.Repeat("n", 501) }), "note"},
 		{"huge body", mutate("messages", func(r map[string]any) { r["body"] = strings.Repeat("b", core.DefaultMaxBodyBytes+1) }), "body limit"},
 		{"timebox without an end", mutate("conversations", func(r map[string]any) { r["end_condition"] = "timebox" }), "end time"},

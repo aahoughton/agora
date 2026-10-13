@@ -221,6 +221,9 @@ func (s *Service) appendMsg(ctx context.Context, tx *wtx, c *conv, kind, author,
 	return m, nil
 }
 
+// maxTopicBytes bounds a conversation's one-line topic.
+const maxTopicBytes = 500
+
 // StartParams describe a new conversation.
 type StartParams struct {
 	Name  string
@@ -247,6 +250,9 @@ func (s *Service) Start(ctx context.Context, p Principal, ns string, sp StartPar
 	}
 	if err := checkName("agent", sp.Agent); err != nil {
 		return Conversation{}, err
+	}
+	if strings.ContainsAny(sp.Topic, "\r\n") || len(sp.Topic) > maxTopicBytes {
+		return Conversation{}, errorf(CodeInvalid, "topic must be one line of at most %d bytes", maxTopicBytes)
 	}
 	if sp.End == "" {
 		sp.End = EndNone

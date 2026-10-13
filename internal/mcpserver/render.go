@@ -92,16 +92,22 @@ func renderRead(w *wording.Wording, r core.ReadResult) string {
 }
 
 // writeMessages writes one line per single-line message, and a header line
-// plus the body for multi-line ones.
+// plus the body for multi-line ones. Every body line is indented, so only a
+// real message starts a line with "#": a body cannot pass off its lines as
+// other messages.
 func writeMessages(b *strings.Builder, w *wording.Wording, msgs []core.Message) {
 	for _, m := range msgs {
 		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo))
 		body := strings.TrimSpace(m.Body)
-		if strings.Contains(body, "\n") {
-			fmt.Fprintf(b, "%s\n%s\n\n", head, body)
-		} else {
+		if !strings.Contains(body, "\n") {
 			fmt.Fprintf(b, "%s %s\n", head, body)
+			continue
 		}
+		b.WriteString(head + "\n")
+		for line := range strings.Lines(body) {
+			b.WriteString("  " + strings.TrimRight(line, "\n") + "\n")
+		}
+		b.WriteString("\n")
 	}
 }
 

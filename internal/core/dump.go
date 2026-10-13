@@ -382,8 +382,8 @@ const loadClockSkew = 24 * time.Hour
 // keys alone do not: each conversation's log runs 1..last_seq without gaps,
 // read positions lie within the log, replies point back, enumerations hold
 // known values, names (including message authors and creators) are valid,
-// notes and bodies stay within the limits live writes enforce, a timebox
-// has an end time, and no time lies in the future.
+// text stays within the limits live writes enforce, a timebox has an end
+// time, and no time lies in the future.
 func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	// Times may not lie in the future beyond clock skew between servers.
 	latest := now.Add(loadClockSkew).UnixMilli()
@@ -410,6 +410,8 @@ func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time) error {
 			WHERE m.role NOT IN ('viewer', 'observer', 'member', 'admin')`, nil},
 		{"an end time that does not match the end condition of conversation", `SELECT name FROM conversations
 			WHERE (end_condition = 'timebox') != (ends_at IS NOT NULL)`, nil},
+		{"a topic that is not one line of at most 500 bytes in conversation", `SELECT name FROM conversations
+			WHERE instr(topic, char(10)) > 0 OR instr(topic, char(13)) > 0 OR length(CAST(topic AS BLOB)) > ?`, []any{maxTopicBytes}},
 		{"a note longer than 500 bytes in conversation", `SELECT c.name FROM participants p
 			JOIN conversations c ON c.id = p.conversation_id WHERE length(CAST(p.note AS BLOB)) > ?`, []any{maxNoteBytes}},
 		{"a message over the body limit in conversation", `SELECT c.name FROM messages m
