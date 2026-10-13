@@ -31,7 +31,10 @@ func TestConcurrentSessionsRespectTheCap(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if n := opened.Load(); n != 2 {
-		t.Fatalf("%d sessions opened, want 2", n)
+	// A place can be held briefly by an attempt its client abandoned (the
+	// HTTP client may resend a POST on a fresh connection), so fewer than
+	// two may open; more than two never may.
+	if n := opened.Load(); n < 1 || n > 2 {
+		t.Fatalf("%d sessions opened, want 1 or 2", n)
 	}
 }

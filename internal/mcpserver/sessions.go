@@ -41,6 +41,7 @@ type guard struct {
 
 type owner struct {
 	account int64
+	created time.Time
 	seen    time.Time
 	// srv is the session's server; once it has no session left, the SDK
 	// has closed the session and the entry is pruned.
@@ -86,11 +87,16 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "too_many_sessions", err.Error())
 		return
 	}
-	cw := &captureSession{ResponseWriter: w}
 	ref := &serverRef{}
+	// The session is recorded as soon as the SDK names it, before the
+	// response reaches the client, which may send its next request on the
+	// session at once.
+	cw := &captureSession{ResponseWriter: w, named: func(sid string) { g.record(sid, p, ref.srv) }}
 	ctx := context.WithValue(context.WithValue(r.Context(), principalKey{}, p), serverRefKey{}, ref)
-	defer func() { g.record(cw.sid, p, ref.srv) }()
 	g.next.ServeHTTP(cw, r.WithContext(ctx))
+	if cw.sid == "" {
+		g.record("", p, nil) // no session: give back the place admit held
+	}
 }
 
 // admit refuses a new session past the per-account or total cap, after
@@ -125,14 +131,20 @@ func (g *guard) admit(p core.Principal) error {
 }
 
 // prune drops sessions the SDK has closed and entries well past the idle
-// timeout. The caller holds g.mu.
+// timeout. A session is recorded before the SDK finishes starting it, so
+// one younger than startGrace is never taken for closed. The caller holds
+// g.mu.
 func (g *guard) prune(now time.Time) {
 	for id, o := range g.owners {
-		if now.Sub(o.seen) > g.ttl+ownerMargin || (o.srv != nil && !hasSession(o.srv)) {
+		closed := o.srv != nil && now.Sub(o.created) > startGrace && !hasSession(o.srv)
+		if now.Sub(o.seen) > g.ttl+ownerMargin || closed {
 			delete(g.owners, id)
 		}
 	}
 }
+
+// startGrace is how long a new session is kept before the SDK must show it.
+const startGrace = time.Minute
 
 func hasSession(s *mcp.Server) bool {
 	for range s.Sessions() {
@@ -180,7 +192,7 @@ func (g *guard) record(sid string, p core.Principal, srv *mcp.Server) {
 	}
 	now := time.Now()
 	g.prune(now)
-	g.owners[sid] = owner{account: p.AccountID, seen: now, srv: srv}
+	g.owners[sid] = owner{account: p.AccountID, created: now, seen: now, srv: srv}
 }
 
 // SessionUse is one account's open MCP sessions.
@@ -226,21 +238,30 @@ func (g *guard) forget(sid string) {
 	delete(g.owners, sid)
 }
 
-// captureSession records the session id the SDK assigns on initialize.
+// captureSession notes the session id the SDK assigns on initialize and
+// passes it to named before any of the response is sent.
 type captureSession struct {
 	http.ResponseWriter
-	sid string
+	sid   string
+	named func(sid string)
+}
+
+func (c *captureSession) capture() {
+	if c.sid == "" {
+		if sid := c.Header().Get(sessionHeader); sid != "" {
+			c.sid = sid
+			c.named(sid)
+		}
+	}
 }
 
 func (c *captureSession) WriteHeader(code int) {
-	c.sid = c.Header().Get(sessionHeader)
+	c.capture()
 	c.ResponseWriter.WriteHeader(code)
 }
 
 func (c *captureSession) Write(b []byte) (int, error) {
-	if c.sid == "" {
-		c.sid = c.Header().Get(sessionHeader)
-	}
+	c.capture()
 	return c.ResponseWriter.Write(b)
 }
 
