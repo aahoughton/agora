@@ -24,9 +24,13 @@ import (
 )
 
 type client struct {
-	t   *testing.T
-	url string
+	t     *testing.T
+	url   string
+	token string
 }
+
+// as returns a client that sends token as a bearer token.
+func (c *client) as(token string) *client { return &client{t: c.t, url: c.url, token: token} }
 
 func newServer(t *testing.T, authn auth.Authenticator, opts core.Options) *client {
 	return newServerWith(t, authn, opts, api.Options{Logger: slog.New(slog.DiscardHandler)})
@@ -69,6 +73,9 @@ func (c *client) do(method, path string, body any, out any) int {
 	req, err := http.NewRequestWithContext(c.t.Context(), method, c.url+path, rd)
 	if err != nil {
 		c.t.Fatal(err)
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

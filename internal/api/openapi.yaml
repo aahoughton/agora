@@ -8,8 +8,236 @@ info:
     expected and what to do next.
 
     Times are RFC 3339. Errors share one shape (see Error). With auth mode
-    `none` no credentials are needed.
+    `none` no credentials are needed; with `token`, every request but
+    GET /healthz sends `Authorization: Bearer <token>`, and each namespace
+    allows what the caller's role there allows (viewer: read; observer: and
+    comment; member: and take part as an agent; admin: and manage members).
+    Server admins may do anything.
 paths:
+  /v1/whoami:
+    get:
+      operationId: whoami
+      responses:
+        "200":
+          description: The caller, the server's auth mode and version. The anonymous caller (auth mode none) has no account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [auth_mode, version, memberships]
+                properties:
+                  auth_mode: { type: string, enum: [none, token] }
+                  version: { type: string }
+                  account:
+                    description: Null for the anonymous caller.
+                    oneOf:
+                      - $ref: "#/components/schemas/Account"
+                      - type: "null"
+                  memberships:
+                    type: array
+                    items: { $ref: "#/components/schemas/Membership" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /v1/accounts:
+    get:
+      operationId: listAccounts
+      description: Server admins only.
+      responses:
+        "200":
+          description: Every account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accounts]
+                properties:
+                  accounts:
+                    type: array
+                    items: { $ref: "#/components/schemas/Account" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createAccount
+      description: Server admins only. Names are unique regardless of case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { $ref: "#/components/schemas/Name" }
+                server_admin: { type: boolean }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/accounts/{account}:
+    parameters:
+      - $ref: "#/components/parameters/account"
+    patch:
+      operationId: updateAccount
+      description: >
+        Server admins only. The last enabled server admin cannot be disabled
+        or demoted (last_admin).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                disabled: { type: boolean }
+                server_admin: { type: boolean }
+      responses:
+        "200":
+          description: The account afterwards.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/accounts/{account}/tokens:
+    parameters:
+      - $ref: "#/components/parameters/account"
+    get:
+      operationId: listTokens
+      description: The account itself or a server admin. Secrets are never returned.
+      responses:
+        "200":
+          description: The account's tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items: { $ref: "#/components/schemas/Token" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: issueToken
+      description: >
+        The account itself or a server admin. The response is the only time
+        the secret is shown. ttl_seconds 0 (the default) never expires.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                label: { type: string, maxLength: 100, description: One line of printable text. }
+                ttl_seconds: { type: integer, minimum: 0, maximum: 3162240000 }
+      responses:
+        "201":
+          description: Issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Token"
+                  - type: object
+                    required: [secret]
+                    properties:
+                      secret: { type: string }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /v1/accounts/{account}/tokens/revoke:
+    parameters:
+      - $ref: "#/components/parameters/account"
+    post:
+      operationId: revokeAllTokens
+      description: Revokes every token of the account, and the browser sessions they started.
+      responses:
+        "200":
+          description: How many tokens were revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked: { type: integer }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /v1/tokens/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    delete:
+      operationId: revokeToken
+      description: The token's account or a server admin. Also ends the browser sessions it started.
+      responses:
+        "204": { description: Revoked. }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/members:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+    get:
+      operationId: listMembers
+      description: Namespace admins and server admins.
+      responses:
+        "200":
+          description: The namespace's members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /v1/namespaces/{ns}/members/{account}:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+      - $ref: "#/components/parameters/account"
+    put:
+      operationId: setMember
+      description: Namespace admins and server admins. Replaces any role the account had.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              additionalProperties: false
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "200":
+          description: The membership.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: removeMember
+      description: Namespace admins and server admins. Removing a missing membership is not an error.
+      responses:
+        "204": { description: Removed. }
+        "403": { $ref: "#/components/responses/Error" }
+
   /v1/namespaces:
     get:
       operationId: listNamespaces
@@ -448,6 +676,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Name" }
+    account:
+      name: account
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Name" }
     agentRequired:
       name: agent
       in: query
@@ -483,6 +716,40 @@ components:
     Name:
       type: string
       pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+
+    Role:
+      type: string
+      enum: [viewer, observer, member, admin]
+
+    Account:
+      type: object
+      required: [id, name, server_admin, disabled, created_at]
+      properties:
+        id: { type: integer }
+        name: { $ref: "#/components/schemas/Name" }
+        server_admin: { type: boolean }
+        disabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    Token:
+      type: object
+      required: [id, account, label, created_at]
+      properties:
+        id: { type: integer }
+        account: { $ref: "#/components/schemas/Name" }
+        label: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+
+    Membership:
+      type: object
+      required: [namespace, account, role]
+      properties:
+        namespace: { $ref: "#/components/schemas/Name" }
+        account: { $ref: "#/components/schemas/Name" }
+        role: { $ref: "#/components/schemas/Role" }
 
     EndCondition:
       type: string

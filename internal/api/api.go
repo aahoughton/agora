@@ -37,6 +37,9 @@ const DefaultBodyReadTimeout = 30 * time.Second
 type Options struct {
 	Logger          *slog.Logger
 	BodyReadTimeout time.Duration
+	// AuthMode and Version are reported by GET /v1/whoami.
+	AuthMode string
+	Version  string
 }
 
 type handler struct {
@@ -44,6 +47,8 @@ type handler struct {
 	authn       auth.Authenticator
 	logger      *slog.Logger
 	bodyTimeout time.Duration
+	authMode    string
+	version     string
 }
 
 type route struct {
@@ -73,6 +78,17 @@ var routes = []route{
 	{"POST", convPath + "/close", (*handler).closeConv},
 	{"POST", convPath + "/presence", (*handler).presence},
 	{"POST", convPath + "/observe", (*handler).observe},
+	{"GET", "/v1/whoami", (*handler).whoami},
+	{"GET", "/v1/accounts", (*handler).listAccounts},
+	{"POST", "/v1/accounts", (*handler).createAccount},
+	{"PATCH", "/v1/accounts/{account}", (*handler).updateAccount},
+	{"GET", "/v1/accounts/{account}/tokens", (*handler).listTokens},
+	{"POST", "/v1/accounts/{account}/tokens", (*handler).issueToken},
+	{"POST", "/v1/accounts/{account}/tokens/revoke", (*handler).revokeAllTokens},
+	{"DELETE", "/v1/tokens/{id}", (*handler).revokeToken},
+	{"GET", "/v1/namespaces/{ns}/members", (*handler).listMembers},
+	{"PUT", "/v1/namespaces/{ns}/members/{account}", (*handler).setMember},
+	{"DELETE", "/v1/namespaces/{ns}/members/{account}", (*handler).removeMember},
 }
 
 // Register adds the API routes and GET /v1/openapi.yaml to mux.
@@ -83,7 +99,10 @@ func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, o
 	if opts.BodyReadTimeout == 0 {
 		opts.BodyReadTimeout = DefaultBodyReadTimeout
 	}
-	h := &handler{svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout}
+	h := &handler{
+		svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout,
+		authMode: opts.AuthMode, version: opts.Version,
+	}
 	for _, rt := range routes {
 		mux.HandleFunc(rt.method+" "+rt.pattern, func(w http.ResponseWriter, r *http.Request) {
 			p, err := h.authn.Authenticate(r)

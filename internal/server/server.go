@@ -22,6 +22,8 @@ type Deps struct {
 	Logger        *slog.Logger
 	MCPMaxWait    time.Duration
 	Version       string
+	// AuthMode is reported by GET /v1/whoami.
+	AuthMode string
 	// Web, if set, serves the HTML viewer at every path the API, MCP and
 	// health routes do not claim.
 	Web http.Handler
@@ -41,7 +43,7 @@ func New(d Deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	api.Register(mux, d.Service, d.Authenticator, api.Options{Logger: d.Logger})
+	api.Register(mux, d.Service, d.Authenticator, api.Options{Logger: d.Logger, AuthMode: d.AuthMode, Version: d.Version})
 	mux.Handle("/mcp", mcpserver.Handler(d.Service, d.Authenticator, mcpserver.Options{
 		Logger: d.Logger, MaxWait: d.MCPMaxWait, Version: d.Version,
 	}))
