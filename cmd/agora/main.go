@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -26,8 +27,25 @@ import (
 	"github.com/aahoughton/agora/internal/web"
 )
 
-// version is set at build time with -ldflags "-X main.version=...".
+// version is set at build time with -ldflags "-X main.version=...". A
+// build without it (go install, go build) reports the module version Go
+// recorded, when there is one.
 var version = "dev"
+
+func init() {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		version = buildVersion(version, bi.Main.Version)
+	}
+}
+
+// buildVersion keeps a version set with -ldflags, else uses the module
+// version Go recorded; "(devel)" means Go recorded none.
+func buildVersion(set, module string) string {
+	if set != "dev" || module == "" || module == "(devel)" {
+		return set
+	}
+	return module
+}
 
 const usage = `usage: agora <command> [flags]
 
