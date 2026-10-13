@@ -56,6 +56,9 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return SayResult{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return SayResult{}, err
+	}
 	if err := checkName("agent", sp.Agent); err != nil {
 		return SayResult{}, err
 	}
@@ -165,6 +168,9 @@ type ObserveParams struct {
 // presence, and do not count toward any end condition.
 func (s *Service) Observe(ctx context.Context, p Principal, ns, name string, op ObserveParams) (Message, error) {
 	if err := s.authorize(ctx, p, ns, ActionObserve); err != nil {
+		return Message{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return Message{}, err
 	}
 	if !p.IsAnonymous() {

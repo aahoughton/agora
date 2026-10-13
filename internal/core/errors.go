@@ -3,7 +3,18 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
+	"time"
 )
+
+// RateLimited returns a rate_limited error saying when to retry.
+func RateLimited(what string, wait time.Duration) *Error {
+	secs := int(math.Ceil(wait.Seconds()))
+	return &Error{
+		Code: CodeRateLimited, RetryAfter: time.Duration(secs) * time.Second,
+		Message: fmt.Sprintf("too many %s; retry in %ds", what, secs),
+	}
+}
 
 // Code identifies a class of failure. Codes are part of the public API: the
 // HTTP and MCP layers report them verbatim.
@@ -30,6 +41,7 @@ const (
 	CodeAccountExists         Code = "account_exists"
 	CodeTokenNotFound         Code = "token_not_found"
 	CodeLastAdmin             Code = "last_admin"
+	CodeRateLimited           Code = "rate_limited"
 )
 
 // Error is a failure the caller can act on. Message is short, ASCII, and
@@ -39,6 +51,9 @@ type Error struct {
 	Message string
 	// LastSeq is set for CodeStaleContext: the conversation's current last seq.
 	LastSeq int64
+	// RetryAfter is set for CodeRateLimited: how long until a retry can
+	// succeed.
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string { return string(e.Code) + ": " + e.Message }

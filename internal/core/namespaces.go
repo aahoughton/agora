@@ -39,6 +39,9 @@ func (s *Service) CreateNamespace(ctx context.Context, p Principal, name string)
 	if err := s.authorize(ctx, p, "", ActionAdmin); err != nil {
 		return Namespace{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Namespace{}, err
+	}
 	if err := checkName("namespace", name); err != nil {
 		return Namespace{}, err
 	}

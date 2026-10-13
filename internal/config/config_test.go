@@ -27,6 +27,9 @@ func TestParseServeDefaults(t *testing.T) {
 		MCPMaxWait: DefaultMCPMaxWait,
 		LogLevel:   slog.LevelInfo,
 		LogFormat:  "text",
+
+		WriteLimit:       DefaultWriteLimit,
+		AuthFailureLimit: DefaultAuthFailureLimit,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -84,6 +87,7 @@ func TestParseServeEnvOverridesDefault(t *testing.T) {
 	want := Serve{
 		DB: "/env.db", Addr: ":9000", Web: true, Auth: AuthNone, MCPMaxWait: 2 * time.Minute,
 		LogLevel: slog.LevelDebug, LogFormat: "json",
+		WriteLimit: DefaultWriteLimit, AuthFailureLimit: DefaultAuthFailureLimit,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -123,6 +127,9 @@ func TestParseServeErrors(t *testing.T) {
 		{"log level offset", nil, map[string]string{EnvLogLevel: "info+2"}, "invalid log-level"},
 		{"bad log format", []string{"--log-format", "xml"}, nil, "invalid log-format"},
 		{"bad public url", []string{"--public-url", "agora.example"}, nil, "invalid public-url"},
+		{"bad write limit", []string{"--write-limit", "lots"}, nil, "invalid write-limit"},
+		{"negative failure limit", nil, map[string]string{EnvAuthFailureLimit: "-1"}, "invalid auth-failure-limit"},
+		{"bad proxy", []string{"--trusted-proxies", "10.0.0.0/8,proxy.lan"}, nil, "invalid trusted-proxies entry"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -188,5 +195,14 @@ func TestParseServeLogFlagOverridesEnv(t *testing.T) {
 		env(map[string]string{"HOME": "/h", EnvLogLevel: "debug", EnvLogFormat: "json"}), io.Discard)
 	if err != nil || cfg.LogLevel != slog.LevelWarn || cfg.LogFormat != "text" {
 		t.Fatalf("got %v %q, %v", cfg.LogLevel, cfg.LogFormat, err)
+	}
+}
+
+func TestParseServeRateLimits(t *testing.T) {
+	cfg, err := ParseServe([]string{"--write-limit", "0", "--trusted-proxies", "10.0.0.0/8, 192.0.2.7"},
+		env(map[string]string{"HOME": "/h", EnvAuthFailureLimit: "5"}), io.Discard)
+	if err != nil || cfg.WriteLimit != 0 || cfg.AuthFailureLimit != 5 || len(cfg.TrustedProxies) != 2 ||
+		cfg.TrustedProxies[1].String() != "192.0.2.7/32" {
+		t.Fatalf("got %+v, %v", cfg, err)
 	}
 }

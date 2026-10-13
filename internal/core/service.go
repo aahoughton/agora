@@ -7,9 +7,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/aahoughton/agora/internal/ratelimit"
 	"github.com/aahoughton/agora/internal/wording"
 )
 
@@ -40,6 +42,11 @@ type Options struct {
 	MaxWatchers int
 	// Wording supplies the advice in standing lines.
 	Wording *wording.Wording
+	// WriteLimit caps the writes (start, join, say, observe, conclude,
+	// leave, close, presence and admin changes) each account may make per
+	// minute; 0 is no limit. The anonymous principal (auth mode none) is
+	// never limited.
+	WriteLimit int
 	// RecheckEvery is how often a blocked Wait or Follow re-checks that
 	// its caller is still allowed, so revoking a credential or a
 	// membership cuts it off. Both also re-check before returning.
@@ -48,9 +55,10 @@ type Options struct {
 
 // Service is the domain layer. It is safe for concurrent use.
 type Service struct {
-	db   *sql.DB
-	opts Options
-	hub  hub
+	db     *sql.DB
+	opts   Options
+	hub    hub
+	writes *ratelimit.Limiter
 }
 
 // New returns a Service over an opened store.
@@ -88,6 +96,9 @@ func New(db *sql.DB, opts Options) *Service {
 	if r, ok := opts.Policy.(*Roles); ok {
 		r.svc = s
 	}
+	if opts.WriteLimit > 0 {
+		s.writes = ratelimit.New(opts.WriteLimit, time.Minute, 0, opts.Now)
+	}
 	return s
 }
 
@@ -103,6 +114,17 @@ func (s *Service) authorizeIn(ctx context.Context, q querier, p Principal, ns st
 		return s.authorizeRole(ctx, q, p, ns, a)
 	}
 	return s.opts.Policy.Authorize(ctx, p, ns, a)
+}
+
+// limitWrite takes one write from p's allowance.
+func (s *Service) limitWrite(p Principal) error {
+	if s.writes == nil || p.IsAnonymous() {
+		return nil
+	}
+	if ok, wait := s.writes.Allow(strconv.FormatInt(p.AccountID, 10)); !ok {
+		return RateLimited("writes", wait)
+	}
+	return nil
 }
 
 // querier is satisfied by *sql.DB and *sql.Tx.

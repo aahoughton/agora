@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -31,6 +32,10 @@ const (
 
 	EnvPublicURL = "AGORA_PUBLIC_URL"
 
+	EnvWriteLimit       = "AGORA_WRITE_LIMIT"
+	EnvAuthFailureLimit = "AGORA_AUTH_FAILURE_LIMIT"
+	EnvTrustedProxies   = "AGORA_TRUSTED_PROXIES"
+
 	EnvLogLevel  = "AGORA_LOG_LEVEL"
 	EnvLogFormat = "AGORA_LOG_FORMAT"
 )
@@ -38,6 +43,12 @@ const (
 // DefaultMCPMaxWait keeps MCP waits under the 60s tool-call timeout several
 // clients use by default.
 const DefaultMCPMaxWait = 50 * time.Second
+
+// Rate limit defaults, in auth mode token.
+const (
+	DefaultWriteLimit       = 300
+	DefaultAuthFailureLimit = 10
+)
 
 // DefaultAddr listens on loopback only. Exposing the server to a network is a
 // deliberate choice made with --addr or AGORA_ADDR.
@@ -72,6 +83,14 @@ type Serve struct {
 	AnyHost      bool
 	// ThemeDir holds HTML theme files that replace the default theme's.
 	ThemeDir string
+	// WriteLimit is how many writes each account may make per minute in
+	// auth mode token; 0 turns the limit off.
+	WriteLimit int
+	// AuthFailureLimit is how many failed authentications a client address
+	// may have per minute in auth mode token; 0 turns the limit off.
+	AuthFailureLimit int
+	// TrustedProxies are proxies whose X-Forwarded-For names the client.
+	TrustedProxies []netip.Prefix
 	// PublicURL is the address browsers use to reach the server, when it
 	// differs from Addr (for example behind a TLS proxy). An https URL
 	// marks the viewer's session cookie Secure.
@@ -107,6 +126,9 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
 	publicURL := fs.String("public-url", "", "the URL browsers reach the server at, e.g. https://agora.example; https marks session cookies Secure (env "+EnvPublicURL+")")
+	writeLimit := fs.String("write-limit", "", "writes per minute each account may make with --auth token; 0 for no limit (env "+EnvWriteLimit+", default "+strconv.Itoa(DefaultWriteLimit)+")")
+	failLimit := fs.String("auth-failure-limit", "", "failed sign-ins per minute per client address with --auth token; 0 for no limit (env "+EnvAuthFailureLimit+", default "+strconv.Itoa(DefaultAuthFailureLimit)+")")
+	proxies := fs.String("trusted-proxies", "", "comma-separated proxy addresses or CIDRs whose X-Forwarded-For names the client (env "+EnvTrustedProxies+")")
 	logLevel := fs.String("log-level", "", "least severe level logged: debug, info, warn or error (env "+EnvLogLevel+", default info)")
 	logFormat := fs.String("log-format", "", "log format: text or json (env "+EnvLogFormat+", default text)")
 	mcpMaxWait := fs.String("mcp-max-wait", "", "longest MCP wait, e.g. 50s; keep it under your MCP clients' tool timeout (env "+EnvMCPMaxWait+", default 50s)")
@@ -160,6 +182,36 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 		u, err := url.Parse(cfg.PublicURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port]", cfg.PublicURL)
+		}
+	}
+
+	for _, l := range []struct {
+		name, flag, env string
+		def             int
+		dst             *int
+	}{
+		{"write-limit", *writeLimit, EnvWriteLimit, DefaultWriteLimit, &cfg.WriteLimit},
+		{"auth-failure-limit", *failLimit, EnvAuthFailureLimit, DefaultAuthFailureLimit, &cfg.AuthFailureLimit},
+	} {
+		v := firstNonEmpty(l.flag, getenv(l.env), strconv.Itoa(l.def))
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return Serve{}, fmt.Errorf("serve: invalid %s %q: want a number, 0 for no limit", l.name, v)
+		}
+		*l.dst = n
+	}
+	if list := strings.TrimSpace(firstNonEmpty(*proxies, getenv(EnvTrustedProxies))); list != "" {
+		for item := range strings.SplitSeq(list, ",") {
+			item = strings.TrimSpace(item)
+			pfx, err := netip.ParsePrefix(item)
+			if err != nil {
+				addr, aerr := netip.ParseAddr(item)
+				if aerr != nil {
+					return Serve{}, fmt.Errorf("serve: invalid trusted-proxies entry %q: want an address or CIDR", item)
+				}
+				pfx = netip.PrefixFrom(addr, addr.BitLen())
+			}
+			cfg.TrustedProxies = append(cfg.TrustedProxies, pfx)
 		}
 	}
 

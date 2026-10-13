@@ -920,6 +920,7 @@ components:
                 - account_exists
                 - token_not_found
                 - last_admin
+                - rate_limited
             message: { type: string }
             last_seq:
               type: integer

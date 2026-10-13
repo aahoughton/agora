@@ -200,6 +200,9 @@ func (s *Service) Join(ctx context.Context, p Principal, ns, name string, jp Joi
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return Standing{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Standing{}, err
+	}
 	if err := checkName("agent", jp.Agent); err != nil {
 		return Standing{}, err
 	}
@@ -265,6 +268,9 @@ type LeaveParams struct {
 // standing; a final message with it is rejected.
 func (s *Service) Leave(ctx context.Context, p Principal, ns, name string, lp LeaveParams) (Standing, error) {
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
+		return Standing{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return Standing{}, err
 	}
 	if err := checkName("agent", lp.Agent); err != nil {
@@ -366,6 +372,9 @@ func (s *Service) SetPresence(ctx context.Context, p Principal, ns, name string,
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return Participant{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Participant{}, err
+	}
 	if err := checkName("agent", pp.Agent); err != nil {
 		return Participant{}, err
 	}
@@ -420,6 +429,9 @@ func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return Standing{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Standing{}, err
+	}
 	if err := checkName("agent", cp.Agent); err != nil {
 		return Standing{}, err
 	}
@@ -469,6 +481,9 @@ type CloseParams struct {
 // Close concludes a conversation. Only its creator may close it.
 func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp CloseParams) (Standing, error) {
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
+		return Standing{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return Standing{}, err
 	}
 	if err := checkName("agent", cp.Agent); err != nil {

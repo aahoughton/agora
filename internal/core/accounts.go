@@ -347,6 +347,9 @@ func (s *Service) CreateAccount(ctx context.Context, p Principal, name string, s
 	if err := s.requireServerAdmin(ctx, p); err != nil {
 		return Account{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Account{}, err
+	}
 	var a Account
 	err := s.writeAs(ctx, p, "", ActionAdmin, func(tx *wtx) error {
 		var err error
@@ -374,6 +377,9 @@ type AccountUpdate struct {
 // admins only. The last enabled server admin cannot be disabled or demoted.
 func (s *Service) UpdateAccount(ctx context.Context, p Principal, name string, u AccountUpdate) (Account, error) {
 	if err := s.requireServerAdmin(ctx, p); err != nil {
+		return Account{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return Account{}, err
 	}
 	var a Account
@@ -424,6 +430,9 @@ func (s *Service) IssueToken(ctx context.Context, p Principal, account, label st
 		return IssuedToken{}, s.hideAccount(ctx, p, err)
 	}
 	if err := s.requireSelfOrAdmin(ctx, p, a); err != nil {
+		return IssuedToken{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return IssuedToken{}, err
 	}
 	var t IssuedToken
@@ -488,6 +497,9 @@ func (s *Service) RevokeToken(ctx context.Context, p Principal, id int64) error 
 	if err := s.requireSelfOrAdmin(ctx, p, Account{ID: owner}); err != nil {
 		return err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return err
+	}
 	return s.writeSelfOrAdmin(ctx, p, owner, func(tx *wtx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`, ms(s.now()), id)
 		return err
@@ -502,6 +514,9 @@ func (s *Service) RevokeAllTokens(ctx context.Context, p Principal, account stri
 		return 0, s.hideAccount(ctx, p, err)
 	}
 	if err := s.requireSelfOrAdmin(ctx, p, a); err != nil {
+		return 0, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return 0, err
 	}
 	var n int64
@@ -521,6 +536,9 @@ func (s *Service) RevokeAllTokens(ctx context.Context, p Principal, account stri
 // had. Namespace admins and server admins only.
 func (s *Service) SetMembership(ctx context.Context, p Principal, ns, account string, role Role) (Membership, error) {
 	if err := s.authorize(ctx, p, ns, ActionAdmin); err != nil {
+		return Membership{}, err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return Membership{}, err
 	}
 	if err := checkRole(role); err != nil {
@@ -550,6 +568,9 @@ func (s *Service) SetMembership(ctx context.Context, p Principal, ns, account st
 // that does not exist is not an error.
 func (s *Service) RemoveMembership(ctx context.Context, p Principal, ns, account string) error {
 	if err := s.authorize(ctx, p, ns, ActionAdmin); err != nil {
+		return err
+	}
+	if err := s.limitWrite(p); err != nil {
 		return err
 	}
 	return s.writeAs(ctx, p, ns, ActionAdmin, func(tx *wtx) error {

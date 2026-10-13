@@ -103,6 +103,8 @@ type Options struct {
 	// SessionTTL is how long a browser session lasts; default
 	// core.DefaultSessionTTL.
 	SessionTTL time.Duration
+	// Failures, if set, limits failed logins per client address.
+	Failures *auth.Failures
 }
 
 type viewer struct {
@@ -363,6 +365,8 @@ func statusOf(err error) int {
 		return http.StatusForbidden
 	case core.CodeConversationConcluded, core.CodeTooManyWatchers:
 		return http.StatusConflict
+	case core.CodeRateLimited:
+		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}
@@ -371,6 +375,7 @@ func statusOf(err error) int {
 // fail renders the error page for err.
 func (v *viewer) fail(w http.ResponseWriter, err error, data Page) {
 	status := statusOf(err)
+	retryAfter(w, err)
 	if core.CodeOf(err) == "" {
 		v.opts.Logger.Error("viewer request failed", "err", err)
 		err = errors.New("something went wrong")
@@ -531,7 +536,12 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Notice = err.Error()
 		data.Observer, data.Draft = observer, r.PostForm.Get("body")
-		v.render(w, http.StatusBadRequest, "conversation", data)
+		status := http.StatusBadRequest
+		if core.CodeOf(err) == core.CodeRateLimited {
+			status = http.StatusTooManyRequests
+			retryAfter(w, err)
+		}
+		v.render(w, status, "conversation", data)
 		return
 	}
 	if account == "" {
@@ -699,6 +709,13 @@ func returnTo(next string) string {
 
 func noStore(w http.ResponseWriter) { w.Header().Set("Cache-Control", "no-store") }
 
+// retryAfter sets Retry-After for a rate_limited error.
+func retryAfter(w http.ResponseWriter, err error) {
+	if ce, ok := errors.AsType[*core.Error](err); ok && ce.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(ce.RetryAfter.Seconds())))
+	}
+}
+
 func (v *viewer) loginPage(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	v.render(w, http.StatusOK, "login", Page{Title: "Sign in", ReturnTo: returnTo(r.URL.Query().Get("next"))})
@@ -720,6 +737,17 @@ func (v *viewer) login(w http.ResponseWriter, r *http.Request) {
 			v.fail(w, err, Page{})
 			return
 		}
+		// A valid token always signs in; only failures are limited.
+		if cerr := v.opts.Failures.Check(r); cerr != nil {
+			notice := "Too many failed sign-ins; try again later."
+			if ce, ok := errors.AsType[*core.Error](cerr); ok {
+				notice = ce.Message
+			}
+			retryAfter(w, cerr)
+			v.render(w, http.StatusTooManyRequests, "login", Page{Title: "Sign in", ReturnTo: next, Notice: notice})
+			return
+		}
+		v.opts.Failures.Fail(r)
 		v.render(w, http.StatusUnauthorized, "login", Page{
 			Title: "Sign in", ReturnTo: next,
 			Notice: "That token is not valid, or it has been revoked or has expired.",

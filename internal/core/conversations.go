@@ -239,6 +239,9 @@ func (s *Service) Start(ctx context.Context, p Principal, ns string, sp StartPar
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return Conversation{}, err
 	}
+	if err := s.limitWrite(p); err != nil {
+		return Conversation{}, err
+	}
 	if err := checkName("conversation", sp.Name); err != nil {
 		return Conversation{}, err
 	}

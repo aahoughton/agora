@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -142,8 +143,12 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	status, code, msg := http.StatusUnauthorized, "unauthorized", "authentication failed"
 	if ce, ok := errors.AsType[*core.Error](err); ok {
 		code, msg = string(ce.Code), ce.Message
-		if ce.Code == core.CodeForbidden {
+		switch ce.Code {
+		case core.CodeForbidden:
 			status = http.StatusForbidden
+		case core.CodeRateLimited:
+			status = http.StatusTooManyRequests
+			w.Header().Set("Retry-After", strconv.Itoa(int(ce.RetryAfter.Seconds())))
 		}
 	}
 	if status == http.StatusUnauthorized {

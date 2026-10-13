@@ -24,12 +24,18 @@ type tokenEnv struct {
 
 func newTokenEnv(t *testing.T, opts web.Options) *tokenEnv {
 	t.Helper()
+	return newTokenEnvWith(t, opts, core.Options{})
+}
+
+func newTokenEnvWith(t *testing.T, opts web.Options, coreOpts core.Options) *tokenEnv {
+	t.Helper()
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	coreOpts.Policy = core.RolePolicy()
+	svc := core.New(db, coreOpts)
 	root, err := svc.Bootstrap(t.Context(), "root")
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +220,38 @@ func TestNoLoginPageWithAuthOff(t *testing.T) {
 	e := newEnv(t, web.Options{})
 	if code, _ := e.get("/login"); code != http.StatusNotFound {
 		t.Fatalf("login with auth off = %d", code)
+	}
+}
+
+func TestFailedLoginsAreLimited(t *testing.T) {
+	e := newTokenEnv(t, web.Options{Failures: auth.NewFailures(2, nil, nil)})
+	for range 2 {
+		if r := e.postRaw("/login", url.Values{"token": {"agora_wrong"}}); r.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("bad login = %d", r.StatusCode)
+		}
+	}
+	// A further bad token is refused until the limit refills...
+	if r := e.postRaw("/login", url.Values{"token": {"agora_wrong"}}); r.StatusCode != http.StatusTooManyRequests || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("bad login after failures = %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
+	}
+	// ...but the right token still signs in.
+	if r := e.postRaw("/login", url.Values{"token": {e.token}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("good login after failures = %d", r.StatusCode)
+	}
+}
+
+func TestRateLimitedCommentsSayWhenToRetry(t *testing.T) {
+	// The fixture's setup takes four of root's writes; pat has its own four.
+	e := newTokenEnvWith(t, web.Options{}, core.Options{WriteLimit: 4})
+	e.postRaw("/login", url.Values{"token": {e.token}})
+	for i := range 4 {
+		if r := e.postRaw("/n/default/c/c/observe", url.Values{"body": {"comment"}}); r.StatusCode != http.StatusSeeOther {
+			t.Fatalf("comment %d = %d", i, r.StatusCode)
+		}
+	}
+	r := e.postRaw("/n/default/c/c/observe", url.Values{"body": {"one too many"}})
+	if r.StatusCode != http.StatusTooManyRequests || r.Header.Get("Retry-After") != "15" {
+		t.Fatalf("second comment = %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
 	}
 }
 

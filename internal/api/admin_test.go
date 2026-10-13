@@ -124,6 +124,35 @@ func TestAdminChangesAreLoggedWithoutSecrets(t *testing.T) {
 	}
 }
 
+func TestRateLimitedRequestsSayWhenToRetry(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := core.New(db, core.Options{Policy: core.RolePolicy(), WriteLimit: 1})
+	tok, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{Logger: slog.New(slog.DiscardHandler)})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := &client{t: t, url: srv.URL, token: tok.Secret}
+	c.ok("POST", "/v1/namespaces", map[string]any{"name": "one"}, http.StatusCreated, nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v1/namespaces", strings.NewReader(`{"name":"two"}`))
+	req.Header.Set("Authorization", "Bearer "+tok.Secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") != "60" {
+		t.Fatalf("second write = %d, Retry-After %q", resp.StatusCode, resp.Header.Get("Retry-After"))
+	}
+}
+
 func TestTokenLifetimesAreBounded(t *testing.T) {
 	root := newTokenServer(t)
 	for _, ttl := range []int64{-1, 36028797018963968, 100*366*24*3600 + 1} {

@@ -119,10 +119,19 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	svc := core.New(db, core.Options{Policy: policy})
+	opts := core.Options{Policy: policy}
+	var failures *auth.Failures
+	if cfg.Auth == config.AuthToken {
+		opts.WriteLimit = cfg.WriteLimit
+		failures = auth.NewFailures(cfg.AuthFailureLimit, cfg.TrustedProxies, nil)
+	}
+	svc := core.New(db, opts)
 	authn, err := auth.For(cfg.Auth, svc)
 	if err != nil {
 		return err
+	}
+	if failures != nil {
+		authn = auth.Limited{Next: authn, Failures: failures}
 	}
 	var viewer http.Handler
 	if cfg.Web {
@@ -130,11 +139,12 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		// bearer tokens only.
 		viewerAuth := authn
 		if cfg.Auth == config.AuthToken {
-			viewerAuth = auth.Session{Service: svc}
+			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Failures: failures}
 		}
 		viewer, err = web.Handler(svc, viewerAuth, web.Options{
 			ThemeDir: cfg.ThemeDir, Logger: logger, Version: version,
 			Login: cfg.Auth == config.AuthToken, SecureCookies: strings.HasPrefix(cfg.PublicURL, "https://"),
+			Failures: failures,
 		})
 		if err != nil {
 			return err

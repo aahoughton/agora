@@ -147,7 +147,7 @@ func statusFor(code core.Code) int {
 		return http.StatusConflict
 	case core.CodeMessageTooLarge:
 		return http.StatusRequestEntityTooLarge
-	case core.CodeTooManyWaiters, core.CodeTooManyWatchers:
+	case core.CodeTooManyWaiters, core.CodeTooManyWatchers, core.CodeRateLimited:
 		return http.StatusTooManyRequests
 	case codeRequestTimeout:
 		return http.StatusRequestTimeout
@@ -176,6 +176,9 @@ func (h *handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	body.Error.Message = ce.Message
 	if ce.Code == core.CodeUnauthorized {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="agora"`)
+	}
+	if ce.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(ce.RetryAfter.Seconds())))
 	}
 	if ce.Code == core.CodeStaleContext {
 		body.Error.LastSeq = &ce.LastSeq
