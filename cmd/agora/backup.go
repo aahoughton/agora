@@ -127,30 +127,33 @@ including token hashes. The file is written with mode 0600.
 	return exitOK
 }
 
-func runLoad(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func runLoad(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("load", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
 		fmt.Fprint(stderr, `usage: agora load --db PATH [-i FILE]
+       agora load [--as NAME] [-i FILE]
 
-Creates a new database at PATH from a dump (agora dump), in one
+With --db, creates a new database at PATH from a dump (agora dump), in one
 transaction, then migrates it to this build's schema. PATH must not
 exist. Point agora serve at it to use it.
+
+Without --db, adds a namespace dump to a running server (--url, with a
+server admin's --token), as namespace --as or the dump's own name, which
+must not exist there yet.
 
 `)
 		fs.PrintDefaults()
 	}
-	dbPath := fs.String("db", "", "database file to create (required; must not exist)")
+	resolveClient := config.ClientFlags(fs)
+	dbPath := fs.String("db", "", "database file to create (must not exist)")
+	as := fs.String("as", "", "without --db: the namespace's name on the server (default: the dump's)")
 	in := fs.String("i", "", "dump file to read (default: standard input)")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
-	if *dbPath == "" || fs.NArg() > 0 {
-		return flagError(stderr, errors.New("--db PATH is required"))
-	}
-	if _, err := os.Lstat(*dbPath); err == nil {
-		fmt.Fprintf(stderr, "agora load: %s exists; load creates a new database\n", *dbPath)
-		return exitError
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
 	}
 	src := stdin
 	if *in != "" {
@@ -161,6 +164,31 @@ exist. Point agora serve at it to use it.
 		}
 		defer func() { _ = f.Close() }()
 		src = f
+	}
+	if *dbPath == "" {
+		cc, err := resolveClient(getenv)
+		if err != nil {
+			return flagError(stderr, err)
+		}
+		cl, err := client.New(cc.URL, cc.Token)
+		if err != nil {
+			return flagError(stderr, err)
+		}
+		res, err := cl.LoadNamespace(ctx, src, *as)
+		if err != nil {
+			fmt.Fprintln(stderr, "agora load:", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "loaded namespace %s into %s: %d conversations, %d messages\n",
+			res.Namespace, cl.URL(), res.Conversations, res.Messages)
+		return exitOK
+	}
+	if *as != "" {
+		return flagError(stderr, errors.New("--as applies only when loading into a server (without --db)"))
+	}
+	if _, err := os.Lstat(*dbPath); err == nil {
+		fmt.Fprintf(stderr, "agora load: %s exists; load creates a new database\n", *dbPath)
+		return exitError
 	}
 	r := bufio.NewReaderSize(src, 1<<20)
 	h, err := core.ReadDumpHeader(r, store.LatestVersion())

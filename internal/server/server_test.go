@@ -227,3 +227,48 @@ func TestCallersAreRecorded(t *testing.T) {
 		t.Fatalf("callers = %v", callers)
 	}
 }
+
+// A caller who may not load gets no longer than anyone else to send a body.
+func TestLoadRefusesNonAdminsWithinTheBodyDeadline(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	root, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := svc.AuthenticateToken(t.Context(), root.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateAccount(t.Context(), admin, "pat", false); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := svc.IssueToken(t.Context(), admin, "pat", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New(Deps{
+		Service: svc, Authenticator: auth.Bearer{Service: svc}, Logger: slog.New(slog.DiscardHandler),
+		BodyReadTimeout: 200 * time.Millisecond,
+	}))
+	defer srv.Close()
+	var d net.Dialer
+	conn, err := d.DialContext(t.Context(), "tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := io.WriteString(conn, "POST /v1/load HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer "+tok.Secret+
+		"\r\nContent-Length: 100000\r\n\r\n{"); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	line := make([]byte, 12)
+	if _, err := io.ReadFull(conn, line); err != nil || string(line) != "HTTP/1.1 403" {
+		t.Fatalf("response %q, %v", line, err)
+	}
+}

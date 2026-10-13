@@ -96,6 +96,29 @@ func (c *client) do(method, path string, body any, out any) int {
 	return resp.StatusCode
 }
 
+// text sends a request without a body and returns the response body,
+// failing unless the status is 200.
+func (c *client) text(method, path string) string {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(c.t.Context(), method, c.url+path, nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		c.t.Fatalf("%s %s = %d %s %v", method, path, resp.StatusCode, raw, err)
+	}
+	return string(raw)
+}
+
 type apiError struct {
 	Error struct {
 		Code    string `json:"code"`

@@ -25,6 +25,15 @@ func newTokenServer(t *testing.T) *client {
 
 func newTokenServerLogging(t *testing.T, logger *slog.Logger) *client {
 	t.Helper()
+	return newTokenServerWith(t, api.Options{Logger: logger})
+}
+
+func newTokenServerWith(t *testing.T, opts api.Options) *client {
+	t.Helper()
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
+	}
+	opts.AuthMode, opts.Version = "token", "test"
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +45,7 @@ func newTokenServerLogging(t *testing.T, logger *slog.Logger) *client {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	api.Register(mux, svc, auth.Bearer{Service: svc}, api.Options{Logger: logger, AuthMode: "token", Version: "test"})
+	api.Register(mux, svc, auth.Bearer{Service: svc}, opts)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &client{t: t, url: srv.URL, token: tok.Secret}
@@ -183,4 +192,40 @@ func TestBackupAndDumpNeedAdmins(t *testing.T) {
 	if got := pat.do("GET", "/v1/dump?namespace=default", nil, nil); got != http.StatusOK {
 		t.Fatalf("namespace admin dump = %d", got)
 	}
+}
+
+func TestLoadANamespaceDump(t *testing.T) {
+	root := newTokenServerWith(t, api.Options{MaxLoadBytes: 4096})
+	root.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "c", "agent": "a"}, http.StatusCreated, nil)
+	root.ok("POST", "/v1/namespaces/default/conversations/c/messages", map[string]any{"agent": "a", "body": "hello"}, http.StatusCreated, nil)
+	dump := root.text("GET", "/v1/dump?namespace=default")
+
+	var res struct {
+		Namespace     string `json:"namespace"`
+		Conversations int    `json:"conversations"`
+		Messages      int    `json:"messages"`
+	}
+	root.ok("POST", "/v1/load?as=copy", dump, http.StatusCreated, &res)
+	if res.Namespace != "copy" || res.Conversations != 1 || res.Messages != 3 {
+		t.Fatalf("load = %+v", res)
+	}
+	var page struct {
+		Messages []struct {
+			Body string `json:"body"`
+		} `json:"messages"`
+	}
+	root.ok("GET", "/v1/namespaces/copy/conversations/c/messages", nil, http.StatusOK, &page)
+	if len(page.Messages) != 3 || page.Messages[2].Body != "hello" {
+		t.Fatalf("copied messages = %+v", page.Messages)
+	}
+
+	root.wantError("POST", "/v1/load?as=copy", dump, http.StatusConflict, "namespace_exists")
+	root.wantError("POST", "/v1/load?as=other", "not a dump\n", http.StatusBadRequest, "invalid")
+	root.wantError("POST", "/v1/load?as=big", dump+strings.Repeat(" ", 4096), http.StatusRequestEntityTooLarge, "message_too_large")
+	root.ok("POST", "/v1/accounts", map[string]any{"name": "pat"}, http.StatusCreated, nil)
+	var issued struct {
+		Secret string `json:"secret"`
+	}
+	root.ok("POST", "/v1/accounts/pat/tokens", map[string]any{}, http.StatusCreated, &issued)
+	root.as(issued.Secret).wantError("POST", "/v1/load?as=mine", dump, http.StatusForbidden, "forbidden")
 }

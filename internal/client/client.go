@@ -91,8 +91,13 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	u.Path += path
 	u.RawQuery = query.Encode()
 	var rd io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
+	contentType := "application/json"
+	switch b := body.(type) {
+	case nil:
+	case jsonl:
+		rd, contentType = b.Reader, "application/jsonl"
+	default:
+		raw, err := json.Marshal(b)
 		if err != nil {
 			return err
 		}
@@ -103,7 +108,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return err
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 	if c.token != "" {
@@ -135,6 +140,28 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return nil
 	}
 	return json.Unmarshal(raw, out)
+}
+
+// jsonl is a request body sent as is, as JSON Lines.
+type jsonl struct{ io.Reader }
+
+// LoadResult is what POST /v1/load added.
+type LoadResult struct {
+	Namespace     string `json:"namespace"`
+	Conversations int    `json:"conversations"`
+	Messages      int    `json:"messages"`
+}
+
+// LoadNamespace sends a namespace dump to POST /v1/load, to be added as
+// namespace as (the dump's own name when empty). Server admins only.
+func (c *Client) LoadNamespace(ctx context.Context, dump io.Reader, as string) (LoadResult, error) {
+	var q url.Values
+	if as != "" {
+		q = url.Values{"as": {as}}
+	}
+	var out LoadResult
+	err := c.do(ctx, http.MethodPost, "/v1/load", q, jsonl{dump}, &out)
+	return out, err
 }
 
 func convPath(ns, conv string) string {

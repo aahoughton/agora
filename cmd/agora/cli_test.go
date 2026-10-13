@@ -646,6 +646,20 @@ func TestBackupDumpAndLoad(t *testing.T) {
 		t.Fatalf("load namespace dump = %+v", r)
 	}
 
+	// Without --db, a namespace dump goes into the running server.
+	if r := cli(with, "load", "-i", part, "--as", "copy"); r.code != exitOK || !strings.Contains(r.stdout, "loaded namespace copy into") {
+		t.Fatalf("load into the server = %+v", r)
+	}
+	if r := cli(with, "load", "-i", part, "--as", "copy"); r.code != exitError || !strings.Contains(r.stderr, "already exists") {
+		t.Fatalf("load into an existing namespace = %+v", r)
+	}
+	if r := cli(with, "load", "-i", full); r.code != exitError || !strings.Contains(r.stderr, "full dump") {
+		t.Fatalf("load a full dump into the server = %+v", r)
+	}
+	if r := cli(nil, "load", "--db", filepath.Join(dir, "as.db"), "--as", "x", "-i", part); r.code != exitUsage {
+		t.Fatalf("--as with --db = %+v", r)
+	}
+
 	// A cut-off dump is refused, and no database is left behind.
 	raw, err := os.ReadFile(full)
 	if err != nil {

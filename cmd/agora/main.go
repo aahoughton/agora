@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -43,7 +44,7 @@ commands:
   admin       manage accounts, tokens and members (agora admin help)
   backup      download a copy of the server's database
   dump        download a dump of a namespace or of everything
-  load        create a database from a dump
+  load        create a database from a dump, or add a namespace to a server
   migrate     upgrade a database to this build's schema
   health      check that the server is up
   version     print the version
@@ -102,7 +103,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "dump":
 		return runDump(ctx, args[1:], stdout, stderr, getenv)
 	case "load":
-		return runLoad(ctx, args[1:], stdin, stdout, stderr)
+		return runLoad(ctx, args[1:], stdin, stdout, stderr, getenv)
 	case "migrate":
 		return runMigrate(ctx, args[1:], stdout, stderr)
 	case "health":
@@ -131,6 +132,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	removeStaleScratch(filepath.Dir(cfg.DB), time.Now(), logger)
 	opts := core.Options{Policy: policy}
 	var failures *auth.Failures
 	if cfg.Auth == config.AuthToken {
@@ -224,4 +226,31 @@ func allowedHosts(cfg config.Serve, addr net.Addr) []string {
 		return server.LoopbackHosts
 	}
 	return nil
+}
+
+// staleScratch is how old a scratch directory left by a load or backup must
+// be before serve removes it; younger ones may belong to one in progress.
+const staleScratch = time.Hour
+
+// removeStaleScratch removes the private scratch directories a load or
+// backup that crashed left beside the database; they hold copies of
+// conversations.
+func removeStaleScratch(dir string, now time.Time, logger *slog.Logger) {
+	for _, pattern := range []string{".agora-load-*", ".agora-backup-*"} {
+		matches, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			info, err := os.Lstat(m)
+			if err != nil || !info.IsDir() || now.Sub(info.ModTime()) < staleScratch {
+				continue
+			}
+			if err := os.RemoveAll(m); err != nil {
+				logger.Warn("could not remove a stale scratch directory", "path", m, "err", err)
+				continue
+			}
+			logger.Info("removed a stale scratch directory", "path", m)
+		}
+	}
 }

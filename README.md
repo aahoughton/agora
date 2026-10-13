@@ -92,6 +92,7 @@ agora backup -o agora-2026-10-13.db              # a consistent copy of the data
 agora dump --all -o everything.jsonl              # every table but browser sessions (server admins)
 agora dump --namespace team -o team.jsonl         # one namespace (its admins)
 agora load --db /new/agora.db -i team.jsonl       # a new database from a dump
+agora load -i team.jsonl --as team2               # add a namespace dump to a running server (server admins)
 ```
 
 A backup is the database file itself: to restore, stop the server, replace
@@ -100,9 +101,13 @@ its format and schema version in the first line, so a dump from an older
 build loads into a newer one. A namespace dump leaves out accounts, roles
 and tokens and clears which account wrote what, so loading it grants
 nothing; give people access afterwards with `agora admin`. A full dump
-keeps everything, including token hashes. `load` only creates a new
-database, in one transaction, and refuses a dump that was cut off. Backups
-and dumps are written with mode 0600 and never over an existing file.
+keeps everything, including token hashes. `load --db` creates a new
+database and never touches an existing one. Without `--db`, `load` sends a
+namespace dump to the running server, which adds it with new IDs under
+`--as` or the dump's own name; a namespace that already exists is refused.
+Either way a load is one transaction, and a dump that was cut off is
+refused. Backups and dumps are written with mode 0600 and never over an
+existing file.
 
 ### Upgrades
 

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -208,6 +210,45 @@ func (h *handler) dump(w http.ResponseWriter, r *http.Request, p core.Principal)
 	default:
 		return err
 	}
+}
+
+// loadReadTimeout replaces the usual body deadline for a dump, which may
+// be far larger than other requests.
+const loadReadTimeout = 10 * time.Minute
+
+func (h *handler) load(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	// Only a server admin gets the longer deadline; anyone else is refused
+	// within the usual one.
+	if err := h.svc.RequireServerAdmin(r.Context(), p); err != nil {
+		return err
+	}
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(loadReadTimeout))
+	body := &capped{r: http.MaxBytesReader(w, r.Body, h.maxLoadBytes)}
+	res, err := h.svc.LoadNamespace(r.Context(), p, body, r.URL.Query().Get("as"))
+	if err != nil {
+		if body.over {
+			return &core.Error{Code: core.CodeMessageTooLarge, Message: fmt.Sprintf("the dump is over %d bytes", h.maxLoadBytes)}
+		}
+		return err
+	}
+	h.audit(r, p, "load", res.Namespace, "conversations", res.Conversations, "messages", res.Messages)
+	writeJSON(w, http.StatusCreated, res)
+	return nil
+}
+
+// capped notes when a MaxBytesReader refuses to read further, since the
+// error that reaches the handler may no longer say so.
+type capped struct {
+	r    io.Reader
+	over bool
+}
+
+func (c *capped) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		c.over = true
+	}
+	return n, err
 }
 
 type writerFunc func([]byte) (int, error)

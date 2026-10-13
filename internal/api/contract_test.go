@@ -64,8 +64,12 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call := func(method, path string, body any) map[string]any {
 		t.Helper()
 		var rd io.Reader
-		if body != nil {
-			raw, err := json.Marshal(body)
+		switch b := body.(type) {
+		case nil:
+		case []byte: // sent as is
+			rd = bytes.NewReader(b)
+		default:
+			raw, err := json.Marshal(b)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -131,6 +135,11 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call("POST", c+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: LRU"})
 	call("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "led", "agent": "lead", "end": "coordinator"})
 	call("POST", "/v1/namespaces/default/conversations/led/close", map[string]any{"agent": "lead", "body": "done"})
+	var dump bytes.Buffer
+	if err := svc.Dump(t.Context(), rootP, "default", &dump); err != nil {
+		t.Fatal(err)
+	}
+	call("POST", "/v1/load?as=copy", dump.Bytes())
 	token = issued["secret"].(string)
 	call("GET", "/v1/server", nil)
 	token = root.Secret

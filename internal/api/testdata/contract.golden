@@ -538,6 +538,13 @@
   "you": "active"
 }
 
+## POST /v1/load?as=copy -> Created
+{
+  "conversations": 2,
+  "messages": 14,
+  "namespace": "copy"
+}
+
 ## GET /v1/server -> Forbidden
 {
   "error": {
@@ -556,7 +563,7 @@
       "client": "Go-http-client/1.1",
       "first_seen": "2030-01-02T03:04:05Z",
       "last_seen": "2030-01-02T03:04:05Z",
-      "requests": 19,
+      "requests": 20,
       "surface": "api"
     },
     {
@@ -582,7 +589,7 @@
     "author": "agora",
     "conversation": "led",
     "kind": "system",
-    "namespace": "default",
+    "namespace": "copy",
     "seq": 4
   },
   "mcp_sessions": [

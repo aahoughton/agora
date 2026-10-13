@@ -267,3 +267,89 @@ func TestLoadRefusesInconsistentState(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadNamespaceIntoALiveDatabase(t *testing.T) {
+	src, _, _ := seedDumpable(t)
+	var dump bytes.Buffer
+	if err := src.svc.Dump(t.Context(), src.admin, "team", &dump); err != nil {
+		t.Fatal(err)
+	}
+	var full bytes.Buffer
+	if err := src.svc.Dump(t.Context(), src.admin, "", &full); err != nil {
+		t.Fatal(err)
+	}
+
+	f := newTokenFixture(t)
+	ctx := t.Context()
+	// Existing rows, so loaded IDs must not collide with them.
+	must[core.Conversation](t)(f.svc.Start(ctx, f.admin, "default", core.StartParams{Name: "here", Agent: "h", Join: true}))
+	before := len(must[core.ReadResult](t)(f.svc.Read(ctx, f.admin, "default", "here", core.ReadParams{})).Messages)
+	load := func(p core.Principal, b []byte, as string) (core.LoadResult, error) {
+		return f.svc.LoadNamespace(ctx, p, bytes.NewReader(b), as)
+	}
+
+	res, err := load(f.admin, dump.Bytes(), "")
+	if err != nil || res != (core.LoadResult{Namespace: "team", Conversations: 1, Messages: 3}) {
+		t.Fatalf("load = %+v, %v", res, err)
+	}
+	res, err = load(f.admin, dump.Bytes(), "copy")
+	if err != nil || res.Namespace != "copy" {
+		t.Fatalf("load as copy = %+v, %v", res, err)
+	}
+	for _, ns := range []string{"team", "copy"} {
+		msgs := must[core.ReadResult](t)(f.svc.Read(ctx, f.admin, ns, "c", core.ReadParams{}))
+		if len(msgs.Messages) != 3 || msgs.Messages[2].Body != "line one\nline \"two\" <b>" {
+			t.Fatalf("%s: %+v", ns, msgs.Messages)
+		}
+		// The log continues where the dump left off.
+		must[core.Standing](t)(f.svc.Join(ctx, f.admin, ns, "c", core.JoinParams{Agent: "late"}))
+		said := must[core.SayResult](t)(f.svc.Say(ctx, f.admin, ns, "c", core.SayParams{Agent: "late", Body: "hi"}))
+		if said.Message.Seq != 5 {
+			t.Fatalf("%s: next seq = %d", ns, said.Message.Seq)
+		}
+	}
+	if n := len(must[core.ReadResult](t)(f.svc.Read(ctx, f.admin, "default", "here", core.ReadParams{})).Messages); n != before {
+		t.Fatalf("the existing conversation has %d messages, had %d", n, before)
+	}
+
+	_, err = load(f.admin, dump.Bytes(), "")
+	wantCode(t, err, core.CodeNamespaceExists)
+	_, err = load(f.admin, full.Bytes(), "other")
+	wantCode(t, err, core.CodeInvalid)
+	_, err = load(f.admin, dump.Bytes()[:dump.Len()-20], "cut")
+	wantCode(t, err, core.CodeInvalid)
+	_, err = load(f.admin, dump.Bytes(), "bad name")
+	wantCode(t, err, core.CodeInvalid)
+	_, err = load(f.account(t, "pat"), dump.Bytes(), "mine")
+	wantCode(t, err, core.CodeForbidden)
+	for _, ns := range []string{"other", "cut", "mine"} {
+		if n := count(t, f.db, `SELECT count(*) FROM namespaces WHERE name = ?`, ns); n != 0 {
+			t.Fatalf("namespace %s was created by a refused load", ns)
+		}
+	}
+	left, err := filepath.Glob(filepath.Join(filepath.Dir(f.path), ".agora-load-*"))
+	if err != nil || len(left) != 0 {
+		t.Fatalf("staging left behind: %v %v", left, err)
+	}
+}
+
+// A dump from an older schema is migrated before it is copied in.
+func TestLoadNamespaceFromAnOlderSchema(t *testing.T) {
+	const dump = `{"format":"agora-dump","version":1,"schema":1,"namespace":"old","created_at":"x"}
+{"table":"namespaces","row":{"id":7,"name":"old","created_at":1}}
+{"table":"conversations","row":{"id":3,"namespace_id":7,"name":"c","topic":"t","end_condition":"none","status":"concluded","created_by":"a","created_at":1,"concluded_at":2,"last_seq":2,"last_at":2}}
+{"table":"participants","row":{"conversation_id":3,"agent":"a","state":"left","joined_at":1,"read_seq":2,"last_seen_at":2}}
+{"table":"messages","row":{"conversation_id":3,"seq":1,"kind":"say","author":"a","body":"first","created_at":1}}
+{"table":"messages","row":{"conversation_id":3,"seq":2,"kind":"say","author":"a","body":"second","reply_to":1,"created_at":2}}
+{"end":true,"rows":5}
+`
+	f := newTokenFixture(t)
+	res, err := f.svc.LoadNamespace(t.Context(), f.admin, strings.NewReader(dump), "")
+	if err != nil || res != (core.LoadResult{Namespace: "old", Conversations: 1, Messages: 2}) {
+		t.Fatalf("load = %+v, %v", res, err)
+	}
+	msgs := must[core.ReadResult](t)(f.svc.Read(t.Context(), f.admin, "old", "c", core.ReadParams{}))
+	if len(msgs.Messages) != 2 || msgs.Messages[1].ReplyTo == nil || *msgs.Messages[1].ReplyTo != 1 {
+		t.Fatalf("messages = %+v", msgs.Messages)
+	}
+}

@@ -311,6 +311,42 @@ paths:
             application/jsonl: {}
         "403": { $ref: "#/components/responses/Error" }
 
+  /v1/load:
+    post:
+      operationId: load
+      description: >
+        Adds the namespace in a namespace dump (from GET /v1/dump?namespace=)
+        to this server, with new IDs, in one transaction. Server admins
+        only. A dump from an older schema is migrated first; full dumps are
+        refused. Like the dump, the loaded namespace grants nothing: give
+        accounts roles in it afterwards. Bodies are limited to 256 MiB and
+        may take up to 10 minutes to send.
+      parameters:
+        - name: as
+          in: query
+          description: The new namespace's name; default the dump's own. It must not exist.
+          schema: { $ref: "#/components/schemas/Name" }
+      requestBody:
+        required: true
+        content:
+          application/jsonl: {}
+      responses:
+        "201":
+          description: What was added.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace, conversations, messages]
+                properties:
+                  namespace: { type: string }
+                  conversations: { type: integer }
+                  messages: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+
   /v1/namespaces/{ns}/members:
     parameters:
       - $ref: "#/components/parameters/ns"

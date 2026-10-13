@@ -48,18 +48,25 @@ type Options struct {
 	MCPSessions func() []mcpserver.SessionUse
 	// Now defaults to time.Now.
 	Now func() time.Time
+	// MaxLoadBytes bounds a dump sent to POST /v1/load; default
+	// DefaultMaxLoadBytes.
+	MaxLoadBytes int64
 }
 
+// DefaultMaxLoadBytes bounds a dump sent to POST /v1/load.
+const DefaultMaxLoadBytes = 256 << 20
+
 type handler struct {
-	svc         *core.Service
-	authn       auth.Authenticator
-	logger      *slog.Logger
-	bodyTimeout time.Duration
-	authMode    string
-	version     string
-	activity    *auth.Activity
-	mcpSessions func() []mcpserver.SessionUse
-	now         func() time.Time
+	svc          *core.Service
+	authn        auth.Authenticator
+	logger       *slog.Logger
+	bodyTimeout  time.Duration
+	authMode     string
+	version      string
+	activity     *auth.Activity
+	mcpSessions  func() []mcpserver.SessionUse
+	now          func() time.Time
+	maxLoadBytes int64
 }
 
 type route struct {
@@ -104,6 +111,7 @@ var routes = []route{
 	{"GET", "/v1/server", (*handler).serverStatus},
 	{"GET", "/v1/backup", (*handler).backup},
 	{"GET", "/v1/dump", (*handler).dump},
+	{"POST", "/v1/load", (*handler).load},
 }
 
 // Register adds the API routes and GET /v1/openapi.yaml to mux.
@@ -117,7 +125,10 @@ func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, o
 	h := &handler{
 		svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout,
 		authMode: opts.AuthMode, version: opts.Version, activity: opts.Activity,
-		mcpSessions: opts.MCPSessions, now: opts.Now,
+		mcpSessions: opts.MCPSessions, now: opts.Now, maxLoadBytes: opts.MaxLoadBytes,
+	}
+	if h.maxLoadBytes == 0 {
+		h.maxLoadBytes = DefaultMaxLoadBytes
 	}
 	if h.now == nil {
 		h.now = time.Now
