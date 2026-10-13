@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -396,5 +397,44 @@ func TestMCPConfig(t *testing.T) {
 		if r := runCLI(t.Context(), "http://127.0.0.1:9000", args...); r.code != exitUsage {
 			t.Errorf("%v = %d, want usage error", args, r.code)
 		}
+	}
+}
+
+func TestSkillsInstall(t *testing.T) {
+	dir := t.TempDir()
+	install := func(args ...string) cliResult {
+		return runCLI(t.Context(), "http://127.0.0.1:1", append([]string{"skills", "install", "--dir", dir}, args...)...)
+	}
+	r := install()
+	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(dir, "agora", "SKILL.md")) || !strings.Contains(r.stdout, filepath.Join(dir, "convene", "SKILL.md")) {
+		t.Fatalf("first install = %+v", r)
+	}
+	if r := install(); r.code != exitOK || !strings.Contains(r.stdout, "up to date") {
+		t.Fatalf("second install = %+v", r)
+	}
+
+	// A changed file blocks the install, and nothing else is written.
+	edited := filepath.Join(dir, "agora", "SKILL.md")
+	if err := os.WriteFile(edited, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "convene", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	if r := install(); r.code != exitError || !strings.Contains(r.stderr, edited) {
+		t.Fatalf("conflicting install = %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "convene", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a refused install wrote files")
+	}
+	if r := install("--force"); r.code != exitOK {
+		t.Fatalf("forced install = %+v", r)
+	}
+	if got, _ := os.ReadFile(edited); string(got) == "mine" {
+		t.Fatal("--force did not replace the file")
+	}
+
+	if r := runCLI(t.Context(), "", "skills", "install"); r.code != exitUsage {
+		t.Fatalf("no client = %+v", r)
 	}
 }

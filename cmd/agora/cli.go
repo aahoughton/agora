@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +23,7 @@ import (
 	"github.com/aahoughton/agora/internal/mcpserver"
 	"github.com/aahoughton/agora/internal/profiles"
 	"github.com/aahoughton/agora/internal/tui"
+	"github.com/aahoughton/agora/skills"
 	"github.com/aahoughton/agora/themes"
 )
 
@@ -394,4 +399,124 @@ that keeps a session from ending while it is expected in a conversation.
 		fmt.Fprint(stdout, "\n"+hook)
 	}
 	return exitOK
+}
+
+func runSkills(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "install" {
+		fmt.Fprintln(stderr, "usage: agora skills install --client NAME [--dir DIR] [--force]")
+		return exitUsage
+	}
+	fs := flag.NewFlagSet("skills install", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, `usage: agora skills install --client NAME [--dir DIR] [--force]
+
+Writes agora's skills (%s) where client %s reads them, and lists each
+file it writes. It refuses to replace a file that differs from the one it
+would write unless --force is given, and then writes nothing.
+
+`, strings.Join(skillNames(), ", "), strings.Join(profiles.Names(), " or "))
+		fs.PrintDefaults()
+	}
+	clientName := fs.String("client", "", "client profile: "+strings.Join(profiles.Names(), ", "))
+	dir := fs.String("dir", "", "install into this directory instead of the client's skills directory")
+	force := fs.Bool("force", false, "replace files that differ")
+	if err := fs.Parse(args[1:]); err != nil {
+		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+	}
+	target := *dir
+	if target == "" {
+		if *clientName == "" {
+			return flagError(stderr, errors.New("--client or --dir is required"))
+		}
+		p, err := profiles.Get(*clientName)
+		if err != nil {
+			return flagError(stderr, err)
+		}
+		if target, err = expandHome(p.SkillsDir); err != nil {
+			fmt.Fprintln(stderr, "agora skills install:", err)
+			return exitError
+		}
+	}
+	if err := installSkills(skills.FS, target, *force, stdout); err != nil {
+		fmt.Fprintln(stderr, "agora skills install:", err)
+		return exitError
+	}
+	return exitOK
+}
+
+func skillNames() []string {
+	entries, _ := fs.ReadDir(skills.FS, ".")
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+// expandHome replaces a leading ~ with the user's home directory.
+func expandHome(path string) (string, error) {
+	rest, ok := strings.CutPrefix(path, "~")
+	if !ok {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, rest), nil
+}
+
+// installSkills copies every file in src under dir. It checks all files
+// before writing any, so a refusal leaves dir as it was.
+func installSkills(src fs.FS, dir string, force bool, out io.Writer) error {
+	type file struct {
+		path string
+		data []byte
+	}
+	var files []file
+	var conflicts []string
+	err := fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(src, path)
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(dir, filepath.FromSlash(path))
+		old, err := os.ReadFile(dst)
+		switch {
+		case err == nil && bytes.Equal(old, data):
+			return nil
+		case err == nil && !force:
+			conflicts = append(conflicts, dst)
+		case err != nil && !errors.Is(err, fs.ErrNotExist):
+			return err
+		}
+		files = append(files, file{dst, data})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(conflicts) > 0 {
+		return fmt.Errorf("these files differ from agora's; pass --force to replace them:\n  %s", strings.Join(conflicts, "\n  "))
+	}
+	for _, f := range files {
+		if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(f.path, f.data, 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "wrote", f.path)
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(out, "skills in", dir, "are up to date")
+	}
+	return nil
 }

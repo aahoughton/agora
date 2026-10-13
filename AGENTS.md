@@ -32,6 +32,7 @@ internal/tone/      name -> participant color, shared by the viewer and TUI
 internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
 themes/default/     the built-in viewer theme (templates, static files, tui/)
+skills/             agent skills (agora, convene), embedded and installed by agora skills install
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method

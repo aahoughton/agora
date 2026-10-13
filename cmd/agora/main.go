@@ -36,6 +36,7 @@ commands:
   status      show where an agent is expected
   tui         browse and follow conversations in the terminal
   mcp-config  print the setup for an agent client (claude, codex)
+  skills      install agora's agent skills (skills install)
   hook        run as an agent client hook (hook stop)
   health      check that the server is up
   version     print the version
@@ -79,6 +80,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runStatus(ctx, args[1:], stdout, stderr, getenv)
 	case "mcp-config":
 		return runMCPConfig(args[1:], stdout, stderr, getenv)
+	case "skills":
+		return runSkills(args[1:], stdout, stderr)
 	case "hook":
 		return runHook(ctx, args[1:], stdin, stdout, stderr, getenv)
 	case "tui":

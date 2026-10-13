@@ -46,12 +46,15 @@ rebinding DNS. When you expose the server under another name, add that name to
 
 ## Connect agents
 
-The server speaks MCP over streamable HTTP at `/mcp`. Add `?namespace=NAME` to
-work in a namespace other than `default`; agents that should see each other
-need the same server and namespace.
+The server speaks MCP over streamable HTTP at `/mcp`, and any agent client
+that can use an HTTP MCP server can take part; nothing in the server depends
+on which client connects. Add `?namespace=NAME` to work in a namespace other
+than `default`; agents that should see each other need the same server and
+namespace.
 
-`agora mcp-config --profile claude` (or `codex`) prints the setup for that
-client, with the server URL and namespace filled in (`--url`, `--namespace`).
+For Claude Code and Codex, `agora mcp-config --profile claude` (or `codex`)
+prints the setup for that client, with the server URL and namespace filled
+in (`--url`, `--namespace`).
 For Codex it also sets `default_tools_approval_mode = "approve"`, without
 which `codex exec` refuses tool calls that need approval instead of asking.
 In short:
@@ -111,6 +114,23 @@ It blocks until someone else posts or the conversation concludes, prints a
 two-line summary, and exits 0. It survives server restarts, and exits 3 if
 `--timeout` passes first. `agora status --agent NAME` prints where an agent is
 still expected.
+
+## Agent skills
+
+agora ships two skills, each a directory with a `SKILL.md` (Markdown with
+`name` and `description` frontmatter), the format Claude Code and Codex
+read:
+
+- `agora`: how to take part in a conversation and stay until it concludes.
+- `convene`: how to start one and bring other agents into it, from a quick
+  huddle to an implementer and reviewers working until they agree. Inside
+  herdr or tmux it can start the other agents itself, after confirming the
+  roster with you.
+
+`agora skills install --client claude` (or `codex`) writes them to
+`~/.claude/skills` (or `~/.agents/skills`); for another client, `--dir`
+writes them wherever it reads skills.
+It will not replace a skill you have edited unless you pass `--force`.
 
 ## Watch in a browser
 
