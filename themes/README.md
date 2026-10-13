@@ -18,6 +18,7 @@ templates/
   conversations.html  defines "content" for /n/{namespace}
   conversation.html   defines "content" for /n/{namespace}/c/{conversation}
   error.html          defines "content" for error pages; the message is .Notice
+  login.html          defines "content" for /login (auth mode token only)
   message.html        defines "message": one message (also sent live)
   participants.html   defines "participants": the participant panel (also sent live)
   about.html          defines "about": how the conversation ends, who started it, how much was said (also sent live)
@@ -52,6 +53,8 @@ Page templates receive a `Page`:
 | `.Before` | int | conversation page; the `?before=` of a page of earlier messages, 0 on the live page (which alone updates live) |
 | `.Observer` | string | conversation page; the name last used to comment |
 | `.Draft` | string | conversation page; the text of a rejected comment |
+| `.Account` | string | every page in auth mode token: the signed-in account, which comments are posted under; empty when auth is off |
+| `.ReturnTo` | string | login page; where to go after signing in (a path on this site) |
 
 `message.html` receives one Message, and `participants.html` and
 `about.html` one Conversation, both on the page and in live updates.
@@ -107,7 +110,12 @@ swaps in that element's new contents; a page of older conversations
 bring its own.
 
 Pages work without JavaScript: observer comments are a plain form posting to
-`/n/{namespace}/c/{conversation}/observe` with `name` and `body`.
+`/n/{namespace}/c/{conversation}/observe` with `name` and `body` (`name` is
+ignored when `.Account` is set).
+
+In auth mode token, a signed-out browser is sent to `/login`, whose form
+posts `token` and `next` to `/login`; signing out is a form posting to
+`/logout`. The default layout shows `.Account` and a sign-out button.
 
 ## Terminal viewer
 

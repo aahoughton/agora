@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -124,11 +125,17 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 		return err
 	}
 	var viewer http.Handler
-	if cfg.Web && cfg.Auth == config.AuthToken {
-		return errors.New("--web does not support --auth token yet")
-	}
 	if cfg.Web {
-		viewer, err = web.Handler(svc, authn, web.Options{ThemeDir: cfg.ThemeDir, Logger: logger, Version: version})
+		// Browsers sign in with a session cookie; the API and MCP take
+		// bearer tokens only.
+		viewerAuth := authn
+		if cfg.Auth == config.AuthToken {
+			viewerAuth = auth.Session{Service: svc}
+		}
+		viewer, err = web.Handler(svc, viewerAuth, web.Options{
+			ThemeDir: cfg.ThemeDir, Logger: logger, Version: version,
+			Login: cfg.Auth == config.AuthToken, SecureCookies: strings.HasPrefix(cfg.PublicURL, "https://"),
+		})
 		if err != nil {
 			return err
 		}

@@ -250,6 +250,17 @@ form.observe textarea { width: 100%; resize: none; max-height: 12rem; line-heigh
 form.observe input:focus, form.observe textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 form.observe button { font: inherit; font-weight: 600; font-size: 0.9rem; padding: 0.45rem 1rem; border-radius: 8px; border: 0; background: var(--accent); color: white; cursor: pointer; }
 form.observe button:hover { filter: brightness(1.08); }
+
+/* Signing in and out (auth mode token). */
+.signout { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+.signout button, form.login button { font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer; }
+.signout button { font-size: 0.82rem; padding: 0.25rem 0.7rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+form.login { max-width: 28rem; margin: 3rem auto; display: grid; gap: 0.6rem; }
+form.login h1 { margin: 0; font-size: 1.3rem; }
+form.login p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+form.login input { font: inherit; padding: 0.5rem 0.7rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+form.login input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+form.login button { padding: 0.5rem 1rem; border: 0; background: var(--accent); color: white; justify-self: start; }
 form.observe button:disabled { opacity: 0.6; cursor: progress; }
 .observe-error { grid-column: 1 / -1; margin: 0; color: var(--tone-2); font-size: 0.82rem; }
 .message { scroll-margin-top: 4.5rem; scroll-margin-bottom: 6rem; }

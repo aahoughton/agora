@@ -121,13 +121,20 @@
     fetch(form.action, {
       method: "POST",
       body: new URLSearchParams(new FormData(form)),
+      headers: { "X-Agora-Background": "1" },
       redirect: "manual",
       credentials: "same-origin",
     }).then(function (res) {
-      if (res.type === "opaqueredirect" || res.ok) {
+      if (res.ok) {
         box.value = "";
         grow();
         box.focus();
+        return;
+      }
+      if (res.type === "opaqueredirect") {
+        // Posted in the background, only a signed-out request redirects.
+        error.textContent = "You are signed out. Sign in again in another tab; your comment is still here.";
+        error.hidden = false;
         return;
       }
       return res.text().then(function (html) {

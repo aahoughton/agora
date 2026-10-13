@@ -41,6 +41,25 @@ func (b Bearer) Authenticate(r *http.Request) (core.Principal, error) {
 	return b.Service.AuthenticateToken(r.Context(), strings.TrimSpace(token))
 }
 
+// SessionCookie holds a browser session secret in auth mode token.
+const SessionCookie = "agora_session"
+
+// Session authenticates the HTML viewer's session cookie. Browsers get the
+// cookie by pasting a token at the viewer's login page; the JSON API and
+// MCP never accept it.
+type Session struct {
+	Service *core.Service
+}
+
+// Authenticate implements Authenticator.
+func (s Session) Authenticate(r *http.Request) (core.Principal, error) {
+	c, err := r.Cookie(SessionCookie)
+	if err != nil || c.Value == "" {
+		return core.Principal{}, &core.Error{Code: core.CodeUnauthorized, Message: "sign in"}
+	}
+	return s.Service.AuthenticateSession(r.Context(), c.Value)
+}
+
 // PolicyFor returns the core policy for an auth mode.
 func PolicyFor(mode config.AuthMode) (core.Policy, error) {
 	switch mode {

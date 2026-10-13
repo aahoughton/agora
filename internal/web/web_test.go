@@ -413,6 +413,7 @@ func readEvents(t *testing.T, body io.Reader, until func([]sse) bool) []sse {
 // stream is an open event stream; its body is closed when the test ends.
 type stream struct {
 	StatusCode int
+	Header     http.Header
 	Body       io.Reader
 }
 
@@ -429,7 +430,7 @@ func openStream(t *testing.T, e *env, path string, header map[string]string) str
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
-	return stream{StatusCode: resp.StatusCode, Body: resp.Body}
+	return stream{StatusCode: resp.StatusCode, Header: resp.Header, Body: resp.Body}
 }
 
 func TestStreamCannotBeInjectedThroughCarriageReturns(t *testing.T) {

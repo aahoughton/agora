@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +28,8 @@ const (
 	EnvThemeDir     = "AGORA_THEME_DIR"
 
 	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
+
+	EnvPublicURL = "AGORA_PUBLIC_URL"
 
 	EnvLogLevel  = "AGORA_LOG_LEVEL"
 	EnvLogFormat = "AGORA_LOG_FORMAT"
@@ -69,6 +72,10 @@ type Serve struct {
 	AnyHost      bool
 	// ThemeDir holds HTML theme files that replace the default theme's.
 	ThemeDir string
+	// PublicURL is the address browsers use to reach the server, when it
+	// differs from Addr (for example behind a TLS proxy). An https URL
+	// marks the viewer's session cookie Secure.
+	PublicURL string
 	// LogLevel is the least severe level logged. At info the server logs
 	// each MCP tool call; at debug, each HTTP request too.
 	LogLevel slog.Level
@@ -99,6 +106,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
+	publicURL := fs.String("public-url", "", "the URL browsers reach the server at, e.g. https://agora.example; https marks session cookies Secure (env "+EnvPublicURL+")")
 	logLevel := fs.String("log-level", "", "least severe level logged: debug, info, warn or error (env "+EnvLogLevel+", default info)")
 	logFormat := fs.String("log-format", "", "log format: text or json (env "+EnvLogFormat+", default text)")
 	mcpMaxWait := fs.String("mcp-max-wait", "", "longest MCP wait, e.g. 50s; keep it under your MCP clients' tool timeout (env "+EnvMCPMaxWait+", default 50s)")
@@ -146,6 +154,14 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 		return Serve{}, fmt.Errorf("serve: invalid mcp-max-wait %q: want a duration between 1s and 10m", waitStr)
 	}
 	cfg.MCPMaxWait = d
+
+	cfg.PublicURL = firstNonEmpty(*publicURL, getenv(EnvPublicURL))
+	if cfg.PublicURL != "" {
+		u, err := url.Parse(cfg.PublicURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port]", cfg.PublicURL)
+		}
+	}
 
 	lvl := firstNonEmpty(*logLevel, getenv(EnvLogLevel), "info")
 	switch strings.ToLower(lvl) {

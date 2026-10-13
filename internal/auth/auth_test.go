@@ -80,3 +80,33 @@ func TestUnknownMode(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+func TestTheAPIIgnoresSessionCookies(t *testing.T) {
+	svc := service(t, config.AuthToken)
+	tok, err := svc.Bootstrap(t.Context(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.AuthenticateToken(t.Context(), tok.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, _, err := svc.CreateSession(t.Context(), p, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := request(t, "")
+	r.AddCookie(&http.Cookie{Name: SessionCookie, Value: secret})
+	if _, err := (Bearer{Service: svc}).Authenticate(r); core.CodeOf(err) != core.CodeUnauthorized {
+		t.Fatalf("bearer accepted a cookie: %v", err)
+	}
+	if got, err := (Session{Service: svc}).Authenticate(r); err != nil || got.AccountID != p.AccountID {
+		t.Fatalf("session = %+v, %v", got, err)
+	}
+	// A token in the cookie is not a session.
+	r = request(t, "")
+	r.AddCookie(&http.Cookie{Name: SessionCookie, Value: tok.Secret})
+	if _, err := (Session{Service: svc}).Authenticate(r); core.CodeOf(err) != core.CodeUnauthorized {
+		t.Fatalf("session accepted a token: %v", err)
+	}
+}

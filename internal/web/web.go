@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"text/template/parse"
@@ -63,12 +64,19 @@ type Page struct {
 	Observer string
 	// Draft is the text of a comment that was rejected, to show again.
 	Draft string
+
+	// Account is the signed-in account's name in auth mode token, which is
+	// also the name observer comments are posted under; empty when auth is
+	// off.
+	Account string
+	// ReturnTo is where the login page sends the browser after signing in.
+	ReturnTo string
 }
 
 // pages are the page templates a theme must provide. Each defines
 // "content"; layout.html defines "layout", message.html "message",
 // participants.html "participants" and about.html "about".
-var pages = []string{"namespaces", "conversations", "conversation", "error"}
+var pages = []string{"namespaces", "conversations", "conversation", "error", "login"}
 
 var partials = []string{"layout", "message", "participants", "about"}
 
@@ -85,6 +93,16 @@ type Options struct {
 	// they default to the real clock and the local zone.
 	Now      func() time.Time
 	Location *time.Location
+	// Login turns on the login page and session cookies (auth mode token);
+	// the authenticator passed to Handler must then read the session
+	// cookie (auth.Session).
+	Login bool
+	// SecureCookies marks the session cookie Secure, for a server reached
+	// over HTTPS.
+	SecureCookies bool
+	// SessionTTL is how long a browser session lasts; default
+	// core.DefaultSessionTTL.
+	SessionTTL time.Duration
 }
 
 type viewer struct {
@@ -133,7 +151,20 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) (http.Ha
 	mux.HandleFunc("GET /n/{ns}/c/{conv}/events", v.events)
 	mux.HandleFunc("POST /n/{ns}/c/{conv}/observe", v.observe)
 	mux.Handle("GET /static/", v.static)
-	return mux, nil
+	if opts.Login {
+		mux.HandleFunc("GET /login", v.loginPage)
+		mux.HandleFunc("POST /login", v.login)
+		mux.HandleFunc("POST /logout", v.logout)
+	}
+	// Pages and streams carry conversation content, possibly private to
+	// the signed-in account: no cache may keep them. Static files may be
+	// cached.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/static/") {
+			noStore(w)
+		}
+		mux.ServeHTTP(w, r)
+	}), nil
 }
 
 func (v *viewer) funcs() template.FuncMap {
@@ -351,34 +382,57 @@ func (v *viewer) fail(w http.ResponseWriter, err error, data Page) {
 	v.render(w, status, "error", data)
 }
 
-func (v *viewer) principal(w http.ResponseWriter, r *http.Request) (core.Principal, bool) {
+// principal authenticates the request and returns the caller and its
+// account name. With Login on, a signed-out page request is sent to the
+// login page and comes back afterwards.
+func (v *viewer) principal(w http.ResponseWriter, r *http.Request) (core.Principal, string, bool) {
 	p, err := v.authn.Authenticate(r)
 	if err != nil {
-		v.fail(w, err, Page{})
-		return core.Principal{}, false
+		switch {
+		case v.opts.Login && core.CodeOf(err) == core.CodeUnauthorized && strings.HasSuffix(r.URL.Path, "/events"):
+			http.Error(w, "sign in", http.StatusUnauthorized)
+		case v.opts.Login && core.CodeOf(err) == core.CodeUnauthorized:
+			back := r.URL.RequestURI()
+			if r.Method != http.MethodGet {
+				back = "/n/" + r.PathValue("ns") + "/c/" + r.PathValue("conv")
+			}
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(back), http.StatusSeeOther)
+		default:
+			v.fail(w, err, Page{})
+		}
+		return core.Principal{}, "", false
 	}
-	return p, true
+	var account string
+	if !p.IsAnonymous() {
+		id, err := v.svc.Whoami(r.Context(), p)
+		if err != nil {
+			v.fail(w, err, Page{})
+			return core.Principal{}, "", false
+		}
+		account = id.Account.Name
+	}
+	return p, account, true
 }
 
 func (v *viewer) root(w http.ResponseWriter, r *http.Request) {
-	p, ok := v.principal(w, r)
+	p, account, ok := v.principal(w, r)
 	if !ok {
 		return
 	}
 	ns, err := v.svc.ListNamespaces(r.Context(), p)
 	if err != nil {
-		v.fail(w, err, Page{})
+		v.fail(w, err, Page{Account: account})
 		return
 	}
 	if len(ns) == 1 {
 		http.Redirect(w, r, "/n/"+ns[0].Name, http.StatusFound)
 		return
 	}
-	v.render(w, http.StatusOK, "namespaces", Page{Title: "Namespaces", Namespaces: ns})
+	v.render(w, http.StatusOK, "namespaces", Page{Title: "Namespaces", Namespaces: ns, Account: account})
 }
 
 func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
-	p, ok := v.principal(w, r)
+	p, account, ok := v.principal(w, r)
 	if !ok {
 		return
 	}
@@ -391,7 +445,7 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := v.svc.ListConversations(r.Context(), p, ns, lp)
 	if err != nil {
-		v.fail(w, err, Page{Namespace: ns})
+		v.fail(w, err, Page{Namespace: ns, Account: account})
 		return
 	}
 	cs := page.Conversations
@@ -400,12 +454,13 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 	}
 	v.render(w, http.StatusOK, "conversations", Page{
 		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, OpenOnly: openOnly, Next: page.Next,
+		Account: account,
 	})
 }
 
-func (v *viewer) conversationPage(r *http.Request, p core.Principal) (Page, error) {
+func (v *viewer) conversationPage(r *http.Request, p core.Principal, account string) (Page, error) {
 	ns, name := r.PathValue("ns"), r.PathValue("conv")
-	data := Page{Namespace: ns, Title: name}
+	data := Page{Namespace: ns, Title: name, Account: account}
 	c, err := v.svc.GetConversation(r.Context(), p, ns, name)
 	if err != nil {
 		return data, err
@@ -443,11 +498,11 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal) (Page, erro
 }
 
 func (v *viewer) conversation(w http.ResponseWriter, r *http.Request) {
-	p, ok := v.principal(w, r)
+	p, account, ok := v.principal(w, r)
 	if !ok {
 		return
 	}
-	data, err := v.conversationPage(r, p)
+	data, err := v.conversationPage(r, p, account)
 	if err != nil {
 		v.fail(w, err, data)
 		return
@@ -456,7 +511,7 @@ func (v *viewer) conversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
-	p, ok := v.principal(w, r)
+	p, account, ok := v.principal(w, r)
 	if !ok {
 		return
 	}
@@ -469,7 +524,7 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 	observer := strings.TrimSpace(r.PostForm.Get("name"))
 	_, err := v.svc.Observe(r.Context(), p, ns, name, core.ObserveParams{Name: observer, Body: r.PostForm.Get("body")})
 	if err != nil {
-		data, perr := v.conversationPage(r, p)
+		data, perr := v.conversationPage(r, p, account)
 		if perr != nil {
 			v.fail(w, perr, data)
 			return
@@ -479,19 +534,30 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 		v.render(w, http.StatusBadRequest, "conversation", data)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: observerCookie, Value: observer, Path: "/", MaxAge: 365 * 24 * 3600,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode,
-	})
+	if account == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name: observerCookie, Value: observer, Path: "/", MaxAge: 365 * 24 * 3600,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		})
+	}
+	// The page's script posts in the background and needs success told
+	// apart from a redirect to the login page.
+	if r.Header.Get(backgroundHeader) != "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	http.Redirect(w, r, "/n/"+ns+"/c/"+name+"#messages", http.StatusSeeOther)
 }
+
+// backgroundHeader marks a comment posted by the page's script.
+const backgroundHeader = "X-Agora-Background"
 
 // followTimeout bounds each server-side wait in the event stream; a comment
 // line is sent between waits to keep proxies from closing the connection.
 const followTimeout = 25 * time.Second
 
 func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
-	p, ok := v.principal(w, r)
+	p, _, ok := v.principal(w, r)
 	if !ok {
 		return
 	}
@@ -517,7 +583,6 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 
 	rc := http.NewResponseController(w)
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	// Start with fresh state, so a reconnecting page catches up on anything
 	// it missed between events.
@@ -617,4 +682,77 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// returnTo keeps a post-login redirect on this site: a path, never another
+// host. Browsers drop tabs and newlines from a Location and read a
+// backslash as a slash, so "/\t/evil" would become "//evil"; any control
+// character or backslash is refused.
+func returnTo(next string) string {
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") ||
+		strings.ContainsFunc(next, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '\\' }) {
+		return "/"
+	}
+	return next
+}
+
+func noStore(w http.ResponseWriter) { w.Header().Set("Cache-Control", "no-store") }
+
+func (v *viewer) loginPage(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	v.render(w, http.StatusOK, "login", Page{Title: "Sign in", ReturnTo: returnTo(r.URL.Query().Get("next"))})
+}
+
+// login exchanges a pasted token for a browser session. The session cookie
+// replaces (and revokes) any session the browser had.
+func (v *viewer) login(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if err := r.ParseForm(); err != nil {
+		v.render(w, http.StatusBadRequest, "login", Page{Title: "Sign in", Notice: "Could not read the form.", ReturnTo: "/"})
+		return
+	}
+	next := returnTo(r.PostForm.Get("next"))
+	p, err := v.svc.AuthenticateToken(r.Context(), strings.TrimSpace(r.PostForm.Get("token")))
+	if err != nil {
+		if core.CodeOf(err) != core.CodeUnauthorized {
+			v.fail(w, err, Page{})
+			return
+		}
+		v.render(w, http.StatusUnauthorized, "login", Page{
+			Title: "Sign in", ReturnTo: next,
+			Notice: "That token is not valid, or it has been revoked or has expired.",
+		})
+		return
+	}
+	var replaces string
+	if old, err := r.Cookie(auth.SessionCookie); err == nil {
+		replaces = old.Value
+	}
+	secret, expires, err := v.svc.CreateSession(r.Context(), p, v.opts.SessionTTL, replaces)
+	if err != nil {
+		v.fail(w, err, Page{})
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: auth.SessionCookie, Value: secret, Path: "/", Expires: expires,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: v.opts.SecureCookies,
+	})
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+func (v *viewer) logout(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	if c, err := r.Cookie(auth.SessionCookie); err == nil {
+		if err := v.svc.EndSession(r.Context(), c.Value); err != nil {
+			v.fail(w, err, Page{})
+			return
+		}
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: auth.SessionCookie, Value: "", Path: "/", MaxAge: -1,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: v.opts.SecureCookies,
+	})
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

@@ -122,6 +122,7 @@ func TestParseServeErrors(t *testing.T) {
 		{"bad log level", []string{"--log-level", "loud"}, nil, "invalid log-level"},
 		{"log level offset", nil, map[string]string{EnvLogLevel: "info+2"}, "invalid log-level"},
 		{"bad log format", []string{"--log-format", "xml"}, nil, "invalid log-format"},
+		{"bad public url", []string{"--public-url", "agora.example"}, nil, "invalid public-url"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
