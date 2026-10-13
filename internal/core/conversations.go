@@ -86,18 +86,21 @@ type Message struct {
 type conv struct {
 	id   int64
 	nsID int64
+	// creatorAccount is the account that started the conversation; NULL
+	// under auth mode none.
+	creatorAccount sql.NullInt64
 	Conversation
 }
 
 const convColumns = `c.id, c.namespace_id, n.name, c.name, c.topic, c.end_condition, c.ends_at,
-	c.status, c.created_by, c.created_at, c.concluded_at, c.last_seq, c.last_at`
+	c.status, c.created_by, c.created_at, c.concluded_at, c.last_seq, c.last_at, c.created_by_account`
 
 func scanConv(row interface{ Scan(...any) error }) (*conv, error) {
 	var c conv
 	var endsAt, concludedAt sql.NullInt64
 	var created, lastAt int64
 	err := row.Scan(&c.id, &c.nsID, &c.Namespace, &c.Name, &c.Topic, &c.End, &endsAt,
-		&c.Status, &c.CreatedBy, &created, &concludedAt, &c.LastSeq, &lastAt)
+		&c.Status, &c.CreatedBy, &created, &concludedAt, &c.LastSeq, &lastAt, &c.creatorAccount)
 	if err != nil {
 		return nil, err
 	}
@@ -204,8 +207,8 @@ func (s *Service) appendMsg(ctx context.Context, tx *wtx, c *conv, kind, author,
 	if replyTo != nil {
 		rt = sql.NullInt64{Int64: *replyTo, Valid: true}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO messages (conversation_id, seq, kind, author, body, reply_to, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, c.id, m.Seq, kind, author, body, rt, ms(now)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO messages (conversation_id, seq, kind, author, body, reply_to, created_at, account_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, c.id, m.Seq, kind, author, body, rt, ms(now), tx.account); err != nil {
 		return Message{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE conversations SET last_seq = ?, last_at = ? WHERE id = ?`,
@@ -259,15 +262,15 @@ func (s *Service) Start(ctx context.Context, p Principal, ns string, sp StartPar
 	}
 
 	var out Conversation
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		nsID, err := namespaceID(ctx, tx, ns)
 		if err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO conversations
-			(namespace_id, name, topic, end_condition, ends_at, created_by, created_at, last_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			nsID, sp.Name, sp.Topic, sp.End, nullMS(sp.EndsAt), sp.Agent, ms(now), ms(now))
+			(namespace_id, name, topic, end_condition, ends_at, created_by, created_at, last_at, created_by_account)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nsID, sp.Name, sp.Topic, sp.End, nullMS(sp.EndsAt), sp.Agent, ms(now), ms(now), tx.account)
 		if err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				return errorf(CodeConversationExists, "conversation %q already exists in namespace %q; join it or pick another name", sp.Name, ns)

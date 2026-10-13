@@ -113,6 +113,36 @@ func (s *Service) participant(ctx context.Context, q querier, convID int64, agen
 	return &pt, nil
 }
 
+// checkOwner refuses p acting as agent in c when the name belongs to
+// another account. A name is bound to the account that first joined with
+// it (or started the conversation with it), for the life of the
+// conversation. Names bound under auth mode none (NULL) cannot be acted as
+// by an account. The anonymous principal (auth mode none) is not checked.
+func (s *Service) checkOwner(ctx context.Context, q querier, c *conv, p Principal, agent string) error {
+	if p.IsAnonymous() {
+		return nil
+	}
+	var owner sql.NullInt64
+	err := q.QueryRowContext(ctx, `SELECT account_id FROM participants WHERE conversation_id = ? AND agent = ?`,
+		c.id, agent).Scan(&owner)
+	switch {
+	case isNoRows(err):
+		if agent != c.CreatedBy {
+			return nil
+		}
+		owner = c.creatorAccount
+	case err != nil:
+		return err
+	}
+	switch {
+	case !owner.Valid:
+		return errorf(CodeForbidden, "%s in conversation %q was joined without an account; pick another name", agent, c.Name)
+	case owner.Int64 != p.AccountID:
+		return errorf(CodeForbidden, "%s in conversation %q belongs to another account; pick another name", agent, c.Name)
+	}
+	return nil
+}
+
 // member returns the agent's row if they are active or concluded, and a
 // not_participant error otherwise.
 func (s *Service) member(ctx context.Context, q querier, c *conv, agent string) (*Participant, error) {
@@ -129,8 +159,8 @@ func (s *Service) member(ctx context.Context, q querier, c *conv, agent string) 
 func (s *Service) addParticipant(ctx context.Context, tx *wtx, c *conv, agent string) error {
 	now := ms(s.now())
 	if _, err := tx.ExecContext(ctx, `INSERT INTO participants
-		(conversation_id, agent, state, joined_at, last_seen_at) VALUES (?, ?, ?, ?, ?)`,
-		c.id, agent, StateActive, now, now); err != nil {
+		(conversation_id, agent, state, joined_at, last_seen_at, account_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		c.id, agent, StateActive, now, now, tx.account); err != nil {
 		return err
 	}
 	_, err := s.appendMsg(ctx, tx, c, KindSystem, agent, agent+" joined", nil)
@@ -177,9 +207,12 @@ func (s *Service) Join(ctx context.Context, p Principal, ns, name string, jp Joi
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Standing{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, jp.Agent); err != nil {
 			return err
 		}
 		if err := openOrError(c); err != nil {
@@ -244,9 +277,12 @@ func (s *Service) Leave(ctx context.Context, p Principal, ns, name string, lp Le
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Standing{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, lp.Agent); err != nil {
 			return err
 		}
 		pt, err := s.member(ctx, tx, c, lp.Agent)
@@ -345,9 +381,12 @@ func (s *Service) SetPresence(ctx context.Context, p Principal, ns, name string,
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Participant{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, pp.Agent); err != nil {
 			return err
 		}
 		if _, err := s.member(ctx, tx, c, pp.Agent); err != nil {
@@ -391,9 +430,12 @@ func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Standing{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, cp.Agent); err != nil {
 			return err
 		}
 		if err := openOrError(c); err != nil {
@@ -439,9 +481,12 @@ func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp Cl
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Standing{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, cp.Agent); err != nil {
 			return err
 		}
 		if err := openOrError(c); err != nil {

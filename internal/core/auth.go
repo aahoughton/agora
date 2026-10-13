@@ -74,7 +74,7 @@ func (r *Roles) Authorize(ctx context.Context, p Principal, ns string, a Action)
 	if r.svc == nil {
 		panic("core: Roles used outside the Service it was given to")
 	}
-	return r.svc.authorizeRole(ctx, p, ns, a)
+	return r.svc.authorizeRole(ctx, r.svc.db, p, ns, a)
 }
 
 // AllowAll is the policy for auth mode `none`.

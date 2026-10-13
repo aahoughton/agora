@@ -285,10 +285,20 @@ func (s *Service) requireServerAdmin(ctx context.Context, p Principal) error {
 
 // requireSelfOrAdmin allows the account itself or a server admin.
 func (s *Service) requireSelfOrAdmin(ctx context.Context, p Principal, a Account) error {
-	if !p.IsAnonymous() && p.AccountID == a.ID {
-		return s.checkCredential(ctx, s.db, p)
+	return s.selfOrAdminIn(ctx, s.db, p, a.ID)
+}
+
+func (s *Service) selfOrAdminIn(ctx context.Context, q querier, p Principal, account int64) error {
+	if !p.IsAnonymous() && p.AccountID == account {
+		return s.checkCredential(ctx, q, p)
 	}
-	return s.requireServerAdmin(ctx, p)
+	return s.authorizeIn(ctx, q, p, "", ActionAdmin)
+}
+
+// writeSelfOrAdmin is a write by the account itself or a server admin,
+// checked again inside the transaction.
+func (s *Service) writeSelfOrAdmin(ctx context.Context, p Principal, account int64, fn func(tx *wtx) error) error {
+	return s.writeChecked(ctx, p, func(q querier) error { return s.selfOrAdminIn(ctx, q, p, account) }, fn)
 }
 
 func (s *Service) insertAccount(ctx context.Context, tx *wtx, name string, serverAdmin bool) (Account, error) {
@@ -338,7 +348,7 @@ func (s *Service) CreateAccount(ctx context.Context, p Principal, name string, s
 		return Account{}, err
 	}
 	var a Account
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, "", ActionAdmin, func(tx *wtx) error {
 		var err error
 		a, err = s.insertAccount(ctx, tx, name, serverAdmin)
 		return err
@@ -367,7 +377,7 @@ func (s *Service) UpdateAccount(ctx context.Context, p Principal, name string, u
 		return Account{}, err
 	}
 	var a Account
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, "", ActionAdmin, func(tx *wtx) error {
 		var err error
 		a, err = s.accountByName(ctx, tx, name)
 		if err != nil {
@@ -417,7 +427,7 @@ func (s *Service) IssueToken(ctx context.Context, p Principal, account, label st
 		return IssuedToken{}, err
 	}
 	var t IssuedToken
-	err = s.write(ctx, func(tx *wtx) error {
+	err = s.writeSelfOrAdmin(ctx, p, a.ID, func(tx *wtx) error {
 		var err error
 		t, err = s.insertToken(ctx, tx, a, label, ttl)
 		return err
@@ -478,7 +488,7 @@ func (s *Service) RevokeToken(ctx context.Context, p Principal, id int64) error 
 	if err := s.requireSelfOrAdmin(ctx, p, Account{ID: owner}); err != nil {
 		return err
 	}
-	return s.write(ctx, func(tx *wtx) error {
+	return s.writeSelfOrAdmin(ctx, p, owner, func(tx *wtx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`, ms(s.now()), id)
 		return err
 	})
@@ -495,7 +505,7 @@ func (s *Service) RevokeAllTokens(ctx context.Context, p Principal, account stri
 		return 0, err
 	}
 	var n int64
-	err = s.write(ctx, func(tx *wtx) error {
+	err = s.writeSelfOrAdmin(ctx, p, a.ID, func(tx *wtx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL`,
 			ms(s.now()), a.ID)
 		if err != nil {
@@ -517,7 +527,7 @@ func (s *Service) SetMembership(ctx context.Context, p Principal, ns, account st
 		return Membership{}, err
 	}
 	var m Membership
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionAdmin, func(tx *wtx) error {
 		nsID, err := namespaceID(ctx, tx, ns)
 		if err != nil {
 			return err
@@ -542,7 +552,7 @@ func (s *Service) RemoveMembership(ctx context.Context, p Principal, ns, account
 	if err := s.authorize(ctx, p, ns, ActionAdmin); err != nil {
 		return err
 	}
-	return s.write(ctx, func(tx *wtx) error {
+	return s.writeAs(ctx, p, ns, ActionAdmin, func(tx *wtx) error {
 		nsID, err := namespaceID(ctx, tx, ns)
 		if err != nil {
 			return err
@@ -617,16 +627,16 @@ func (s *Service) Recover(ctx context.Context, name string) (IssuedToken, error)
 }
 
 // authorizeRole implements the Roles policy.
-func (s *Service) authorizeRole(ctx context.Context, p Principal, ns string, a Action) error {
+func (s *Service) authorizeRole(ctx context.Context, q querier, p Principal, ns string, a Action) error {
 	if p.IsAnonymous() {
 		return unauthorized("sign in with a token")
 	}
-	if err := s.checkCredential(ctx, s.db, p); err != nil {
+	if err := s.checkCredential(ctx, q, p); err != nil {
 		return err
 	}
 	var admin bool
 	var role sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT a.server_admin, m.role FROM accounts a
+	err := q.QueryRowContext(ctx, `SELECT a.server_admin, m.role FROM accounts a
 		LEFT JOIN memberships m ON m.account_id = a.id
 			AND m.namespace_id = (SELECT id FROM namespaces WHERE name = ?)
 		WHERE a.id = ?`, ns, p.AccountID).Scan(&admin, &role)

@@ -89,6 +89,14 @@ func (s *Service) authorize(ctx context.Context, p Principal, ns string, a Actio
 	return s.opts.Policy.Authorize(ctx, p, ns, a)
 }
 
+// authorizeIn is authorize reading through q, such as a write transaction.
+func (s *Service) authorizeIn(ctx context.Context, q querier, p Principal, ns string, a Action) error {
+	if _, ok := s.opts.Policy.(*Roles); ok {
+		return s.authorizeRole(ctx, q, p, ns, a)
+	}
+	return s.opts.Policy.Authorize(ctx, p, ns, a)
+}
+
 // querier is satisfied by *sql.DB and *sql.Tx.
 type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -101,16 +109,42 @@ type querier interface {
 type wtx struct {
 	*sql.Tx
 	changed []int64
+	// account is the account acting, recorded on what the transaction
+	// appends; NULL for the anonymous principal and for the server itself.
+	account sql.NullInt64
 }
 
 func (t *wtx) touched(convID int64) { t.changed = append(t.changed, convID) }
 
 func (s *Service) write(ctx context.Context, fn func(tx *wtx) error) error {
+	return s.writeChecked(ctx, Anonymous(), nil, fn)
+}
+
+// writeAs is write on behalf of p, whose account is recorded on appended
+// messages and joined participants. Once it holds the write lock it checks
+// again that p may do a in ns, so a revocation, disable or demotion that
+// committed while the write waited for the lock wins.
+func (s *Service) writeAs(ctx context.Context, p Principal, ns string, a Action, fn func(tx *wtx) error) error {
+	return s.writeChecked(ctx, p, func(q querier) error { return s.authorizeIn(ctx, q, p, ns, a) }, fn)
+}
+
+// writeChecked is write on behalf of p with check run first, inside the
+// transaction.
+func (s *Service) writeChecked(ctx context.Context, p Principal, check func(querier) error, fn func(tx *wtx) error) error {
 	sqlTx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	tx := &wtx{Tx: sqlTx}
+	if !p.IsAnonymous() {
+		tx.account = sql.NullInt64{Int64: p.AccountID, Valid: true}
+	}
+	if check != nil {
+		if err := check(tx); err != nil {
+			_ = sqlTx.Rollback()
+			return err
+		}
+	}
 	if err := fn(tx); err != nil {
 		_ = sqlTx.Rollback()
 		return err

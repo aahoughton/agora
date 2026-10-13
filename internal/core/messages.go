@@ -66,9 +66,12 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 	if err := s.settle(ctx, ns, name); err != nil {
 		return SayResult{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, sp.Agent); err != nil {
 			return err
 		}
 		if err := openOrError(c); err != nil {
@@ -164,6 +167,14 @@ func (s *Service) Observe(ctx context.Context, p Principal, ns, name string, op 
 	if err := s.authorize(ctx, p, ns, ActionObserve); err != nil {
 		return Message{}, err
 	}
+	if !p.IsAnonymous() {
+		// An account comments under its own name, whatever it asked for.
+		a, err := s.accountByID(ctx, s.db, p.AccountID)
+		if err != nil {
+			return Message{}, err
+		}
+		op.Name = a.Name
+	}
 	if err := checkName("observer", op.Name); err != nil {
 		return Message{}, err
 	}
@@ -174,7 +185,7 @@ func (s *Service) Observe(ctx context.Context, p Principal, ns, name string, op 
 	if err := s.settle(ctx, ns, name); err != nil {
 		return Message{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionObserve, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
 			return err
@@ -225,7 +236,13 @@ type ReadResult struct {
 
 // Read returns messages after a seq, oldest first.
 func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp ReadParams) (ReadResult, error) {
-	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+	// Reading as an agent moves its read position, so it takes the right to
+	// participate; reading without one is a plain read.
+	action := ActionRead
+	if rp.Agent != "" {
+		action = ActionParticipate
+	}
+	if err := s.authorize(ctx, p, ns, action); err != nil {
 		return ReadResult{}, err
 	}
 	if rp.Agent != "" {
@@ -276,9 +293,12 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 	if err := s.settle(ctx, ns, name); err != nil {
 		return ReadResult{}, err
 	}
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, rp.Agent); err != nil {
 			return err
 		}
 		pt, err := s.member(ctx, tx, c, rp.Agent)

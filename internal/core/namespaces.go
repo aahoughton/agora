@@ -43,7 +43,7 @@ func (s *Service) CreateNamespace(ctx context.Context, p Principal, name string)
 		return Namespace{}, err
 	}
 	now := s.now()
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, "", ActionAdmin, func(tx *wtx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO namespaces (name, created_at) VALUES (?, ?)`, name, ms(now))
 		if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 			return errorf(CodeNamespaceExists, "namespace %q already exists", name)

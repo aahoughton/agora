@@ -90,3 +90,59 @@ func TestReadsStayWithinTheLoadedSnapshot(t *testing.T) {
 		t.Fatalf("unread = %d, want %d (messages up to the snapshot only)", st.Unread, unread)
 	}
 }
+
+// Inline delivery re-checks access inside its own transaction: a token
+// revoked after the wait's last check does not receive the message.
+func TestInlineDeliveryRechecksAccess(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	s := New(db, Options{Policy: RolePolicy()})
+	ctx := t.Context()
+	tok, err := s.Bootstrap(ctx, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := s.AuthenticateToken(ctx, tok.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAccount(ctx, root, "pat", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetMembership(ctx, root, "default", "pat", RoleMember); err != nil {
+		t.Fatal(err)
+	}
+	pt, err := s.IssueToken(ctx, root, "pat", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pat, err := s.AuthenticateToken(ctx, pt.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Start(ctx, root, "default", StartParams{Name: "c", Agent: "boss", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Join(ctx, pat, "default", "c", JoinParams{Agent: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Read(ctx, pat, "default", "c", ReadParams{Agent: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Say(ctx, root, "default", "c", SayParams{Agent: "boss", Body: "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	testHookBeforeInline = func() {
+		if _, err := s.RevokeAllTokens(context.WithoutCancel(ctx), root, "pat"); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { testHookBeforeInline = nil })
+	d, err := s.Wait(ctx, pat, "default", "c", WaitParams{Agent: "p", Timeout: time.Second, InlineBytes: 1000})
+	if CodeOf(err) != CodeUnauthorized {
+		t.Fatalf("wait after revocation = %+v, %v", d, err)
+	}
+}

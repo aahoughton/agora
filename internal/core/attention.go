@@ -196,10 +196,13 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	}
 	var c *conv
 	var after int64
-	err := s.write(ctx, func(tx *wtx) error {
+	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		var err error
 		c, err = s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, wp.Agent); err != nil {
 			return err
 		}
 		pt, err := s.member(ctx, tx, c, wp.Agent)
@@ -255,7 +258,10 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	}
 
 	if wp.InlineBytes > 0 && wp.After == nil && d.New > 0 {
-		inlined, ok, err := s.inline(ctx, ns, name, wp.Agent, wp.InlineBytes)
+		if testHookBeforeInline != nil {
+			testHookBeforeInline()
+		}
+		inlined, ok, err := s.inline(ctx, p, ns, name, wp.Agent, wp.InlineBytes)
 		if err != nil {
 			return Digest{}, err
 		}
@@ -270,11 +276,14 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	return d, nil
 }
 
+// testHookBeforeInline, set only by tests, runs just before inline delivery.
+var testHookBeforeInline func()
+
 // inline reads the agent's unread messages from others and returns them as a
 // digest if they fit the budget, marking them read. ok is false, with nothing
 // changed, when they do not fit.
-func (s *Service) inline(ctx context.Context, ns, name, agent string, budget int) (d Digest, ok bool, err error) {
-	err = s.write(ctx, func(tx *wtx) error {
+func (s *Service) inline(ctx context.Context, p Principal, ns, name, agent string, budget int) (d Digest, ok bool, err error) {
+	err = s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
 		c, err := s.loadConvTx(ctx, tx, ns, name)
 		if err != nil {
 			return err
@@ -399,9 +408,11 @@ func (s *Service) Status(ctx context.Context, p Principal, ns, agent string) ([]
 	}, `SELECT c.name FROM conversations c
 		WHERE c.namespace_id = ? AND c.status = 'open' AND (
 			EXISTS (SELECT 1 FROM participants pt WHERE pt.conversation_id = c.id
-				AND pt.agent = ? AND pt.state IN ('active', 'concluded'))
-			OR (c.end_condition = 'coordinator' AND c.created_by = ?))
-		ORDER BY c.last_at DESC, c.id DESC`, nsID, agent, agent)
+				AND pt.agent = ? AND pt.state IN ('active', 'concluded')
+				AND (? = 0 OR pt.account_id = ?))
+			OR (c.end_condition = 'coordinator' AND c.created_by = ?
+				AND (? = 0 OR c.created_by_account = ?)))
+		ORDER BY c.last_at DESC, c.id DESC`, nsID, agent, p.AccountID, p.AccountID, agent, p.AccountID, p.AccountID)
 	if err != nil {
 		return nil, err
 	}
@@ -434,6 +445,9 @@ func (s *Service) StandingOf(ctx context.Context, p Principal, ns, name, agent s
 	}
 	c, err := s.loadConvRead(ctx, ns, name)
 	if err != nil {
+		return Standing{}, err
+	}
+	if err := s.checkOwner(ctx, s.db, c, p, agent); err != nil {
 		return Standing{}, err
 	}
 	return s.standing(ctx, s.db, c, agent)

@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -33,6 +34,7 @@ func (c *clock) Advance(d time.Duration) {
 
 type fixture struct {
 	svc   *core.Service
+	db    *sql.DB
 	clock *clock
 	p     core.Principal
 }
@@ -50,7 +52,7 @@ func newFixture(t *testing.T, opts core.Options) *fixture {
 	})
 	clk := &clock{t: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)}
 	opts.Now = clk.Now
-	return &fixture{svc: core.New(db, opts), clock: clk, p: core.Anonymous()}
+	return &fixture{svc: core.New(db, opts), db: db, clock: clk, p: core.Anonymous()}
 }
 
 func ptr[T any](v T) *T { return &v }
