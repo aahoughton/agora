@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -30,6 +31,9 @@ type Deps struct {
 	// AllowedHosts, if non-empty, refuses requests whose Host is not one of
 	// these names or addresses (port ignored, case-insensitive).
 	AllowedHosts []string
+	// BodyReadTimeout bounds how long a client may take to send a request
+	// body, on every route; default api.DefaultBodyReadTimeout.
+	BodyReadTimeout time.Duration
 }
 
 // New returns the root handler: GET /healthz, the /v1 JSON API, and MCP at
@@ -54,10 +58,44 @@ func New(d Deps) http.Handler {
 	if len(d.AllowedHosts) > 0 {
 		h = allowHosts(d.AllowedHosts, h)
 	}
+	timeout := d.BodyReadTimeout
+	if timeout == 0 {
+		timeout = api.DefaultBodyReadTimeout
+	}
+	h = bodyDeadline(timeout, h)
 	if d.Logger != nil {
 		h = logRequests(d.Logger, h)
 	}
 	return h
+}
+
+// bodyDeadline gives a request that carries a body a deadline to finish
+// sending it, so a stalled client cannot hold a connection open. Responses,
+// such as long polls and event streams, are not bounded by it.
+func bodyDeadline(timeout time.Duration, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && r.Body != http.NoBody {
+			rc := http.NewResponseController(w)
+			_ = rc.SetReadDeadline(time.Now().Add(timeout)) // unsupported writers keep no deadline
+			r.Body = &deadlineBody{ReadCloser: r.Body, rc: rc}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// deadlineBody lifts the read deadline once the body has been read, so the
+// connection can be kept alive for the next request.
+type deadlineBody struct {
+	io.ReadCloser
+	rc *http.ResponseController
+}
+
+func (b *deadlineBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err == io.EOF {
+		_ = b.rc.SetReadDeadline(time.Time{})
+	}
+	return n, err
 }
 
 // LoopbackHosts are the names a loopback-only server answers to.

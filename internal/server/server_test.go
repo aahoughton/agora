@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aahoughton/agora/internal/auth"
 	"github.com/aahoughton/agora/internal/core"
@@ -167,5 +169,34 @@ func TestRequestsAreLogged(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "secret") {
 		t.Errorf("query string logged:\n%s", buf.String())
+	}
+}
+
+// A client that sends headers and then dribbles (or stalls) its body is cut
+// off, on every route, not only the JSON API.
+func TestSlowBodiesAreCutOff(t *testing.T) {
+	got := make(chan error, 1)
+	slow := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		got <- err
+	})
+	srv := httptest.NewServer(New(Deps{Authenticator: auth.None{}, Logger: slog.New(slog.DiscardHandler), Web: slow, BodyReadTimeout: 100 * time.Millisecond}))
+	defer srv.Close()
+	var d net.Dialer
+	conn, err := d.DialContext(t.Context(), "tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := io.WriteString(conn, "POST /login HTTP/1.1\r\nHost: x\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 100\r\n\r\ntoken="); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-got:
+		if err == nil {
+			t.Fatal("the stalled body read succeeded")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the stalled body was not cut off")
 	}
 }
