@@ -166,14 +166,31 @@ func (h *handler) removeMember(w http.ResponseWriter, r *http.Request, p core.Pr
 	return nil
 }
 
+// deadlined returns a writer to w whose every write must finish within
+// h.streamWrite, and a function that lifts the deadline once streaming is
+// done, so it cannot cut off a later response on the same connection. A
+// writer that cannot take a deadline (a wrapper without Unwrap) fails the
+// write rather than streaming without one.
+func (h *handler) deadlined(w http.ResponseWriter) (io.Writer, func()) {
+	rc := http.NewResponseController(w)
+	return writerFunc(func(b []byte) (int, error) {
+		if err := rc.SetWriteDeadline(time.Now().Add(h.streamWrite)); err != nil {
+			return 0, err
+		}
+		return w.Write(b)
+	}), func() { _ = rc.SetWriteDeadline(time.Time{}) }
+}
+
 // backup streams a copy of the database (server admins).
 func (h *handler) backup(w http.ResponseWriter, r *http.Request, p core.Principal) error {
+	out, lift := h.deadlined(w)
+	defer lift()
 	err := h.svc.Backup(r.Context(), p, func(size int64, body io.Reader) error {
 		w.Header().Set("Content-Type", "application/vnd.sqlite3")
 		w.Header().Set("Content-Disposition", `attachment; filename="agora.db"`)
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.Header().Set("Cache-Control", "no-store")
-		_, err := io.Copy(w, body)
+		_, err := io.Copy(out, body)
 		return err
 	})
 	if err == nil {
@@ -186,13 +203,15 @@ func (h *handler) backup(w http.ResponseWriter, r *http.Request, p core.Principa
 func (h *handler) dump(w http.ResponseWriter, r *http.Request, p core.Principal) error {
 	ns := r.URL.Query().Get("namespace")
 	started := false
+	out, lift := h.deadlined(w)
+	defer lift()
 	sw := writerFunc(func(b []byte) (int, error) {
 		if !started {
 			started = true
 			w.Header().Set("Content-Type", "application/jsonl")
 			w.Header().Set("Cache-Control", "no-store")
 		}
-		return w.Write(b)
+		return out.Write(b)
 	})
 	err := h.svc.Dump(r.Context(), p, ns, sw)
 	switch {

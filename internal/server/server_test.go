@@ -272,3 +272,27 @@ func TestLoadRefusesNonAdminsWithinTheBodyDeadline(t *testing.T) {
 		t.Fatalf("response %q, %v", line, err)
 	}
 }
+
+// Streams (dumps, backups, the viewer's events) bound each write with
+// http.ResponseController; every wrapper New puts around a handler must
+// pass that through, or the deadline silently stops applying.
+func TestHandlersCanSetWriteDeadlines(t *testing.T) {
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	got := io.EOF // replaced by the handler's result
+	web := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		got = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute))
+	})
+	srv := httptest.NewServer(New(Deps{
+		Service: core.New(db, core.Options{}), Authenticator: auth.None{},
+		Logger: slog.New(slog.DiscardHandler), Web: web,
+	}))
+	t.Cleanup(srv.Close)
+	do(t, http.MethodGet, srv.URL+"/anything")
+	if got != nil {
+		t.Fatalf("SetWriteDeadline through the server's middleware: %v", got)
+	}
+}
