@@ -731,3 +731,27 @@ func TestBodiesCannotForgeWithOtherLineBreaks(t *testing.T) {
 		s.ok("read", map[string]any{"conversation": "c", "agent": "bob"})
 	}
 }
+
+// Behind a TLS-terminating proxy the server sees plain http; the wait
+// recipe in the instructions must still name the public https URL, or an
+// agent following it sends its token in the clear.
+func TestInstructionsUseThePublicURL(t *testing.T) {
+	svc := newService(t)
+	for _, tc := range []struct{ public, want string }{
+		{"https://agora.example", "--url https://agora.example"},
+		{"https://agora.example/", "--url https://agora.example"},
+		{"", "--url http://127.0.0.1:"},
+	} {
+		srv := httptest.NewServer(mcpserver.Handler(svc, auth.None{}, mcpserver.Options{URL: tc.public}))
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
+			&mcp.StreamableClientTransport{Endpoint: srv.URL}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cs.InitializeResult().Instructions; !strings.Contains(got, tc.want) {
+			t.Errorf("public URL %q: instructions say\n%s\nwant %q", tc.public, got, tc.want)
+		}
+		_ = cs.Close()
+		srv.Close()
+	}
+}

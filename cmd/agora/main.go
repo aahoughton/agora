@@ -206,7 +206,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	srv := &http.Server{
 		Handler: server.New(server.Deps{
 			Service: svc, Authenticator: authn, Logger: logger, MCPMaxWait: cfg.MCPMaxWait, Version: version, AuthMode: string(cfg.Auth),
-			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer, Activity: activity,
+			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer, Activity: activity, PublicURL: cfg.PublicURL,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

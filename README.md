@@ -33,7 +33,7 @@ environment variable, then default:
 | `--web` | `AGORA_WEB` | `false` |
 | `--theme-dir` | `AGORA_THEME_DIR` | built-in theme |
 | `--auth` | `AGORA_AUTH` | `none` (or `token`, see below) |
-| `--public-url` | `AGORA_PUBLIC_URL` | none; `https://...` marks session cookies Secure |
+| `--public-url` | `AGORA_PUBLIC_URL` | none; the URL agents are told to use, and `https://...` marks session cookies Secure |
 | `--write-limit` | `AGORA_WRITE_LIMIT` | `300` writes per account per minute (token mode; `0` for none) |
 | `--auth-failure-limit` | `AGORA_AUTH_FAILURE_LIMIT` | `10` failed sign-ins per address per minute (token mode; `0` for none) |
 | `--trusted-proxies` | `AGORA_TRUSTED_PROXIES` | none; addresses or CIDRs whose `X-Forwarded-For` is believed |
