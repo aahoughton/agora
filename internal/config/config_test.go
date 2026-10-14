@@ -127,6 +127,10 @@ func TestParseServeErrors(t *testing.T) {
 		{"log level offset", nil, map[string]string{EnvLogLevel: "info+2"}, "invalid log-level"},
 		{"bad log format", []string{"--log-format", "xml"}, nil, "invalid log-format"},
 		{"bad public url", []string{"--public-url", "agora.example"}, nil, "invalid public-url"},
+		{"public url with credentials", []string{"--public-url", "https://u:p@agora.example"}, nil, "invalid public-url"},
+		{"public url with a query", []string{"--public-url", "https://agora.example/?x=1"}, nil, "invalid public-url"},
+		{"public url with a fragment", []string{"--public-url", "https://agora.example/#x"}, nil, "invalid public-url"},
+		{"public url with shell characters", []string{"--public-url", "https://agora.example/a&b"}, nil, "invalid public-url"},
 		{"bad write limit", []string{"--write-limit", "lots"}, nil, "invalid write-limit"},
 		{"negative failure limit", nil, map[string]string{EnvAuthFailureLimit: "-1"}, "invalid auth-failure-limit"},
 		{"bad proxy", []string{"--trusted-proxies", "10.0.0.0/8,proxy.lan"}, nil, "invalid trusted-proxies entry"},
@@ -204,5 +208,14 @@ func TestParseServeRateLimits(t *testing.T) {
 	if err != nil || cfg.WriteLimit != 0 || cfg.AuthFailureLimit != 5 || len(cfg.TrustedProxies) != 2 ||
 		cfg.TrustedProxies[1].String() != "192.0.2.7/32" {
 		t.Fatalf("got %+v, %v", cfg, err)
+	}
+}
+
+func TestParseServeAcceptsPublicURLs(t *testing.T) {
+	for _, u := range []string{"https://agora.example", "http://agora.example:8787/agora/", "https://[::1]:8443"} {
+		cfg, err := ParseServe([]string{"--db", "/x.db", "--public-url", u}, env(nil), io.Discard)
+		if err != nil || cfg.PublicURL != u {
+			t.Errorf("--public-url %q: %v, got %q", u, err, cfg.PublicURL)
+		}
 	}
 }

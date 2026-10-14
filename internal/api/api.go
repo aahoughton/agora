@@ -51,10 +51,18 @@ type Options struct {
 	// MaxLoadBytes bounds a dump sent to POST /v1/load; default
 	// DefaultMaxLoadBytes.
 	MaxLoadBytes int64
+	// StreamWriteTimeout bounds each write of a dump or backup to the
+	// client; default DefaultStreamWriteTimeout.
+	StreamWriteTimeout time.Duration
 }
 
 // DefaultMaxLoadBytes bounds a dump sent to POST /v1/load.
 const DefaultMaxLoadBytes = 256 << 20
+
+// DefaultStreamWriteTimeout bounds each write of a dump or backup. A dump
+// holds a read transaction while it streams, so a client that stops
+// reading would otherwise keep SQLite from checkpointing its log.
+const DefaultStreamWriteTimeout = 30 * time.Second
 
 type handler struct {
 	svc          *core.Service
@@ -66,6 +74,7 @@ type handler struct {
 	activity     *auth.Activity
 	mcpSessions  func() []mcpserver.SessionUse
 	now          func() time.Time
+	streamWrite  time.Duration
 	maxLoadBytes int64
 }
 
@@ -126,6 +135,10 @@ func Register(mux *http.ServeMux, svc *core.Service, authn auth.Authenticator, o
 		svc: svc, authn: authn, logger: opts.Logger, bodyTimeout: opts.BodyReadTimeout,
 		authMode: opts.AuthMode, version: opts.Version, activity: opts.Activity,
 		mcpSessions: opts.MCPSessions, now: opts.Now, maxLoadBytes: opts.MaxLoadBytes,
+		streamWrite: opts.StreamWriteTimeout,
+	}
+	if h.streamWrite == 0 {
+		h.streamWrite = DefaultStreamWriteTimeout
 	}
 	if h.maxLoadBytes == 0 {
 		h.maxLoadBytes = DefaultMaxLoadBytes

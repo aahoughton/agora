@@ -292,3 +292,108 @@ func TestTokenLabelsArePrintable(t *testing.T) {
 	}
 	must[core.IssuedToken](t)(f.svc.IssueToken(t.Context(), pat, "pat", "laptop (work) é", 0))
 }
+
+// TestSessionsAreBounded: signing in counts against the account's write
+// limit, an account keeps at most MaxSessionsPerAccount sessions, and dead
+// sessions are deleted when a new one starts.
+func TestSessionsAreBounded(t *testing.T) {
+	ctx := t.Context()
+	rows := func(f *tokenFixture, account string) int {
+		t.Helper()
+		var n int
+		if err := f.db.QueryRowContext(ctx, `SELECT count(*) FROM browser_sessions s
+			JOIN accounts a ON a.id = s.account_id WHERE a.name = ?`, account).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	t.Run("write limit", func(t *testing.T) {
+		// Two writes a minute: the admin's two to set pat up, then pat's own.
+		f := newTokenFixtureWith(t, core.Options{WriteLimit: 2})
+		pat := f.account(t, "pat")
+		for range 2 {
+			if _, _, err := f.svc.CreateSession(ctx, pat, 0, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, _, err := f.svc.CreateSession(ctx, pat, 0, ""); core.CodeOf(err) != core.CodeRateLimited {
+			t.Fatalf("third sign-in in a minute: err = %v, want rate_limited", err)
+		}
+	})
+
+	t.Run("cap", func(t *testing.T) {
+		f := newTokenFixture(t)
+		pat := f.account(t, "pat")
+		var first string
+		for i := range core.MaxSessionsPerAccount + 5 {
+			secret, _, err := f.svc.CreateSession(ctx, pat, 0, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 {
+				first = secret
+			}
+		}
+		if n := rows(f, "pat"); n != core.MaxSessionsPerAccount {
+			t.Fatalf("pat has %d sessions, want %d", n, core.MaxSessionsPerAccount)
+		}
+		if _, err := f.svc.AuthenticateSession(ctx, first); core.CodeOf(err) != core.CodeUnauthorized {
+			t.Fatalf("the oldest session still works: err = %v", err)
+		}
+	})
+
+	t.Run("dead sessions are deleted", func(t *testing.T) {
+		f := newTokenFixture(t)
+		pat := f.account(t, "pat")
+		old, _, err := f.svc.CreateSession(ctx, pat, time.Minute, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ended, _, err := f.svc.CreateSession(ctx, pat, 0, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.svc.EndSession(ctx, ended); err != nil {
+			t.Fatal(err)
+		}
+		_ = old
+		f.clock.Advance(2 * time.Minute)
+		if _, _, err := f.svc.CreateSession(ctx, pat, 0, ""); err != nil {
+			t.Fatal(err)
+		}
+		if n := rows(f, "pat"); n != 1 {
+			t.Fatalf("pat has %d session rows after the expired and ended ones, want 1", n)
+		}
+	})
+}
+
+// TestRevokedSessionsStayRevoked: a principal authenticated with a session
+// that ends must stay unauthorized after cleanup deletes that row and a new
+// session takes its place, even if SQLite reuses the row id.
+func TestRevokedSessionsStayRevoked(t *testing.T) {
+	ctx := t.Context()
+	f := newTokenFixture(t)
+	pat := f.account(t, "pat")
+	secret, _, err := f.svc.CreateSession(ctx, pat, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := f.svc.AuthenticateSession(ctx, secret) // as a live stream holds it
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.EndSession(ctx, secret); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Whoami(ctx, held); core.CodeOf(err) != core.CodeUnauthorized {
+		t.Fatalf("ended session: err = %v", err)
+	}
+	// Signing in again deletes the ended row; the new one may get its id.
+	if _, _, err := f.svc.CreateSession(ctx, pat, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Whoami(ctx, held); core.CodeOf(err) != core.CodeUnauthorized {
+		t.Fatalf("ended session after a new sign-in: err = %v, want unauthorized", err)
+	}
+}

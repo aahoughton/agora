@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -38,7 +39,9 @@ type Options struct {
 	MaxWait time.Duration
 	// Version is reported to clients.
 	Version string
-	// URL is the server URL clients use, quoted in the instructions.
+	// URL is the server URL clients use, quoted in the instructions. If
+	// empty, Handler quotes the URL each request reached, which behind a
+	// TLS-terminating proxy is plain http; set it to the public URL there.
 	URL string
 	// Wording supplies instructions, tool descriptions and result phrases.
 	Wording *wording.Wording
@@ -76,6 +79,7 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) *Endpoin
 	if opts.MaxSessions == 0 {
 		opts.MaxSessions = DefaultMaxSessions
 	}
+	opts.URL = strings.TrimRight(opts.URL, "/")
 	sdk := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		p, ok := r.Context().Value(principalKey{}).(core.Principal)
 		if !ok {
@@ -89,7 +93,9 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) *Endpoin
 			return nil
 		}
 		o := opts
-		o.URL = baseURL(r)
+		if o.URL == "" {
+			o.URL = baseURL(r)
+		}
 		o.Authenticator = authn
 		srv := NewServer(svc, p, ns, o)
 		if ref, ok := r.Context().Value(serverRefKey{}).(*serverRef); ok {

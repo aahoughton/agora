@@ -23,10 +23,15 @@ const (
 	CredentialSession CredentialKind = "session"
 )
 
-// Credential identifies a token or browser session by its row id.
+// Credential identifies a token or browser session by its row id. A
+// session also carries the hash of its secret: session rows are deleted
+// (see CreateSession) and SQLite may give a new row a deleted row's id, so
+// the id alone could pass for a later session.
 type Credential struct {
 	Kind CredentialKind
 	ID   int64
+
+	hash string
 }
 
 // Anonymous is the principal used when auth is off.

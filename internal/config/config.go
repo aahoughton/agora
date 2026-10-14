@@ -67,6 +67,10 @@ const (
 	AuthToken AuthMode = "token"
 )
 
+// urlSafe are the characters a public URL may use: none a shell treats
+// specially, since agents are given it in a command.
+const urlSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/%[]"
+
 // Serve holds the settings for `agora serve`.
 type Serve struct {
 	DB   string
@@ -91,9 +95,10 @@ type Serve struct {
 	AuthFailureLimit int
 	// TrustedProxies are proxies whose X-Forwarded-For names the client.
 	TrustedProxies []netip.Prefix
-	// PublicURL is the address browsers use to reach the server, when it
-	// differs from Addr (for example behind a TLS proxy). An https URL
-	// marks the viewer's session cookie Secure.
+	// PublicURL is the address browsers and agents use to reach the
+	// server, when it differs from Addr (for example behind a TLS proxy).
+	// The MCP instructions quote it, and an https URL marks the viewer's
+	// session cookie Secure.
 	PublicURL string
 	// LogLevel is the least severe level logged. At info the server logs
 	// each MCP tool call; at debug, each HTTP request too.
@@ -125,7 +130,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
-	publicURL := fs.String("public-url", "", "the URL browsers reach the server at, e.g. https://agora.example; https marks session cookies Secure (env "+EnvPublicURL+")")
+	publicURL := fs.String("public-url", "", "the URL browsers and agents reach the server at, e.g. https://agora.example; MCP instructions quote it, and https marks session cookies Secure (env "+EnvPublicURL+")")
 	writeLimit := fs.String("write-limit", "", "writes per minute each account may make with --auth token; 0 for no limit (env "+EnvWriteLimit+", default "+strconv.Itoa(DefaultWriteLimit)+")")
 	failLimit := fs.String("auth-failure-limit", "", "failed sign-ins per minute per client address with --auth token; 0 for no limit (env "+EnvAuthFailureLimit+", default "+strconv.Itoa(DefaultAuthFailureLimit)+")")
 	proxies := fs.String("trusted-proxies", "", "comma-separated proxy addresses or CIDRs whose X-Forwarded-For names the client (env "+EnvTrustedProxies+")")
@@ -179,9 +184,14 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 
 	cfg.PublicURL = firstNonEmpty(*publicURL, getenv(EnvPublicURL))
 	if cfg.PublicURL != "" {
+		// It is quoted to agents in a shell command, so it may hold only a
+		// scheme, host and path (no credentials, query or fragment), in
+		// characters a shell takes literally.
 		u, err := url.Parse(cfg.PublicURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port]", cfg.PublicURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
+			strings.ContainsFunc(cfg.PublicURL, func(r rune) bool { return !strings.ContainsRune(urlSafe, r) }) {
+			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port][/path]", cfg.PublicURL)
 		}
 	}
 
