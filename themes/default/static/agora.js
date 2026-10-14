@@ -115,7 +115,51 @@
   }
   box.addEventListener("input", grow);
   grow();
+  // Tab after "@" and the start of a name completes it from the
+  // participants panel (agents, then observers); Tab again moves to the
+  // next match, as long as the box still holds exactly what the last
+  // completion left. Tab with nothing to complete, or again on a single
+  // match, moves focus as usual.
+  var cycle = null;
+  function panelNames() {
+    var seen = {}, out = [];
+    document.querySelectorAll("#participants .person .name").forEach(function (el) {
+      var n = el.textContent.trim();
+      if (n && !seen[n]) { seen[n] = true; out.push(n); }
+    });
+    return out;
+  }
+  function complete() {
+    var at = box.selectionStart;
+    if (at !== box.selectionEnd) return false;
+    if (cycle && at === cycle.end && box.value === cycle.value) {
+      if (cycle.matches.length === 1) {
+        cycle = null;
+        return false;
+      }
+      cycle.i = (cycle.i + 1) % cycle.matches.length;
+    } else {
+      cycle = null;
+      var m = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/.exec(box.value.slice(0, at));
+      if (!m) return false;
+      var prefix = m[2].toLowerCase();
+      var matches = panelNames().filter(function (n) { return n.toLowerCase().indexOf(prefix) === 0; });
+      if (!matches.length) return false;
+      cycle = { start: at - m[2].length, end: at, matches: matches, i: 0, space: !/^\s/.test(box.value.slice(at)) };
+    }
+    var text = cycle.matches[cycle.i] + (cycle.space ? " " : "");
+    box.setRangeText(text, cycle.start, cycle.end, "end");
+    cycle.end = cycle.start + text.length;
+    cycle.value = box.value;
+    grow();
+    return true;
+  }
   box.addEventListener("keydown", function (ev) {
+    if (ev.key === "Tab" && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (complete()) ev.preventDefault();
+      return;
+    }
+    cycle = null;
     // Safari reports the Enter that ends a composition with keyCode 229
     // and isComposing false.
     if (ev.key !== "Enter" || ev.isComposing || ev.keyCode === 229) return;
