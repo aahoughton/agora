@@ -793,6 +793,11 @@ func (v *viewer) login(w http.ResponseWriter, r *http.Request) {
 		replaces = old.Value
 	}
 	secret, expires, err := v.svc.CreateSession(r.Context(), p, v.opts.SessionTTL, replaces)
+	if core.CodeOf(err) == core.CodeRateLimited {
+		retryAfter(w, err)
+		v.render(w, http.StatusTooManyRequests, "login", Page{Title: "Sign in", ReturnTo: next, Notice: err.Error()})
+		return
+	}
 	if err != nil {
 		v.fail(w, err, Page{})
 		return

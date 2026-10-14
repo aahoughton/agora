@@ -259,10 +259,11 @@ func TestSignInsAndFailuresAreRecorded(t *testing.T) {
 }
 
 func TestRateLimitedCommentsSayWhenToRetry(t *testing.T) {
-	// The fixture's setup takes four of root's writes; pat has its own four.
+	// The fixture's setup takes four of root's writes; pat has its own
+	// four: the sign-in and three comments.
 	e := newTokenEnvWith(t, web.Options{}, core.Options{WriteLimit: 4})
 	e.postRaw("/login", url.Values{"token": {e.token}})
-	for i := range 4 {
+	for i := range 3 {
 		if r := e.postRaw("/n/default/c/c/observe", url.Values{"body": {"comment"}}); r.StatusCode != http.StatusSeeOther {
 			t.Fatalf("comment %d = %d", i, r.StatusCode)
 		}
@@ -320,5 +321,20 @@ func TestYourAgentsAreMarked(t *testing.T) {
 	}
 	if !strings.Contains(body, `class="yours-note"`) {
 		t.Fatalf("no note about your agents:\n%s", body)
+	}
+}
+
+// Signing in is a write: past the account's write limit the login page
+// says so and when to retry, instead of creating a session.
+func TestRateLimitedSignInsSayWhenToRetry(t *testing.T) {
+	e := newTokenEnvWith(t, web.Options{}, core.Options{WriteLimit: 4})
+	for i := range 4 {
+		if r := e.postRaw("/login", url.Values{"token": {e.token}}); r.StatusCode != http.StatusSeeOther {
+			t.Fatalf("sign-in %d = %d", i, r.StatusCode)
+		}
+	}
+	r := e.postRaw("/login", url.Values{"token": {e.token}})
+	if r.StatusCode != http.StatusTooManyRequests || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("fifth sign-in = %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
 	}
 }

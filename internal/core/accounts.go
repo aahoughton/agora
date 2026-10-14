@@ -135,15 +135,16 @@ func (s *Service) AuthenticateSession(ctx context.Context, secret string) (Princ
 		return Principal{}, unauthorized("not an agora session")
 	}
 	var id, account int64
+	hash := hashSecret(secret)
 	err := s.db.QueryRowContext(ctx, `SELECT id, account_id FROM browser_sessions WHERE hash = ?`,
-		hashSecret(secret)).Scan(&id, &account)
+		hash).Scan(&id, &account)
 	if isNoRows(err) {
 		return Principal{}, unauthorized("unknown session")
 	}
 	if err != nil {
 		return Principal{}, err
 	}
-	p := Principal{AccountID: account, Credential: Credential{Kind: CredentialSession, ID: id}}
+	p := Principal{AccountID: account, Credential: Credential{Kind: CredentialSession, ID: id, hash: string(hash)}}
 	return p, s.checkCredential(ctx, s.db, p)
 }
 
@@ -162,9 +163,9 @@ func (s *Service) checkCredential(ctx context.Context, q querier, p Principal) e
 	case CredentialSession:
 		err = q.QueryRowContext(ctx, `SELECT count(*) FROM browser_sessions s
 			JOIN tokens t ON t.id = s.source_token_id JOIN accounts a ON a.id = s.account_id
-			WHERE s.id = ? AND s.account_id = ? AND s.revoked_at IS NULL AND s.expires_at > ?
+			WHERE s.id = ? AND s.hash = ? AND s.account_id = ? AND s.revoked_at IS NULL AND s.expires_at > ?
 			AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?) AND a.disabled_at IS NULL`,
-			p.Credential.ID, p.AccountID, now, now).Scan(&ok)
+			p.Credential.ID, []byte(p.Credential.hash), p.AccountID, now, now).Scan(&ok)
 	default:
 		return unauthorized("sign in with a token")
 	}
@@ -177,13 +178,23 @@ func (s *Service) checkCredential(ctx context.Context, q querier, p Principal) e
 	return nil
 }
 
+// MaxSessionsPerAccount caps an account's browser sessions; signing in
+// past it ends the oldest.
+const MaxSessionsPerAccount = 32
+
 // CreateSession starts a browser session for a principal authenticated by
 // token, and returns its secret. The session ends with the token. If
 // replaces is a session secret, that session is revoked in the same
 // transaction, so a login either swaps the sessions or changes nothing.
+// Signing in is a write for the account's write limit. It deletes the
+// account's dead sessions (ended, expired, or from a token that no longer
+// works) and, past MaxSessionsPerAccount, its oldest.
 func (s *Service) CreateSession(ctx context.Context, p Principal, ttl time.Duration, replaces string) (string, time.Time, error) {
 	if p.Credential.Kind != CredentialToken {
 		return "", time.Time{}, unauthorized("sign in with a token")
+	}
+	if err := s.limitWrite(p); err != nil {
+		return "", time.Time{}, err
 	}
 	if ttl <= 0 {
 		ttl = DefaultSessionTTL
@@ -201,9 +212,20 @@ func (s *Service) CreateSession(ctx context.Context, p Principal, ttl time.Durat
 				return err
 			}
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO browser_sessions
+		if _, err := tx.ExecContext(ctx, `DELETE FROM browser_sessions WHERE account_id = ?
+			AND (revoked_at IS NOT NULL OR expires_at <= ? OR source_token_id IN
+				(SELECT id FROM tokens WHERE revoked_at IS NOT NULL OR (expires_at IS NOT NULL AND expires_at <= ?)))`,
+			p.AccountID, ms(now), ms(now)); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO browser_sessions
 			(account_id, source_token_id, hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
-			p.AccountID, p.Credential.ID, hash, ms(now), ms(expires))
+			p.AccountID, p.Credential.ID, hash, ms(now), ms(expires)); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `DELETE FROM browser_sessions WHERE account_id = ? AND id NOT IN
+			(SELECT id FROM browser_sessions WHERE account_id = ? ORDER BY id DESC LIMIT ?)`,
+			p.AccountID, p.AccountID, MaxSessionsPerAccount)
 		return err
 	})
 	if err != nil {
