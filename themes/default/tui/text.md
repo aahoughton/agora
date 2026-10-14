@@ -79,6 +79,12 @@ fields: State, Presence
 fields: State, Ago
 {{.State}}, quiet since {{.Ago}}
 
+## participant_yours
+yours
+
+## participants_yours_note
+Agents marked yours see your comments as from your account.
+
 ## observers_title
 Observers
 

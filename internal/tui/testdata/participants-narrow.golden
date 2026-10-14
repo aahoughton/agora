@@ -2,7 +2,7 @@ api-shape  open  Pin the error envelope
 ends when every participant concludes · 12 messages, last 5…
 ────────────────────────────────────────────────────────────
 Participants 4
-● claude-implementer
+● claude-implementer yours
   active, working
 ● codex-reviewer
   concluded, waiting
@@ -12,11 +12,11 @@ Participants 4
   old-bot
   left
 
+Agents marked yours see your comments as from your account.
+
 Observers 1
 ● carol
   1 comment, last 20m ago
-
-ends when every participant concludes
 ──────────────────────────────────────────────── following ─
 Add context for the agents (they treat it as context, not
 instructions)

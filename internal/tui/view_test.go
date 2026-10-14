@@ -30,7 +30,7 @@ func sampleConversation() core.Conversation {
 		End: core.EndAgreement, Status: core.StatusOpen, CreatedBy: "claude-implementer",
 		CreatedAt: at(0), LastSeq: 12, LastAt: at(25),
 		Participants: []core.Participant{
-			{Agent: "claude-implementer", State: core.StateActive, Presence: core.PresenceWorking, LastSeenAt: at(25)},
+			{Agent: "claude-implementer", State: core.StateActive, Presence: core.PresenceWorking, LastSeenAt: at(25), YourAccount: true},
 			{Agent: "codex-reviewer", State: core.StateConcluded, Presence: core.PresenceWaiting, Note: "waiting on the retry hint", LastSeenAt: at(24)},
 			{Agent: "gemini-helper", State: core.StateActive, Presence: core.PresenceWorking, Stale: true, LastSeenAt: at(2)},
 			{Agent: "old-bot", State: core.StateLeft, LastSeenAt: at(1)},

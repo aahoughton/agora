@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -180,7 +181,11 @@ func (r renderer) participants(c core.Conversation, width int) []string {
 				dot = r.st.faint.Render(r.st.g.dot)
 			}
 		}
-		out = append(out, ansi.Truncate(dot+" "+r.st.toneOf(p.Agent).Bold(true).Render(p.Agent), width, r.st.g.more))
+		name := dot + " " + r.st.toneOf(p.Agent).Bold(true).Render(p.Agent)
+		if p.YourAccount {
+			name += " " + r.st.muted.Render(r.sk.say("participant_yours", nil))
+		}
+		out = append(out, ansi.Truncate(name, width, r.st.g.more))
 		var state string
 		switch {
 		case p.State != core.StateActive && p.State != core.StateConcluded:
@@ -196,6 +201,10 @@ func (r renderer) participants(c core.Conversation, width int) []string {
 				out = append(out, "  "+l)
 			}
 		}
+	}
+	if slices.ContainsFunc(c.Participants, func(p core.Participant) bool { return p.YourAccount }) {
+		out = append(out, "")
+		out = append(out, wrap(words(r.sk.say("participants_yours_note", nil), r.st.faint), width)...)
 	}
 	if len(c.Observers) > 0 {
 		out = append(out, "", r.st.fg.Bold(true).Render(r.sk.say("observers_title", nil))+" "+
