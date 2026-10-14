@@ -392,11 +392,19 @@ func (s *Service) previews(ctx context.Context, q querier, c *conv, after int64,
 		 ORDER BY seq DESC LIMIT ?) ORDER BY seq`, c.id, after, c.LastSeq, agent, maxPreviews)
 }
 
+// lineBreaks turns every line terminator into "\n".
+var lineBreaks = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\v", "\n", "\f", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n")
+
+// NormalizeLineBreaks returns s with every line terminator (CR, CRLF, VT,
+// FF, NEL, U+2028, U+2029) as "\n", so a renderer that splits on "\n"
+// sees the same lines as any reader would.
+func NormalizeLineBreaks(s string) string { return lineBreaks.Replace(s) }
+
 // previewText returns the first non-blank line of body, cut to
 // maxPreviewText runes.
 func previewText(body string) string {
 	line := ""
-	for l := range strings.SplitSeq(body, "\n") {
+	for l := range strings.SplitSeq(NormalizeLineBreaks(body), "\n") {
 		if t := strings.TrimSpace(l); t != "" {
 			line = t
 			break

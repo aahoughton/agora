@@ -94,11 +94,12 @@ func renderRead(w *wording.Wording, r core.ReadResult) string {
 // writeMessages writes one line per single-line message, and a header line
 // plus the body for multi-line ones. Every body line is indented, so only a
 // real message starts a line with "#": a body cannot pass off its lines as
-// other messages.
+// other messages. Lines are split on every line terminator, not only "\n",
+// so a carriage return cannot start an unindented line either.
 func writeMessages(b *strings.Builder, w *wording.Wording, msgs []core.Message) {
 	for _, m := range msgs {
 		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind, m.YourAccount), replyTag(m.ReplyTo))
-		body := strings.TrimSpace(m.Body)
+		body := strings.TrimSpace(core.NormalizeLineBreaks(m.Body))
 		if !strings.Contains(body, "\n") {
 			fmt.Fprintf(b, "%s %s\n", head, body)
 			continue
