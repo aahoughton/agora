@@ -74,7 +74,7 @@ func TestAgentText(t *testing.T) {
 
 	b.WriteString("\n# Phrases (sample fields)\n")
 	sample := map[string]any{
-		"LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
+		"Name": "pat", "LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
 		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
 		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
 		"New": 2, "Authors": "bob x2", "Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",

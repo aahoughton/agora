@@ -83,6 +83,10 @@ type Message struct {
 	Body      string    `json:"body"`
 	ReplyTo   *int64    `json:"reply_to,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	// YourAccount is true when the caller's account posted the message.
+	YourAccount bool `json:"your_account"`
+
+	account sql.NullInt64
 }
 
 // conv is a conversation loaded with its row ids.
@@ -206,7 +210,7 @@ func (s *Service) concludeConv(ctx context.Context, tx *wtx, c *conv, reason str
 // write transaction, so c.LastSeq is current.
 func (s *Service) appendMsg(ctx context.Context, tx *wtx, c *conv, kind, author, body string, replyTo *int64) (Message, error) {
 	now := s.now()
-	m := Message{Seq: c.LastSeq + 1, Kind: kind, Author: author, Body: body, ReplyTo: replyTo, CreatedAt: fromMS(ms(now))}
+	m := Message{Seq: c.LastSeq + 1, Kind: kind, Author: author, Body: body, ReplyTo: replyTo, CreatedAt: fromMS(ms(now)), account: tx.account}
 	var rt sql.NullInt64
 	if replyTo != nil {
 		rt = sql.NullInt64{Int64: *replyTo, Valid: true}
@@ -313,6 +317,7 @@ func (s *Service) Start(ctx context.Context, p Principal, ns string, sp StartPar
 		out, err = s.conversationWithParticipants(ctx, tx, c)
 		return err
 	})
+	markParticipants(p, &out)
 	return out, err
 }
 
@@ -451,6 +456,7 @@ func (s *Service) ListConversations(ctx context.Context, p Principal, ns string,
 		if out.Observers == nil {
 			out.Observers = []Observer{}
 		}
+		markParticipants(p, &out)
 		page.Conversations = append(page.Conversations, out)
 	}
 	return page, nil
@@ -465,7 +471,9 @@ func (s *Service) GetConversation(ctx context.Context, p Principal, ns, name str
 	if err != nil {
 		return Conversation{}, err
 	}
-	return s.conversationWithParticipants(ctx, s.db, c)
+	out, err := s.conversationWithParticipants(ctx, s.db, c)
+	markParticipants(p, &out)
+	return out, err
 }
 
 func (s *Service) conversationWithParticipants(ctx context.Context, q querier, c *conv) (Conversation, error) {

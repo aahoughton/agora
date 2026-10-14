@@ -148,3 +148,114 @@ func TestMessagesRecordTheActingAccount(t *testing.T) {
 		t.Fatalf("recorded accounts %d %d %d (want %d), %v", account, owner, creator, f.admin.AccountID, err)
 	}
 }
+
+// TestYourAccount checks that messages and participants say, for each
+// caller, whether the caller's account posted or joined them.
+func TestYourAccount(t *testing.T) {
+	f := newTokenFixture(t)
+	ctx := t.Context()
+	pat, sam := f.account(t, "pat"), f.account(t, "sam")
+	for _, a := range []string{"pat", "sam"} {
+		must[core.Membership](t)(f.svc.SetMembership(ctx, f.admin, "default", a, core.RoleMember))
+	}
+	// A second token of pat's account is the same account.
+	patToo := f.login(t, must[core.IssuedToken](t)(f.svc.IssueToken(ctx, f.admin, "pat", "other", 0)).Secret)
+
+	must[core.Conversation](t)(f.svc.Start(ctx, pat, "default", core.StartParams{Name: "c", Agent: "pat-agent", End: core.EndAgreement, Join: true}))
+	must[core.Standing](t)(f.svc.Join(ctx, sam, "default", "c", core.JoinParams{Agent: "sam-agent"}))
+	must[core.ReadResult](t)(f.svc.Read(ctx, pat, "default", "c", core.ReadParams{Agent: "pat-agent"}))
+	must[core.ReadResult](t)(f.svc.Read(ctx, sam, "default", "c", core.ReadParams{Agent: "sam-agent"}))
+	must[core.Message](t)(f.svc.Observe(ctx, patToo, "default", "c", core.ObserveParams{Body: "from pat"}))
+	must[core.Message](t)(f.svc.Observe(ctx, sam, "default", "c", core.ObserveParams{Body: "from sam"}))
+
+	yours := func(ms []core.Message) map[string]bool {
+		out := map[string]bool{}
+		for _, m := range ms {
+			if m.Kind == core.KindObserver {
+				out[m.Body] = m.YourAccount
+			}
+		}
+		return out
+	}
+	check := func(where string, got map[string]bool, patMine bool) {
+		t.Helper()
+		if got["from pat"] != patMine || got["from sam"] == patMine {
+			t.Fatalf("%s: your_account = %v", where, got)
+		}
+	}
+
+	d := must[core.Digest](t)(f.svc.Wait(ctx, pat, "default", "c", core.WaitParams{Agent: "pat-agent", Timeout: time.Millisecond}))
+	previews := map[string]bool{}
+	for _, pv := range d.Previews {
+		previews[pv.Text] = pv.YourAccount
+	}
+	check("pat's wait", previews, true)
+	r := must[core.ReadResult](t)(f.svc.Read(ctx, sam, "default", "c", core.ReadParams{Agent: "sam-agent"}))
+	check("sam's read", yours(r.Messages), false)
+
+	// The comments sam had not read come back with sam's post.
+	must[core.Message](t)(f.svc.Observe(ctx, pat, "default", "c", core.ObserveParams{Body: "again from pat"}))
+	sr := must[core.SayResult](t)(f.svc.Say(ctx, sam, "default", "c", core.SayParams{Agent: "sam-agent", Body: "noted", InlineBytes: 4096}))
+	if !sr.Message.YourAccount {
+		t.Fatal("sam's own post is not sam's account")
+	}
+	if sr.Missed == nil || len(sr.Missed.Messages) != 1 || sr.Missed.Messages[0].YourAccount {
+		t.Fatalf("missed = %+v", sr.Missed)
+	}
+
+	pt := must[core.Participant](t)(f.svc.SetPresence(ctx, sam, "default", "c", core.PresenceParams{Agent: "sam-agent", Presence: core.PresenceAway}))
+	if !pt.YourAccount {
+		t.Fatal("sam's presence result is not sam's account")
+	}
+
+	// Concluding records a system message for the request's account; it
+	// is still the server's, not the caller's.
+	must[core.Standing](t)(f.svc.Conclude(ctx, pat, "default", "c", core.ConcludeParams{Agent: "pat-agent", Body: "done"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, sam, "default", "c", core.ConcludeParams{Agent: "sam-agent", Body: "done"}))
+	all := must[core.ReadResult](t)(f.svc.Read(ctx, sam, "default", "c", core.ReadParams{}))
+	for _, m := range all.Messages {
+		if m.Kind == core.KindSystem && m.YourAccount {
+			t.Fatalf("system message %+v is marked as sam's", m)
+		}
+	}
+
+	plain := must[core.ReadResult](t)(f.svc.Read(ctx, f.admin, "default", "c", core.ReadParams{}))
+	for _, m := range plain.Messages {
+		if m.YourAccount {
+			t.Fatalf("the admin's read marks %+v as the admin's", m)
+		}
+	}
+
+	for _, tc := range []struct {
+		who  core.Principal
+		mine string
+	}{{pat, "pat-agent"}, {patToo, "pat-agent"}, {sam, "sam-agent"}, {f.admin, ""}} {
+		c := must[core.Conversation](t)(f.svc.GetConversation(ctx, tc.who, "default", "c"))
+		page := must[core.ListPage](t)(f.svc.ListConversations(ctx, tc.who, "default", core.ListParams{}))
+		for _, ps := range [][]core.Participant{c.Participants, page.Conversations[0].Participants} {
+			for _, p := range ps {
+				if p.YourAccount != (p.Agent == tc.mine) {
+					t.Fatalf("participant %s: your_account = %v for the caller owning %q", p.Agent, p.YourAccount, tc.mine)
+				}
+			}
+		}
+	}
+}
+
+// TestYourAccountWithoutAuth checks that nothing is anyone's account when
+// auth is off.
+func TestYourAccountWithoutAuth(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice")
+	must[core.Message](t)(f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: "pat", Body: "hi"}))
+	r := must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice"}))
+	for _, m := range r.Messages {
+		if m.YourAccount {
+			t.Fatalf("message %+v is marked as the caller's", m)
+		}
+	}
+	if f.get(t, "c").Participants[0].YourAccount {
+		t.Fatal("alice is marked as the caller's")
+	}
+}

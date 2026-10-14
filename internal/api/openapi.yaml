@@ -996,7 +996,7 @@ components:
 
     Participant:
       type: object
-      required: [agent, state, joined_at, read_seq, presence, last_seen_at, stale]
+      required: [agent, state, joined_at, read_seq, presence, last_seen_at, stale, your_account]
       properties:
         agent: { type: string }
         state: { type: string, enum: [active, concluded, left, dropped] }
@@ -1007,6 +1007,7 @@ components:
         check_back_by: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
         stale: { type: boolean }
+        your_account: { type: boolean, description: "True when the caller's account joined under this name." }
 
     Observer:
       type: object
@@ -1018,7 +1019,7 @@ components:
 
     Message:
       type: object
-      required: [seq, kind, author, body, created_at]
+      required: [seq, kind, author, body, created_at, your_account]
       properties:
         seq: { type: integer }
         kind: { type: string, enum: [say, conclude, observer, system] }
@@ -1026,6 +1027,7 @@ components:
         body: { type: string }
         reply_to: { type: integer }
         created_at: { type: string, format: date-time }
+        your_account: { type: boolean, description: "True when the caller's account posted it; false for anonymous callers, messages without an account, and system messages." }
 
     ReadResult:
       type: object
@@ -1091,13 +1093,14 @@ components:
           maxItems: 5
           items:
             type: object
-            required: [seq, kind, author, text]
+            required: [seq, kind, author, text, your_account]
             properties:
               seq: { type: integer }
               kind: { type: string }
               author: { type: string }
               reply_to: { type: integer }
               text: { type: string, description: First non-blank line, at most 120 characters. }
+              your_account: { type: boolean, description: "True when the caller's account posted it." }
         messages:
           type: array
           description: Set when inline delivery applied; previews is then empty.

@@ -133,6 +133,10 @@ type Preview struct {
 	Author  string `json:"author"`
 	ReplyTo *int64 `json:"reply_to,omitempty"`
 	Text    string `json:"text"`
+	// YourAccount is true when the caller's account posted the message.
+	YourAccount bool `json:"your_account"`
+
+	account sql.NullInt64
 }
 
 // AuthorCount counts new messages from one author.
@@ -281,12 +285,16 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 		}
 		if ok {
 			inlined.TimedOut = false
+			markMessages(p, inlined.Messages)
+			markPreviews(p, inlined.Previews)
 			return inlined, nil
 		}
 	}
 	if err := s.touch(ctx, s.db, c, wp.Agent, PresenceWorking); err != nil {
 		return Digest{}, err
 	}
+	markMessages(p, d.Messages)
+	markPreviews(p, d.Previews)
 	return d, nil
 }
 
@@ -376,19 +384,27 @@ func (s *Service) previews(ctx context.Context, q querier, c *conv, after int64,
 	return collect(ctx, q, func(rows *sql.Rows) (Preview, error) {
 		var pv Preview
 		var body string
-		err := rows.Scan(&pv.Seq, &pv.Kind, &pv.Author, &pv.ReplyTo, &body)
+		err := rows.Scan(&pv.Seq, &pv.Kind, &pv.Author, &pv.ReplyTo, &body, &pv.account)
 		pv.Text = previewText(body)
 		return pv, err
-	}, `SELECT seq, kind, author, reply_to, body FROM
+	}, `SELECT seq, kind, author, reply_to, body, account_id FROM
 		(SELECT * FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer')
 		 ORDER BY seq DESC LIMIT ?) ORDER BY seq`, c.id, after, c.LastSeq, agent, maxPreviews)
 }
+
+// lineBreaks turns every line terminator into "\n".
+var lineBreaks = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\v", "\n", "\f", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n")
+
+// NormalizeLineBreaks returns s with every line terminator (CR, CRLF, VT,
+// FF, NEL, U+2028, U+2029) as "\n", so a renderer that splits on "\n"
+// sees the same lines as any reader would.
+func NormalizeLineBreaks(s string) string { return lineBreaks.Replace(s) }
 
 // previewText returns the first non-blank line of body, cut to
 // maxPreviewText runes.
 func previewText(body string) string {
 	line := ""
-	for l := range strings.SplitSeq(body, "\n") {
+	for l := range strings.SplitSeq(NormalizeLineBreaks(body), "\n") {
 		if t := strings.TrimSpace(l); t != "" {
 			line = t
 			break

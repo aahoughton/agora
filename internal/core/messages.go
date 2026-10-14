@@ -142,6 +142,11 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 		out.Standing, err = s.standing(ctx, tx, c, sp.Agent)
 		return err
 	})
+	out.Message.YourAccount = p.owns(out.Message.account)
+	if out.Missed != nil {
+		markMessages(p, out.Missed.Messages)
+		markPreviews(p, out.Missed.Previews)
+	}
 	return out, err
 }
 
@@ -195,8 +200,8 @@ const maxIdempotencyKey = 128
 func (s *Service) messageByKey(ctx context.Context, q querier, c *conv, key string) (*Message, error) {
 	var m Message
 	var created int64
-	err := q.QueryRowContext(ctx, `SELECT seq, kind, author, body, reply_to, created_at FROM messages
-		WHERE conversation_id = ? AND idempotency_key = ?`, c.id, key).Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created)
+	err := q.QueryRowContext(ctx, `SELECT seq, kind, author, body, reply_to, created_at, account_id FROM messages
+		WHERE conversation_id = ? AND idempotency_key = ?`, c.id, key).Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created, &m.account)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -251,6 +256,7 @@ func (s *Service) Observe(ctx context.Context, p Principal, ns, name string, op 
 		out, err = s.appendMsg(ctx, tx, c, KindObserver, op.Name, op.Body, nil)
 		return err
 	})
+	out.YourAccount = p.owns(out.account)
 	return out, err
 }
 
@@ -341,6 +347,7 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		}
 		out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
 		out, _ = capBytes(out, 0, rp.MaxBytes)
+		markMessages(p, out.Messages)
 		return out, err
 	}
 
@@ -391,6 +398,7 @@ func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp Rea
 		out.Standing = &st
 		return err
 	})
+	markMessages(p, out.Messages)
 	return out, err
 }
 
@@ -454,10 +462,10 @@ func (s *Service) messages(ctx context.Context, q querier, convID, after, upto i
 	return collect(ctx, q, func(rows *sql.Rows) (Message, error) {
 		var m Message
 		var created int64
-		err := rows.Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created)
+		err := rows.Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created, &m.account)
 		m.CreatedAt = fromMS(created)
 		return m, err
-	}, `SELECT seq, kind, author, body, reply_to, created_at
+	}, `SELECT seq, kind, author, body, reply_to, created_at, account_id
 		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer') ORDER BY seq LIMIT ?`,
 		convID, after, upto, skipAuthor, limit)
 }
@@ -543,6 +551,7 @@ func (s *Service) follow(ctx context.Context, p Principal, ns, name string, afte
 				return ReadResult{}, err
 			}
 			out, _, err := s.page(ctx, s.db, c, after, FollowLimit, "")
+			markMessages(p, out.Messages)
 			return out, err
 		}
 		if timedOut {

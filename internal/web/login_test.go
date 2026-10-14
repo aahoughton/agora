@@ -19,7 +19,8 @@ import (
 // "pat" and its token.
 type tokenEnv struct {
 	*env
-	token string
+	token string // pat's
+	admin core.Principal
 }
 
 func newTokenEnv(t *testing.T, opts web.Options) *tokenEnv {
@@ -70,7 +71,7 @@ func newTokenEnvWith(t *testing.T, opts web.Options, coreOpts core.Options) *tok
 		t.Fatal(err)
 	}
 	c := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return &tokenEnv{env: &env{t: t, svc: svc, url: srv.URL, c: c}, token: tok.Secret}
+	return &tokenEnv{env: &env{t: t, svc: svc, url: srv.URL, c: c}, token: tok.Secret, admin: admin}
 }
 
 // reply is a response's status and headers; its body is already closed.
@@ -289,5 +290,35 @@ func TestSignedInPagesAreNotStored(t *testing.T) {
 	s := openStream(t, e.env, "/n/default/c/c/events", nil)
 	if got := s.Header.Get("Cache-Control"); got != "no-store" {
 		t.Errorf("events: Cache-Control %q", got)
+	}
+}
+
+// TestYourAgentsAreMarked: the panel marks the agents the signed-in account
+// joined, so a commenter can see which agents read their comments as from
+// their own account.
+func TestYourAgentsAreMarked(t *testing.T) {
+	e := newTokenEnv(t, web.Options{})
+	pat, err := e.svc.AuthenticateToken(t.Context(), e.token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Join(t.Context(), pat, "default", "c", core.JoinParams{Agent: "pat-agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Join(t.Context(), e.admin, "default", "c", core.JoinParams{Agent: "root-agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if resp := e.postRaw("/login", url.Values{"token": {e.token}, "next": {"/n/default/c/c"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("login = %d", resp.StatusCode)
+	}
+	_, body := e.get("/n/default/c/c")
+	if !strings.Contains(body, `<span class="name">pat-agent</span> <span class="yours"`) {
+		t.Fatalf("pat-agent is not marked yours:\n%s", body)
+	}
+	if !strings.Contains(body, `<span class="name">root-agent</span></span>`) {
+		t.Fatalf("root's agent is marked yours:\n%s", body)
+	}
+	if !strings.Contains(body, `class="yours-note"`) {
+		t.Fatalf("no note about your agents:\n%s", body)
 	}
 }
