@@ -130,6 +130,7 @@ type thread struct {
 	composing  bool
 	nameInput  textinput.Model
 	askingName bool
+	mention    *mentionCycle
 	sending    bool
 }
 
@@ -864,6 +865,10 @@ func (m *Model) composerKey(k tea.KeyPressMsg) tea.Cmd {
 	if t.sending {
 		return nil
 	}
+	if k.String() == "tab" && m.complete() {
+		return nil
+	}
+	t.mention = nil
 	if k.String() == "enter" {
 		if strings.TrimSpace(t.composer.Value()) == "" {
 			return nil

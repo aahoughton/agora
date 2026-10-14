@@ -165,6 +165,7 @@ r               refresh a list
 p               show or hide participants
 i or tab        write a comment
 enter           send a comment (shift+enter or ctrl+j for a new line)
+tab             complete an @name in a comment; again for the next match
 esc             leave the comment box, close help, or go back
 q               quit (ctrl+c anywhere)
 ?               show or hide this help
