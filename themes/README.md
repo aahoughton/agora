@@ -57,7 +57,9 @@ Page templates receive a `Page`:
 | `.ReturnTo` | string | login page; where to go after signing in (a path on this site) |
 
 `message.html` receives one Message, and `participants.html` and
-`about.html` one Conversation, both on the page and in live updates.
+`about.html` one Conversation, both on the page and in live updates. The
+Message also carries `.People`, the conversation's participants and
+observers, for `markdown` to mark mentions with.
 
 The record types have the same fields as the JSON API (see
 `/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,
@@ -74,7 +76,7 @@ Functions available in templates:
 
 | Function | Result |
 |---|---|
-| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed |
+| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed; given `.People` as a second argument, each `@name` of one of them becomes `<strong class="mention tone-N">` (`mention observer` for an observer) |
 | `ts` | a time as RFC 3339 UTC, for `datetime` attributes |
 | `clock` | a time as `15:04` in the server's time zone |
 | `ago` | a past time relative to now, such as `5m ago` |

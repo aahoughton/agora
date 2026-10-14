@@ -107,13 +107,13 @@ func (e *env) seed() {
 	}
 	for _, s := range []core.SayParams{
 		{Agent: "alice", Body: "**LRU** or LFU? See [notes](https://example.com/notes).\n\n<script>alert(1)</script>"},
-		{Agent: "bob", Body: "LRU:\n\n```\nevict(oldest)\n```", ReplyTo: ptr(int64(4))},
+		{Agent: "bob", Body: "@alice LRU:\n\n```\nevict(oldest)\n```", ReplyTo: ptr(int64(4))},
 	} {
 		if _, err := e.svc.Say(ctx, p, "default", "cache", s); err != nil {
 			e.t.Fatal(err)
 		}
 	}
-	if _, err := e.svc.Observe(ctx, p, "default", "cache", core.ObserveParams{Name: "pat", Body: "mind the memory budget"}); err != nil {
+	if _, err := e.svc.Observe(ctx, p, "default", "cache", core.ObserveParams{Name: "pat", Body: "mind the memory budget, @bob"}); err != nil {
 		e.t.Fatal(err)
 	}
 	if _, err := e.svc.Conclude(ctx, p, "default", "cache", core.ConcludeParams{Agent: "alice", Body: "AGREED: LRU"}); err != nil {
@@ -228,7 +228,7 @@ func TestEventStream(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		_, _ = e.svc.Say(context.Background(), core.Anonymous(), "default", "cache", core.SayParams{Agent: "bob", Body: "live *hello*"})
+		_, _ = e.svc.Say(context.Background(), core.Anonymous(), "default", "cache", core.SayParams{Agent: "bob", Body: "live *hello* @pat"})
 	}()
 
 	sc := bufio.NewScanner(resp.Body)
@@ -259,7 +259,9 @@ func TestEventStream(t *testing.T) {
 				data = append(data, strings.TrimPrefix(line, "data: "))
 			case line == "" && event == "message":
 				html := strings.Join(data, "\n")
-				if id != "8" || !strings.Contains(html, "<em>hello</em>") || !strings.Contains(html, `id="m8"`) {
+				// pat has commented, so the live message mentions an observer.
+				if id != "8" || !strings.Contains(html, "<em>hello</em>") || !strings.Contains(html, `id="m8"`) ||
+					!strings.Contains(html, `<strong class="mention observer">@pat</strong>`) {
 					t.Fatalf("event id %q data %s", id, html)
 				}
 				return

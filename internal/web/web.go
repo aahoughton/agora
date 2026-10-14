@@ -52,7 +52,7 @@ type Page struct {
 	Next string
 
 	Conversation *core.Conversation
-	Messages     []core.Message
+	Messages     []Message
 	// Truncated is true when older messages exist that are not shown.
 	Truncated bool
 	// Earlier is the seq to pass as ?before= for the messages just before
@@ -485,13 +485,16 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal, account str
 		}
 	}
 	after := max(upto-int64(v.opts.ShownMessages), 0)
-	data.Messages = []core.Message{}
+	data.Messages = []Message{}
 	if upto > after {
 		res, err := v.svc.Read(r.Context(), p, ns, name, core.ReadParams{After: &after, Limit: int(upto - after)})
 		if err != nil {
 			return data, err
 		}
-		data.Messages = res.Messages
+		people := peopleOf(c)
+		for _, m := range res.Messages {
+			data.Messages = append(data.Messages, Message{m, people})
+		}
 	}
 	c = displayable(c)
 	data.Conversation, data.Truncated = &c, after > 0
@@ -618,19 +621,26 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 	connecting := true
 	for {
 		writeBy()
+		// Fresh state after new messages, and at every heartbeat, which
+		// keeps proxies from closing the connection and shows presence
+		// changes and countdowns in a quiet conversation. The state sent on
+		// connecting needs no repeat. It is read before the messages are
+		// rendered, so they mention the people who are there now.
+		fresh := len(batch.Messages) > 0 || !connecting
+		if fresh {
+			if c, err = v.svc.GetConversation(r.Context(), p, ns, name); err != nil {
+				return
+			}
+		}
+		people := peopleOf(c)
 		for _, m := range batch.Messages {
-			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), m); err != nil {
+			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), Message{m, people}); err != nil {
 				return
 			}
 			after = m.Seq
 		}
-		// Fresh state after new messages, and at every heartbeat, which
-		// keeps proxies from closing the connection and shows presence
-		// changes and countdowns in a quiet conversation. The state sent on
-		// connecting needs no repeat.
-		if len(batch.Messages) > 0 || !connecting {
-			c, err := v.svc.GetConversation(r.Context(), p, ns, name)
-			if err != nil || v.snapshot(w, c) != nil {
+		if fresh {
+			if v.snapshot(w, c) != nil {
 				return
 			}
 		} else if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
@@ -678,7 +688,7 @@ func displayable(c core.Conversation) core.Conversation {
 }
 
 // event writes one server-sent event whose data is the named template
-// rendered with data ("message" for a Message, "participants" and "about"
+// rendered with data ("message" for a Message (this package's), "participants" and "about"
 // for a Conversation).
 func (v *viewer) event(w http.ResponseWriter, name, id string, data any) error {
 	var b bytes.Buffer

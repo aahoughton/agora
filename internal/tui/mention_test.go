@@ -2,9 +2,11 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/aahoughton/agora/internal/core"
 )
@@ -148,4 +150,26 @@ func TestComposerMentionEdgeCases(t *testing.T) {
 			t.Fatal("the cycle is still open after a tab on one match")
 		}
 	})
+}
+
+func TestMentionsRecolorWhenSomeoneJoins(t *testing.T) {
+	h := newHarness(t, Options{Namespace: "default", Conversation: "design"})
+	ctx, p := t.Context(), core.Anonymous()
+	if _, err := h.svc.Start(ctx, p, "default", core.StartParams{Name: "design", End: core.EndAgreement, Agent: "alice", Join: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Say(ctx, p, "default", "design", core.SayParams{Agent: "alice", Body: "waiting on @late"}); err != nil {
+		t.Fatal(err)
+	}
+	h.start()
+	h.until("the message", h.shows("waiting on @late"))
+	styled := words("@late", lipgloss.NewStyle().Foreground(h.m.st.toneOf("late").GetForeground()).Bold(true))
+	shown := func() bool { return strings.Contains(h.m.View().Content, styled) }
+	if shown() {
+		t.Fatal("@late is a mention before late joins")
+	}
+	if _, err := h.svc.Join(ctx, p, "default", "design", core.JoinParams{Agent: "late"}); err != nil {
+		t.Fatal(err)
+	}
+	h.until("@late in late's color", shown)
 }

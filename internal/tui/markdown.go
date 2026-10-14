@@ -40,10 +40,11 @@ func sanitize(s string) string {
 // body is Markdown in the dialect of internal/markdown; links show their
 // target in parentheses, code keeps its line breaks, and each word carries
 // its own style so a wrapped line never leaks a style into the next.
-func renderBody(body string, width int, st styles) []string {
+// Mentions of people are bold in that person's color.
+func renderBody(body string, width int, st styles, people markdown.People) []string {
 	width = max(width, minWidth)
 	src := []byte(sanitize(body))
-	doc := markdown.Parser.Parser().Parse(text.NewReader(src))
+	doc := markdown.Parser.Parser().Parse(text.NewReader(src), markdown.WithPeople(people))
 	r := mdRenderer{src: src, st: st}
 	lines := r.blocks(doc, width)
 	if len(lines) == 0 {
@@ -199,6 +200,12 @@ func (r mdRenderer) inline(n ast.Node, base lipgloss.Style) string {
 			b.WriteString(words(string(c.Value), base))
 		case *ast.CodeSpan:
 			b.WriteString(r.inline(c, base.Foreground(r.st.accent.GetForeground())))
+		case *markdown.Mention:
+			color := r.st.toneOf(c.Name)
+			if c.Observer {
+				color = r.st.observer
+			}
+			b.WriteString(r.inline(c, base.Foreground(color.GetForeground()).Bold(true)))
 		case *ast.Emphasis:
 			if c.Level >= 2 {
 				b.WriteString(r.inline(c, base.Bold(true)))

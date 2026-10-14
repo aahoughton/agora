@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/markdown"
 )
 
 // renderer turns API records into terminal lines. Its methods are pure:
@@ -17,6 +18,8 @@ type renderer struct {
 	st  styles
 	now time.Time
 	loc *time.Location
+	// people are the names message bodies can mention.
+	people markdown.People
 }
 
 func (r renderer) clock(t time.Time) string    { return t.In(r.loc).Format("15:04") }
@@ -96,7 +99,7 @@ func (r renderer) message(m core.Message, gutter, width int) []string {
 		head += "  " + r.st.faint.Render(r.sk.say("reply_to", map[string]any{"Seq": *m.ReplyTo}))
 	}
 	out := []string{seq + " " + bar + " " + ansi.Truncate(head, max(inner, minWidth), r.st.g.more)}
-	for _, l := range renderBody(m.Body, inner, r.st) {
+	for _, l := range renderBody(m.Body, inner, r.st, r.people) {
 		out = append(out, blank+" "+bar+" "+l)
 	}
 	return out
