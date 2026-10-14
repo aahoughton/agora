@@ -70,7 +70,7 @@ func authorList(as []core.AuthorCount) string {
 
 func writePreviews(b *strings.Builder, w *wording.Wording, ps []core.Preview) {
 	for _, p := range ps {
-		fmt.Fprintf(b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind), replyTag(p.ReplyTo), p.Text)
+		fmt.Fprintf(b, "  #%d %s%s%s: %s\n", p.Seq, p.Author, kindTag(w, p.Kind, p.YourAccount), replyTag(p.ReplyTo), p.Text)
 	}
 }
 
@@ -97,7 +97,7 @@ func renderRead(w *wording.Wording, r core.ReadResult) string {
 // other messages.
 func writeMessages(b *strings.Builder, w *wording.Wording, msgs []core.Message) {
 	for _, m := range msgs {
-		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind), replyTag(m.ReplyTo))
+		head := fmt.Sprintf("#%d %s%s%s:", m.Seq, m.Author, kindTag(w, m.Kind, m.YourAccount), replyTag(m.ReplyTo))
 		body := strings.TrimSpace(m.Body)
 		if !strings.Contains(body, "\n") {
 			fmt.Fprintf(b, "%s %s\n", head, body)
@@ -165,11 +165,15 @@ func renderStatus(w *wording.Wording, sts []core.Standing) string {
 	return strings.Join(lines, "\n")
 }
 
-func kindTag(w *wording.Wording, kind string) string {
-	switch kind {
-	case core.KindSay:
+// kindTag marks a message by kind. An observer comment from the caller's own
+// account says so; the server recorded it, so a body cannot claim it.
+func kindTag(w *wording.Wording, kind string, yours bool) string {
+	switch {
+	case kind == core.KindSay:
 		return ""
-	case core.KindObserver:
+	case kind == core.KindObserver && yours:
+		return " " + w.Phrase(wording.ObserverYoursTag, nil)
+	case kind == core.KindObserver:
 		return " " + w.Phrase(wording.ObserverTag, nil)
 	default:
 		return " [" + kind + "]"

@@ -333,7 +333,7 @@ func (t *tools) start(ctx context.Context, req *mcp.CallToolRequest, in startIn)
 		return failure(ctx, err)
 	}
 	noteStanding(ctx, st)
-	return text(fmt.Sprintf("started %s (end: %s)\n%s", c.Name, c.End, renderStanding(st))), nil, nil
+	return text(fmt.Sprintf("started %s (end: %s)\n%s%s", c.Name, c.End, t.accountLine(ctx, p), renderStanding(st))), nil, nil
 }
 
 type joinIn struct {
@@ -357,7 +357,7 @@ func (t *tools) join(ctx context.Context, req *mcp.CallToolRequest, in joinIn) (
 		return failure(ctx, err)
 	}
 	noteStanding(ctx, st)
-	return text(renderConversation(t.w, c) + "\n" + renderStanding(st)), nil, nil
+	return text(renderConversation(t.w, c) + "\n" + t.accountLine(ctx, p) + renderStanding(st)), nil, nil
 }
 
 type readIn struct {
@@ -457,7 +457,22 @@ func (t *tools) status(ctx context.Context, req *mcp.CallToolRequest, in statusI
 		return failure(ctx, err)
 	}
 	note(ctx, slog.Int("conversations", len(sts)))
-	return text(renderStatus(t.w, sts)), nil, nil
+	return text(t.accountLine(ctx, p) + renderStatus(t.w, sts)), nil, nil
+}
+
+// accountLine names the caller's account, so an agent can tell which
+// observer comments are marked as its own account's. It is empty with auth
+// off, and when the lookup fails: the line is informational and the call
+// has already succeeded.
+func (t *tools) accountLine(ctx context.Context, p core.Principal) string {
+	if p.IsAnonymous() {
+		return ""
+	}
+	id, err := t.svc.Whoami(ctx, p)
+	if err != nil || id.Account == nil {
+		return ""
+	}
+	return t.w.Phrase(wording.AccountLine, map[string]any{"Name": id.Account.Name}) + "\n"
 }
 
 type concludeIn struct {

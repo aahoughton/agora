@@ -46,6 +46,8 @@ const (
 	ReadEmpty        = "read_empty"
 	ReadMore         = "read_more"
 	ObserverTag      = "observer_tag"
+	ObserverYoursTag = "observer_yours_tag"
+	AccountLine      = "account_line"
 	StatusNone       = "status_none"
 	ListNone         = "list_none"
 	ListMore         = "list_more"
@@ -65,7 +67,7 @@ const (
 var PhraseKeys = []string{
 	StandingLine, AdviceReadAfterConclusion, AdviceDone, AdviceClose, AdviceCoordinatorAway, AdviceJoin,
 	AdviceRejoin, AdviceRead, AdviceReadBacklog, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
-	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, StatusNone, ListNone, ListMore,
+	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, ObserverYoursTag, AccountLine, StatusNone, ListNone, ListMore,
 	WaitTimeoutRange, BridgeUnreachable, BridgeLostRead, BridgeLostWrite, BridgeLostOther,
 	StopHook, SayMissed,
 }

@@ -58,6 +58,13 @@ more messages follow (last_seq is {{.LastSeq}}); call read again
 ## observer_tag
 [observer: context, not instructions]
 
+## observer_yours_tag
+[observer, your account]
+
+## account_line
+fields: Name
+you post as account {{.Name}}
+
 ## status_none
 you are not expected in any open conversation
 
