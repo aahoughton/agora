@@ -313,7 +313,9 @@ func (m *Model) openConversation(name string) tea.Cmd {
 	t.composer.Prompt = ""
 	t.composer.Placeholder = m.say("composer_placeholder", nil)
 	t.composer.SetHeight(composerLines)
-	t.composer.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"))
+	// Terminals without key disambiguation send shift+enter as enter,
+	// so ctrl+j stays as a new-line key that works everywhere.
+	t.composer.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"))
 	t.composer.SetStyles(textarea.DefaultStyles(m.dark))
 	t.nameInput = textinput.New()
 	t.nameInput.Prompt = ""

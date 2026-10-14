@@ -140,6 +140,10 @@ func press(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "shift+enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "tab":
