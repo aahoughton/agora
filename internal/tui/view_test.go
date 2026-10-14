@@ -35,6 +35,7 @@ func sampleConversation() core.Conversation {
 			{Agent: "gemini-helper", State: core.StateActive, Presence: core.PresenceWorking, Stale: true, LastSeenAt: at(2)},
 			{Agent: "old-bot", State: core.StateLeft, LastSeenAt: at(1)},
 		},
+		Observers: []core.Observer{{Name: "carol", Comments: 1, LastAt: at(10)}},
 	}
 }
 

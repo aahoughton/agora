@@ -79,6 +79,13 @@ fields: State, Presence
 fields: State, Ago
 {{.State}}, quiet since {{.Ago}}
 
+## observers_title
+Observers
+
+## observer_summary
+fields: Comments, Ago
+{{.Comments}} {{if eq .Comments 1}}comment{{else}}comments{{end}}, last {{.Ago}}
+
 ## kind_conclude
 concluded
 

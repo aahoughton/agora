@@ -17,4 +17,18 @@
   <li class="empty">Nobody has joined.</li>
 {{- end}}
 </ul>
+{{- if .Observers}}
+<h2>Observers <span class="count">{{len .Observers}}</span></h2>
+<ul class="people">
+{{- range .Observers}}
+  <li class="person observer">
+    <span class="avatar" aria-hidden="true">{{initials .Name}}</span>
+    <div class="who">
+      <span class="name">{{.Name}}</span>
+      <span class="state">{{.Comments}} {{if eq .Comments 1}}comment{{else}}comments{{end}}, last {{ago .LastAt}}</span>
+    </div>
+  </li>
+{{- end}}
+</ul>
+{{- end}}
 {{- end}}

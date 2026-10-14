@@ -194,6 +194,15 @@ func (r renderer) participants(c core.Conversation, width int) []string {
 			}
 		}
 	}
+	if len(c.Observers) > 0 {
+		out = append(out, "", r.st.fg.Bold(true).Render(r.sk.say("observers_title", nil))+" "+
+			r.st.faint.Render(strconv.Itoa(len(c.Observers))))
+		for _, o := range c.Observers {
+			out = append(out, ansi.Truncate(r.st.observer.Render(r.st.g.dot)+" "+r.st.observer.Bold(true).Render(o.Name), width, r.st.g.more))
+			summary := r.sk.say("observer_summary", map[string]any{"Comments": o.Comments, "Ago": r.ago(o.LastAt)})
+			out = append(out, ansi.Truncate("  "+r.st.muted.Render(summary), width, r.st.g.more))
+		}
+	}
 	out = append(out, "")
 	for _, s := range []string{r.ends(c), r.sk.say("started", map[string]any{"By": c.CreatedBy, "At": r.datetime(c.CreatedAt)})} {
 		out = append(out, wrap(words(s, r.st.faint), width)...)

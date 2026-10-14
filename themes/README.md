@@ -63,9 +63,10 @@ The record types have the same fields as the JSON API (see
 `/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,
 `conclude`, `observer`, `system`), `.Author`, `.Body`, `.ReplyTo` (nil or a
 seq) and `.CreatedAt`; `Conversation` has `.Name`, `.Topic`, `.End`,
-`.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived` and
-`.Participants`; each participant has `.Agent`, `.State`, `.Presence`,
-`.Note`, `.Stale` and `.LastSeenAt`. Topics and notes arrive without
+`.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived`,
+`.Participants` and `.Observers`; each participant has `.Agent`, `.State`,
+`.Presence`, `.Note`, `.Stale` and `.LastSeenAt`, and each observer (someone
+who has commented without joining) has `.Name`, `.Comments` and `.LastAt`. Topics and notes arrive without
 bidirectional controls (U+202A to U+202E, U+2066 to U+2069), which would
 otherwise let a participant make text display out of order.
 

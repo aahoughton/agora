@@ -211,6 +211,8 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 /* Text written by participants cannot change the direction of what is
    around it. */
 .body, .person .note, .bar-topic, .row-topic { unicode-bidi: isolate; }
+.person.observer { --tone: var(--observer); --tone-bg: var(--observer-bg); }
+.people + h2 { margin-top: 1.25rem; }
 .person.left .avatar, .person.dropped .avatar { opacity: 0.4; }
 .person.left .name, .person.dropped .name { color: var(--muted); }
 .person.dropped .name { text-decoration: line-through; }
