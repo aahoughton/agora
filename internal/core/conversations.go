@@ -58,6 +58,9 @@ type Conversation struct {
 	LastAt       time.Time     `json:"last_at"`
 	Archived     bool          `json:"archived"`
 	Participants []Participant `json:"participants"`
+	// Observers are the people who have commented, in order of first
+	// comment. Observers never join, so they are not Participants.
+	Observers []Observer `json:"observers"`
 }
 
 // Message kinds.
@@ -109,6 +112,7 @@ func scanConv(row interface{ Scan(...any) error }) (*conv, error) {
 	c.CreatedAt = fromMS(created)
 	c.LastAt = fromMS(lastAt)
 	c.Participants = []Participant{}
+	c.Observers = []Observer{}
 	return &c, nil
 }
 
@@ -425,6 +429,10 @@ func (s *Service) ListConversations(ctx context.Context, p Principal, ns string,
 	if err != nil {
 		return ListPage{}, err
 	}
+	obs, err := s.observersOf(ctx, s.db, ids)
+	if err != nil {
+		return ListPage{}, err
+	}
 	for _, c := range rows {
 		if s.timeboxDue(c) {
 			fresh, err := s.loadConvRead(ctx, ns, c.Name)
@@ -438,6 +446,10 @@ func (s *Service) ListConversations(ctx context.Context, p Principal, ns string,
 		out.Participants = pts[c.id]
 		if out.Participants == nil {
 			out.Participants = []Participant{}
+		}
+		out.Observers = obs[c.id]
+		if out.Observers == nil {
+			out.Observers = []Observer{}
 		}
 		page.Conversations = append(page.Conversations, out)
 	}
@@ -461,7 +473,14 @@ func (s *Service) conversationWithParticipants(ctx context.Context, q querier, c
 	if err != nil {
 		return Conversation{}, err
 	}
+	obs, err := s.observersOf(ctx, q, []int64{c.id})
+	if err != nil {
+		return Conversation{}, err
+	}
 	out := c.Conversation
 	out.Participants = ps
+	if o := obs[c.id]; o != nil {
+		out.Observers = o
+	}
 	return out, nil
 }

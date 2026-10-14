@@ -533,6 +533,45 @@ func TestObserverDoesNotJoin(t *testing.T) {
 	}
 }
 
+func TestObserversListCommenters(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "alice")
+	if c := f.get(t, "c"); c.Observers == nil || len(c.Observers) != 0 {
+		t.Fatalf("observers before any comment = %#v", c.Observers)
+	}
+
+	observe := func(name string) {
+		must[core.Message](t)(f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: name, Body: "note"}))
+	}
+	observe("pat")
+	f.clock.Advance(time.Minute)
+	observe("sam")
+	f.clock.Advance(time.Minute)
+	f.say(t, "c", "alice", "noted")
+	observe("pat")
+	last := f.clock.Now()
+
+	want := []core.Observer{{Name: "pat", Comments: 2, LastAt: last}, {Name: "sam", Comments: 1, LastAt: last.Add(-time.Minute)}}
+	check := func(where string, got []core.Observer) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s: observers = %+v, want %+v", where, got, want)
+		}
+		for i := range want {
+			if got[i].Name != want[i].Name || got[i].Comments != want[i].Comments || !got[i].LastAt.Equal(want[i].LastAt) {
+				t.Fatalf("%s: observers = %+v, want %+v", where, got, want)
+			}
+		}
+	}
+	check("get", f.get(t, "c").Observers)
+	page := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{}))
+	check("list", page.Conversations[0].Observers)
+	if n := len(f.get(t, "c").Participants); n != 1 {
+		t.Fatalf("participants = %d, want only alice", n)
+	}
+}
+
 func TestPresenceAndStale(t *testing.T) {
 	f := newFixture(t, core.Options{StaleAfter: time.Minute})
 	ctx := t.Context()

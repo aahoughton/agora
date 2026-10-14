@@ -122,6 +122,7 @@
   "last_seq": 2,
   "name": "design",
   "namespace": "default",
+  "observers": [],
   "participants": [
     {
       "agent": "alice",
@@ -149,6 +150,7 @@
       "last_seq": 2,
       "name": "design",
       "namespace": "default",
+      "observers": [],
       "participants": [
         {
           "agent": "alice",
@@ -176,6 +178,7 @@
   "last_seq": 2,
   "name": "design",
   "namespace": "default",
+  "observers": [],
   "participants": [
     {
       "agent": "alice",
@@ -399,6 +402,13 @@
     "last_seq": 6,
     "name": "design",
     "namespace": "default",
+    "observers": [
+      {
+        "comments": 1,
+        "last_at": "2030-01-02T03:04:05Z",
+        "name": "root"
+      }
+    ],
     "participants": [
       {
         "agent": "alice",
@@ -510,6 +520,7 @@
   "last_seq": 2,
   "name": "led",
   "namespace": "default",
+  "observers": [],
   "participants": [
     {
       "agent": "lead",

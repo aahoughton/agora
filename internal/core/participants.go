@@ -94,6 +94,48 @@ func (s *Service) participantsOf(ctx context.Context, q querier, convIDs []int64
 	return out, nil
 }
 
+// Observer is someone who has commented on a conversation without joining
+// it.
+type Observer struct {
+	Name     string    `json:"name"`
+	Comments int       `json:"comments"`
+	LastAt   time.Time `json:"last_at"`
+}
+
+// observersOf returns the observers of several conversations in one query,
+// by conversation id, each in order of first comment.
+func (s *Service) observersOf(ctx context.Context, q querier, convIDs []int64) (map[int64][]Observer, error) {
+	out := map[int64][]Observer{}
+	if len(convIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(convIDs)), ",")
+	args := make([]any, len(convIDs))
+	for i, id := range convIDs {
+		args[i] = id
+	}
+	type row struct {
+		convID int64
+		ob     Observer
+	}
+	rows, err := collect(ctx, q, func(rows *sql.Rows) (row, error) {
+		var r row
+		var last int64
+		err := rows.Scan(&r.convID, &r.ob.Name, &r.ob.Comments, &last)
+		r.ob.LastAt = fromMS(last)
+		return r, err
+	}, `SELECT conversation_id, author, COUNT(*), MAX(created_at) FROM messages
+		WHERE conversation_id IN (`+marks+`) AND kind = 'observer'
+		GROUP BY conversation_id, author ORDER BY conversation_id, MIN(seq)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.convID] = append(out[r.convID], r.ob)
+	}
+	return out, nil
+}
+
 // prefixed scans one leading column into first, then the rest as usual.
 type prefixed struct {
 	rows  *sql.Rows

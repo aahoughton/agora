@@ -972,7 +972,7 @@ components:
 
     Conversation:
       type: object
-      required: [namespace, name, topic, end, status, created_by, created_at, last_seq, last_at, archived, participants]
+      required: [namespace, name, topic, end, status, created_by, created_at, last_seq, last_at, archived, participants, observers]
       properties:
         namespace: { type: string }
         name: { type: string }
@@ -989,6 +989,10 @@ components:
         participants:
           type: array
           items: { $ref: "#/components/schemas/Participant" }
+        observers:
+          description: People who have commented without joining, in order of first comment.
+          type: array
+          items: { $ref: "#/components/schemas/Observer" }
 
     Participant:
       type: object
@@ -1003,6 +1007,14 @@ components:
         check_back_by: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
         stale: { type: boolean }
+
+    Observer:
+      type: object
+      required: [name, comments, last_at]
+      properties:
+        name: { type: string }
+        comments: { type: integer }
+        last_at: { type: string, format: date-time }
 
     Message:
       type: object
