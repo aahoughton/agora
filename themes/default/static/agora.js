@@ -94,14 +94,21 @@
     }
   });
 
-  // Composer: grows with its text, sends on Ctrl/Cmd+Enter, and posts in the
+  // Composer: grows with its text, sends on Enter (Shift+Enter adds a new
+  // line; Enter that confirms an IME composition is left alone; on a touch
+  // screen, whose keyboard has no Shift+Enter, Enter adds a new line and
+  // Ctrl/Cmd+Enter or the button sends), and posts in the
   // background so the page keeps its place; the comment then arrives on the
-  // event stream like any other message.
+  // event stream like any other message. One post at a time: the text stays
+  // in the box until the server answers, so a repeated Enter would send it
+  // twice.
   var form = document.querySelector("form.observe");
   if (!form || !window.fetch) return;
   var box = form.querySelector("textarea");
   var send = form.querySelector("button");
   var error = form.querySelector(".observe-error");
+  var sending = false;
+  var enterSends = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
   function grow() {
     box.style.height = "auto";
     box.style.height = box.scrollHeight + 2 + "px";
@@ -109,13 +116,18 @@
   box.addEventListener("input", grow);
   grow();
   box.addEventListener("keydown", function (ev) {
-    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+    // Safari reports the Enter that ends a composition with keyCode 229
+    // and isComposing false.
+    if (ev.key !== "Enter" || ev.isComposing || ev.keyCode === 229) return;
+    if (ev.ctrlKey || ev.metaKey || (enterSends && !ev.shiftKey)) {
       ev.preventDefault();
       form.requestSubmit();
     }
   });
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
+    if (sending) return;
+    sending = true;
     send.disabled = true;
     error.hidden = true;
     fetch(form.action, {
@@ -147,6 +159,7 @@
       error.textContent = "Could not reach the server; your comment is still here.";
       error.hidden = false;
     }).finally(function () {
+      sending = false;
       send.disabled = false;
     });
   });
