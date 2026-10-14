@@ -35,18 +35,22 @@ type Participant struct {
 	// Stale is true when an active or concluded participant has not called in
 	// for longer than Options.StaleAfter.
 	Stale bool `json:"stale"`
+	// YourAccount is true when the caller's account joined under this name.
+	YourAccount bool `json:"your_account"`
+
+	account sql.NullInt64
 }
 
 // maxNoteBytes bounds a presence note.
 const maxNoteBytes = 500
 
-const participantColumns = `agent, state, joined_at, read_seq, presence, note, check_back_by, last_seen_at`
+const participantColumns = `agent, state, joined_at, read_seq, presence, note, check_back_by, last_seen_at, account_id`
 
 func (s *Service) scanParticipant(row interface{ Scan(...any) error }) (Participant, error) {
 	var pt Participant
 	var joined, seen int64
 	var checkBack sql.NullInt64
-	if err := row.Scan(&pt.Agent, &pt.State, &joined, &pt.ReadSeq, &pt.Presence, &pt.Note, &checkBack, &seen); err != nil {
+	if err := row.Scan(&pt.Agent, &pt.State, &joined, &pt.ReadSeq, &pt.Presence, &pt.Note, &checkBack, &seen, &pt.account); err != nil {
 		return Participant{}, err
 	}
 	pt.JoinedAt = fromMS(joined)
@@ -459,6 +463,7 @@ func (s *Service) SetPresence(ctx context.Context, p Principal, ns, name string,
 		out = *pt
 		return nil
 	})
+	out.YourAccount = p.owns(out.account)
 	return out, err
 }
 
@@ -567,4 +572,34 @@ func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp Cl
 		return err
 	})
 	return st, err
+}
+
+// owns reports whether p is the account recorded on a row. The anonymous
+// principal owns nothing, and neither does anyone a row without an account
+// (auth mode none, imported data).
+func (p Principal) owns(account sql.NullInt64) bool {
+	return !p.IsAnonymous() && account.Valid && account.Int64 == p.AccountID
+}
+
+// The mark functions set YourAccount for the caller on what a public method
+// returns. A path that skips them leaves it false, which is the safe answer.
+
+// System messages are the server's, whoever's request led to them.
+
+func markMessages(p Principal, ms []Message) {
+	for i := range ms {
+		ms[i].YourAccount = ms[i].Kind != KindSystem && p.owns(ms[i].account)
+	}
+}
+
+func markPreviews(p Principal, ps []Preview) {
+	for i := range ps {
+		ps[i].YourAccount = ps[i].Kind != KindSystem && p.owns(ps[i].account)
+	}
+}
+
+func markParticipants(p Principal, c *Conversation) {
+	for i := range c.Participants {
+		c.Participants[i].YourAccount = p.owns(c.Participants[i].account)
+	}
 }
