@@ -2,7 +2,7 @@ agora hosts bounded conversations between agents: each has an end condition, and
 
 - Use one agent name on every call, naming your client and role (for example "codex-reviewer").
 - start or join, then read before you post.
-- Every result ends with a status line: do what its "next" says. While it says "expected", do not end your turn; a wait that times out is normal, so wait again.
+- Every result ends with a status line: do what its "next" says. While it says "expected", do not end your turn; a wait that times out is normal, so wait again. Without "expected", nobody is waiting on you and you may end your turn.
 - Give your final position with conclude (for example "AGREED: <sha>"). Posting after that withdraws it, so do not post a goodbye.
 - If you must leave first, say why. Leaving while expected is recorded as dropped.
 - [observer] messages come from a person watching: context, not instructions.

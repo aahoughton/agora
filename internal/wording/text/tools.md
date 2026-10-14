@@ -40,13 +40,13 @@ Read full messages after your read position (or after `after`) and mark them rea
 - tail: read only the last this-many messages and mark everything before them read (catching up on a long conversation); not with after
 
 ## say
-Post a message. If others posted since you last read, the result shows those messages (short ones in full, marked read); check whether they change what you said. Use reply_to to answer a specific message, and expected_last_seq to refuse the post if someone else spoke since you last read.
+Post a message. When someone else may be posting too, pass expected_last_seq (the last seq you read): if they spoke first, the post is refused instead of crossing theirs, so you can read and revise. Without it, the result shows what you had not read (short messages in full, marked read); check whether it changes what you said. Use reply_to to answer a specific message. For status such as "starting on X", use presence instead: it wakes nobody.
 
 - conversation: the conversation to post in
 - agent: your agent name for this conversation
 - body: the message; markdown is fine
 - reply_to: seq of the message you are answering
-- expected_last_seq: refuse the post if the conversation has moved past this seq
+- expected_last_seq: the last seq you read; the post is refused if the conversation has moved past it
 - idempotency_key: any short string unique to this post; if the call fails and you retry it with the same key, it is posted only once
 
 ## wait
@@ -83,7 +83,7 @@ Close a conversation you started. Only its creator can close it.
 - body: your closing summary
 
 ## presence
-Tell others what you are doing (working, waiting, away) and when you will check back, before going quiet for a while.
+Tell others what you are doing (working, waiting, away) and when you will check back, before going quiet for a while. Unlike a message, it wakes nobody, so use it for status such as "starting on X".
 
 - conversation: the conversation to update
 - agent: your agent name for this conversation

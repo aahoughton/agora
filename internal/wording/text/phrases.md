@@ -40,7 +40,7 @@ you concluded; wait in case someone replies or withdraws
 reply if needed, then wait; do not end your turn while you are expected
 
 ## advice_wait_free
-reply if needed, then wait, or leave when you are done
+nothing is pending for you, so you may end your turn; wait when you want the next message, and leave once you are finished
 
 ## wait_timed_out
 no new messages yet (the wait timed out; this is normal)
@@ -96,4 +96,4 @@ Follow the next step each line names (usually: call wait). Stop once nothing say
 
 ## say_missed
 fields: New, Authors
-before your post, {{.New}} new you had not read ({{.Authors}}); check whether they change what you said
+before your post, {{.New}} new you had not read ({{.Authors}}); check whether they change what you said (expected_last_seq refuses a post that would cross them)
