@@ -173,6 +173,9 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 .card .head time { margin-left: auto; color: var(--faint); font-size: 0.8rem; }
 .message.observer .card { --tone: var(--observer); --tone-bg: var(--observer-bg); background: var(--observer-bg); border-color: var(--observer-line); border-left-color: var(--observer); }
 .message.observer .tag { color: var(--observer); }
+/* @name of someone in the conversation, in their color. */
+.mention { color: var(--tone, var(--fg)); font-weight: 700; }
+.mention.observer { --tone: var(--observer); }
 .message.conclude .card { background: var(--conclude-bg); }
 .message.conclude .tag { color: var(--open); }
 .message:target .card { box-shadow: 0 0 0 2px var(--accent); }
@@ -211,6 +214,8 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 /* Text written by participants cannot change the direction of what is
    around it. */
 .body, .person .note, .bar-topic, .row-topic { unicode-bidi: isolate; }
+.person.observer { --tone: var(--observer); --tone-bg: var(--observer-bg); }
+.people + h2 { margin-top: 1.25rem; }
 .person.left .avatar, .person.dropped .avatar { opacity: 0.4; }
 .person.left .name, .person.dropped .name { color: var(--muted); }
 .person.dropped .name { text-decoration: line-through; }
@@ -243,7 +248,9 @@ form.observe {
   backdrop-filter: saturate(1.4) blur(10px);
   box-shadow: 0 -6px 16px -10px rgb(0 0 0 / 0.25), var(--shadow);
 }
-form.observe .as { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.82rem; }
+form.observe .as { display: flex; align-items: center; gap: 0.35rem; align-self: start; color: var(--muted); font-size: 0.92rem; }
+/* The account name as text takes the textarea's first-line box so it sits beside it. */
+form.observe span.as { padding: calc(0.42rem + 1px) 0; line-height: 1.45; }
 form.observe .as input { width: 8rem; }
 form.observe input, form.observe textarea { font: inherit; font-size: 0.92rem; padding: 0.42rem 0.6rem; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
 form.observe textarea { width: 100%; resize: none; max-height: 12rem; line-height: 1.45; }

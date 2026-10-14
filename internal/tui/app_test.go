@@ -157,6 +157,13 @@ func TestFollowAndComment(t *testing.T) {
 	// The first comment asks for a name and rejects a bad one.
 	h.keys("i")
 	h.typeText("from the side")
+	h.keys("shift+enter")
+	h.typeText("and below")
+	h.keys("ctrl+j")
+	h.typeText("and lower")
+	if got, want := h.m.t.composer.Value(), "from the side\nand below\nand lower"; got != want {
+		t.Fatalf("composer = %q, want %q", got, want)
+	}
 	h.keys("enter")
 	h.until("the name prompt", h.shows("Your name"))
 	h.typeText("bad name")

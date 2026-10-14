@@ -35,6 +35,7 @@ func sampleConversation() core.Conversation {
 			{Agent: "gemini-helper", State: core.StateActive, Presence: core.PresenceWorking, Stale: true, LastSeenAt: at(2)},
 			{Agent: "old-bot", State: core.StateLeft, LastSeenAt: at(1)},
 		},
+		Observers: []core.Observer{{Name: "carol", Comments: 1, LastAt: at(10)}},
 	}
 }
 
@@ -140,6 +141,10 @@ func press(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "shift+enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "tab":

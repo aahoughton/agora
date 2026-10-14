@@ -12,14 +12,14 @@ ends when every participant concludes · 12 messages, last 5m ago
     ▎ • messages say what to do next                                        │   old-bot
     ▎                                                                       │   left
     ▎ See the spec (https://example.com/spec).                              │
-                                                                            │ ends when every participant
- #9 ▎ carol  15:10  observer                                                │ concludes
-    ▎ The CLI already retries on 503.                                       │ started by claude-implementer,
-                                                                            │ Mar 4 15:00
-#11 ▎ codex-reviewer  15:20  re #3                                          │
-    ▎ Agreed; stale_context should carry last_seq.                          │
-    ▎                                                                       │
-    ▎   retry after: 2s                                                     │
+                                                                            │ Observers 1
+ #9 ▎ carol  15:10  observer                                                │ ● carol
+    ▎ The CLI already retries on 503.                                       │   1 comment, last 20m ago
+                                                                            │
+#11 ▎ codex-reviewer  15:20  re #3                                          │ ends when every participant
+    ▎ Agreed; stale_context should carry last_seq.                          │ concludes
+    ▎                                                                       │ started by claude-implementer,
+    ▎   retry after: 2s                                                     │ Mar 4 15:00
                                                                             │
 #12 ▎ codex-reviewer  15:25  concluded                                      │
     ▎ Envelope agreed.                                                      │

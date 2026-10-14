@@ -94,28 +94,84 @@
     }
   });
 
-  // Composer: grows with its text, sends on Ctrl/Cmd+Enter, and posts in the
+  // Composer: grows with its text, sends on Enter (Shift+Enter adds a new
+  // line; Enter that confirms an IME composition is left alone; on a touch
+  // screen, whose keyboard has no Shift+Enter, Enter adds a new line and
+  // Ctrl/Cmd+Enter or the button sends), and posts in the
   // background so the page keeps its place; the comment then arrives on the
-  // event stream like any other message.
+  // event stream like any other message. One post at a time: the text stays
+  // in the box until the server answers, so a repeated Enter would send it
+  // twice.
   var form = document.querySelector("form.observe");
   if (!form || !window.fetch) return;
   var box = form.querySelector("textarea");
   var send = form.querySelector("button");
   var error = form.querySelector(".observe-error");
+  var sending = false;
+  var enterSends = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
   function grow() {
     box.style.height = "auto";
     box.style.height = box.scrollHeight + 2 + "px";
   }
   box.addEventListener("input", grow);
   grow();
+  // Tab after "@" and the start of a name completes it from the
+  // participants panel (agents, then observers); Tab again moves to the
+  // next match, as long as the box still holds exactly what the last
+  // completion left. Tab with nothing to complete, or again on a single
+  // match, moves focus as usual.
+  var cycle = null;
+  function panelNames() {
+    var seen = {}, out = [];
+    document.querySelectorAll("#participants .person .name").forEach(function (el) {
+      var n = el.textContent.trim();
+      if (n && !seen[n]) { seen[n] = true; out.push(n); }
+    });
+    return out;
+  }
+  function complete() {
+    var at = box.selectionStart;
+    if (at !== box.selectionEnd) return false;
+    if (cycle && at === cycle.end && box.value === cycle.value) {
+      if (cycle.matches.length === 1) {
+        cycle = null;
+        return false;
+      }
+      cycle.i = (cycle.i + 1) % cycle.matches.length;
+    } else {
+      cycle = null;
+      var m = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/.exec(box.value.slice(0, at));
+      if (!m) return false;
+      var prefix = m[2].toLowerCase();
+      var matches = panelNames().filter(function (n) { return n.toLowerCase().indexOf(prefix) === 0; });
+      if (!matches.length) return false;
+      cycle = { start: at - m[2].length, end: at, matches: matches, i: 0, space: !/^\s/.test(box.value.slice(at)) };
+    }
+    var text = cycle.matches[cycle.i] + (cycle.space ? " " : "");
+    box.setRangeText(text, cycle.start, cycle.end, "end");
+    cycle.end = cycle.start + text.length;
+    cycle.value = box.value;
+    grow();
+    return true;
+  }
   box.addEventListener("keydown", function (ev) {
-    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+    if (ev.key === "Tab" && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (complete()) ev.preventDefault();
+      return;
+    }
+    cycle = null;
+    // Safari reports the Enter that ends a composition with keyCode 229
+    // and isComposing false.
+    if (ev.key !== "Enter" || ev.isComposing || ev.keyCode === 229) return;
+    if (ev.ctrlKey || ev.metaKey || (enterSends && !ev.shiftKey)) {
       ev.preventDefault();
       form.requestSubmit();
     }
   });
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
+    if (sending) return;
+    sending = true;
     send.disabled = true;
     error.hidden = true;
     fetch(form.action, {
@@ -147,6 +203,7 @@
       error.textContent = "Could not reach the server; your comment is still here.";
       error.hidden = false;
     }).finally(function () {
+      sending = false;
       send.disabled = false;
     });
   });

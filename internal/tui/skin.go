@@ -26,6 +26,7 @@ var textKeys = []string{
 	"ends_agreement", "ends_coordinator", "ends_timebox_open", "ends_timebox_done", "ends_none",
 	"started", "messages_count", "truncated",
 	"participants_title", "participants_empty", "participant_state", "participant_stale",
+	"observers_title", "observer_summary",
 	"kind_conclude", "kind_observer", "reply_to",
 	"new_below", "following", "loading",
 	"composer_placeholder", "composer_as", "composer_name_prompt", "composer_name_invalid",

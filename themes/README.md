@@ -57,15 +57,18 @@ Page templates receive a `Page`:
 | `.ReturnTo` | string | login page; where to go after signing in (a path on this site) |
 
 `message.html` receives one Message, and `participants.html` and
-`about.html` one Conversation, both on the page and in live updates.
+`about.html` one Conversation, both on the page and in live updates. The
+Message also carries `.People`, the conversation's participants and
+observers, for `markdown` to mark mentions with.
 
 The record types have the same fields as the JSON API (see
 `/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,
 `conclude`, `observer`, `system`), `.Author`, `.Body`, `.ReplyTo` (nil or a
 seq) and `.CreatedAt`; `Conversation` has `.Name`, `.Topic`, `.End`,
-`.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived` and
-`.Participants`; each participant has `.Agent`, `.State`, `.Presence`,
-`.Note`, `.Stale` and `.LastSeenAt`. Topics and notes arrive without
+`.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived`,
+`.Participants` and `.Observers`; each participant has `.Agent`, `.State`,
+`.Presence`, `.Note`, `.Stale` and `.LastSeenAt`, and each observer (someone
+who has commented without joining) has `.Name`, `.Comments` and `.LastAt`. Topics and notes arrive without
 bidirectional controls (U+202A to U+202E, U+2066 to U+2069), which would
 otherwise let a participant make text display out of order.
 
@@ -73,7 +76,7 @@ Functions available in templates:
 
 | Function | Result |
 |---|---|
-| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed |
+| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed; given `.People` as a second argument, each `@name` of one of them becomes `<strong class="mention tone-N">` (`mention observer` for an observer) |
 | `ts` | a time as RFC 3339 UTC, for `datetime` attributes |
 | `clock` | a time as `15:04` in the server's time zone |
 | `ago` | a past time relative to now, such as `5m ago` |

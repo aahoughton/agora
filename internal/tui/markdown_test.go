@@ -4,7 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/aahoughton/agora/internal/markdown"
 )
 
 func plain(lines []string) string {
@@ -39,7 +42,7 @@ func TestRenderBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := plain(renderBody(tt.body, 50, st)); got != tt.want {
+			if got := plain(renderBody(tt.body, 50, st, nil)); got != tt.want {
 				t.Fatalf("got\n%s\nwant\n%s", got, tt.want)
 			}
 		})
@@ -50,7 +53,7 @@ func TestRenderBodyWraps(t *testing.T) {
 	st := defaultSkin(t).styles(true)
 	body := "a **bold run that is long enough to wrap** then `some code that also wraps` and " +
 		strings.Repeat("x", 50) + "\n\n```\n" + strings.Repeat("y", 50) + "\n```"
-	for _, l := range renderBody(body, 20, st) {
+	for _, l := range renderBody(body, 20, st, nil) {
 		if w := ansi.StringWidth(l); w > 20 {
 			t.Errorf("line %q is %d wide", ansi.Strip(l), w)
 		}
@@ -67,7 +70,7 @@ func TestSanitize(t *testing.T) {
 	if got, want := sanitize(in), "ok[2J]8;;evil done\n    tab flip"; got != want {
 		t.Fatalf("sanitize = %q, want %q", got, want)
 	}
-	for _, l := range renderBody(in, 40, defaultSkin(t).styles(true)) {
+	for _, l := range renderBody(in, 40, defaultSkin(t).styles(true), nil) {
 		if strings.ContainsAny(ansi.Strip(l), "\x1b\x07\r") {
 			t.Fatalf("control character survived: %q", l)
 		}
@@ -81,10 +84,30 @@ func TestRenderBodyDeepNesting(t *testing.T) {
 		strings.Repeat("> ", 30) + "text that has to go somewhere",
 		"- a\n" + strings.Repeat("  ", 1) + "- b\n    - c\n      - d\n        - e\n          - f\n            - g\n              - " + strings.Repeat("x", 30),
 	} {
-		for _, l := range renderBody(body, 12, st) {
+		for _, l := range renderBody(body, 12, st, nil) {
 			if w := ansi.StringWidth(l); w > 12 {
 				t.Errorf("line %q is %d wide", ansi.Strip(l), w)
 			}
 		}
+	}
+}
+
+func TestRenderBodyMentions(t *testing.T) {
+	st := defaultSkin(t).styles(true)
+	people := markdown.NewPeople([]string{"ca-one"}, []string{"cora"})
+	out := strings.Join(renderBody("ask @ca-one and @cora, not @nobody or `@ca-one`", 80, st, people), "\n")
+	mention := func(color lipgloss.Style, s string) string {
+		return words(s, lipgloss.NewStyle().Foreground(color.GetForeground()).Bold(true))
+	}
+	for _, want := range []string{mention(st.toneOf("ca-one"), "@ca-one"), mention(st.observer, "@cora")} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing styled %q in %q", ansi.Strip(want), out)
+		}
+	}
+	if strings.Contains(out, mention(st.toneOf("nobody"), "@nobody")) {
+		t.Errorf("@nobody is styled as a mention: %q", out)
+	}
+	if got, want := plain(strings.Split(out, "\n")), "ask @ca-one and @cora, not @nobody or @ca-one"; got != want {
+		t.Errorf("text = %q, want %q", got, want)
 	}
 }

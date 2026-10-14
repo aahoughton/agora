@@ -13,7 +13,7 @@
       {{- if .ReplyTo}} <a class="reply" href="#m{{.ReplyTo}}">re #{{.ReplyTo}}</a>{{end}}
       <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{clock .CreatedAt}}</time>
     </div>
-    <div class="body">{{markdown .Body}}</div>
+    <div class="body">{{markdown .Body .People}}</div>
   </div>
   {{- end}}
 </li>

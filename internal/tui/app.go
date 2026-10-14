@@ -6,6 +6,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	"github.com/aahoughton/agora/internal/client"
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/markdown"
 )
 
 // Defaults for Options.
@@ -130,6 +132,7 @@ type thread struct {
 	composing  bool
 	nameInput  textinput.Model
 	askingName bool
+	mention    *mentionCycle
 	sending    bool
 }
 
@@ -224,7 +227,24 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) render() renderer {
-	return renderer{sk: m.opts.Skin, st: m.st, now: m.opts.Now(), loc: m.opts.Location}
+	r := renderer{sk: m.opts.Skin, st: m.st, now: m.opts.Now(), loc: m.opts.Location}
+	if m.t != nil {
+		r.people = peopleOf(m.t.conv)
+	}
+	return r
+}
+
+// peopleOf returns the names c's messages can mention.
+func peopleOf(c core.Conversation) markdown.People {
+	ps := make([]string, len(c.Participants))
+	for i, p := range c.Participants {
+		ps[i] = p.Agent
+	}
+	os := make([]string, len(c.Observers))
+	for i, o := range c.Observers {
+		os[i] = o.Name
+	}
+	return markdown.NewPeople(ps, os)
 }
 
 func (m *Model) say(key string, data any) string { return m.opts.Skin.say(key, data) }
@@ -313,7 +333,9 @@ func (m *Model) openConversation(name string) tea.Cmd {
 	t.composer.Prompt = ""
 	t.composer.Placeholder = m.say("composer_placeholder", nil)
 	t.composer.SetHeight(composerLines)
-	t.composer.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"))
+	// Terminals without key disambiguation send shift+enter as enter,
+	// so ctrl+j stays as a new-line key that works everywhere.
+	t.composer.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"))
 	t.composer.SetStyles(textarea.DefaultStyles(m.dark))
 	t.nameInput = textinput.New()
 	t.nameInput.Prompt = ""
@@ -470,6 +492,9 @@ func (m *Model) followed(msg followMsg) tea.Cmd {
 		return nil
 	}
 	t.retrying = ""
+	// Someone joining or commenting changes which names are mentions, in
+	// messages already shown too.
+	recolor := !maps.Equal(peopleOf(t.conv), peopleOf(msg.res.Conversation))
 	t.conv = msg.res.Conversation
 	wasBottom := !t.loaded || t.vp.AtBottom()
 	added := 0
@@ -482,7 +507,7 @@ func (m *Model) followed(msg followMsg) tea.Cmd {
 		added++
 	}
 	t.loaded = true
-	if added > 0 && gutterWidth(t.after) != gutterWidth(t.after-int64(added)) {
+	if recolor || added > 0 && gutterWidth(t.after) != gutterWidth(t.after-int64(added)) {
 		m.rerender()
 	} else {
 		m.renderNew(added)
@@ -862,6 +887,10 @@ func (m *Model) composerKey(k tea.KeyPressMsg) tea.Cmd {
 	if t.sending {
 		return nil
 	}
+	if k.String() == "tab" && m.complete() {
+		return nil
+	}
+	t.mention = nil
 	if k.String() == "enter" {
 		if strings.TrimSpace(t.composer.Value()) == "" {
 			return nil

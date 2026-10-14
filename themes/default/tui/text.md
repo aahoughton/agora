@@ -79,6 +79,13 @@ fields: State, Presence
 fields: State, Ago
 {{.State}}, quiet since {{.Ago}}
 
+## observers_title
+Observers
+
+## observer_summary
+fields: Comments, Ago
+{{.Comments}} {{if eq .Comments 1}}comment{{else}}comments{{end}}, last {{.Ago}}
+
 ## kind_conclude
 concluded
 
@@ -142,7 +149,7 @@ i comment · p participants · g/G top/bottom · esc back · ? help
 p participants · g/G top/bottom · esc back · ? help
 
 ## hints_composer
-enter send · ctrl+j new line · esc leave
+enter send · shift+enter/ctrl+j new line · esc leave
 
 ## help_title
 Keys
@@ -157,7 +164,8 @@ a               include archived conversations
 r               refresh a list
 p               show or hide participants
 i or tab        write a comment
-enter           send a comment (ctrl+j for a new line)
+enter           send a comment (shift+enter or ctrl+j for a new line)
+tab             complete an @name in a comment; again for the next match
 esc             leave the comment box, close help, or go back
 q               quit (ctrl+c anywhere)
 ?               show or hide this help

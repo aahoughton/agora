@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/agora/internal/markdown"
 )
 
 // renderer turns API records into terminal lines. Its methods are pure:
@@ -17,6 +18,8 @@ type renderer struct {
 	st  styles
 	now time.Time
 	loc *time.Location
+	// people are the names message bodies can mention.
+	people markdown.People
 }
 
 func (r renderer) clock(t time.Time) string    { return t.In(r.loc).Format("15:04") }
@@ -96,7 +99,7 @@ func (r renderer) message(m core.Message, gutter, width int) []string {
 		head += "  " + r.st.faint.Render(r.sk.say("reply_to", map[string]any{"Seq": *m.ReplyTo}))
 	}
 	out := []string{seq + " " + bar + " " + ansi.Truncate(head, max(inner, minWidth), r.st.g.more)}
-	for _, l := range renderBody(m.Body, inner, r.st) {
+	for _, l := range renderBody(m.Body, inner, r.st, r.people) {
 		out = append(out, blank+" "+bar+" "+l)
 	}
 	return out
@@ -192,6 +195,15 @@ func (r renderer) participants(c core.Conversation, width int) []string {
 			for _, l := range wrap(words(oneLine(p.Note), r.st.faint), width-2) {
 				out = append(out, "  "+l)
 			}
+		}
+	}
+	if len(c.Observers) > 0 {
+		out = append(out, "", r.st.fg.Bold(true).Render(r.sk.say("observers_title", nil))+" "+
+			r.st.faint.Render(strconv.Itoa(len(c.Observers))))
+		for _, o := range c.Observers {
+			out = append(out, ansi.Truncate(r.st.observer.Render(r.st.g.dot)+" "+r.st.observer.Bold(true).Render(o.Name), width, r.st.g.more))
+			summary := r.sk.say("observer_summary", map[string]any{"Comments": o.Comments, "Ago": r.ago(o.LastAt)})
+			out = append(out, ansi.Truncate("  "+r.st.muted.Render(summary), width, r.st.g.more))
 		}
 	}
 	out = append(out, "")
