@@ -185,6 +185,11 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 	addTool(reg, s, "leave", write, t.leave)
 	addTool(reg, s, "close", destructive, t.closeConv)
 	addTool(reg, s, "presence", write, t.presence)
+	if svc.FeedbackEnabled() {
+		addTool(reg, s, "feedback", write, t.feedback)
+	} else {
+		checkTool[feedbackIn](reg, "feedback")
+	}
 	reg.checkAllUsed()
 	return s
 }
@@ -206,6 +211,14 @@ func (r *registry) checkAllUsed() {
 // addTool registers a tool whose input schema is inferred from In and whose
 // descriptions come from the wording.
 func addTool[In any](r *registry, s *mcp.Server, name string, ann *mcp.ToolAnnotations, h mcp.ToolHandlerFor[In, any]) {
+	desc, schema := checkTool[In](r, name)
+	mcp.AddTool(s, &mcp.Tool{Name: name, Description: desc, Annotations: ann, InputSchema: schema}, h)
+}
+
+// checkTool checks the wording for a tool with input In, without
+// registering it, and returns the tool's description and its schema with
+// each parameter described.
+func checkTool[In any](r *registry, name string) (string, *jsonschema.Schema) {
 	tw, ok := r.w.Tool(name)
 	if !ok {
 		panic(fmt.Sprintf("mcpserver: tools.md has no section for tool %q", name))
@@ -227,7 +240,7 @@ func addTool[In any](r *registry, s *mcp.Server, name string, ann *mcp.ToolAnnot
 		}
 	}
 	r.used = append(r.used, name)
-	mcp.AddTool(s, &mcp.Tool{Name: name, Description: tw.Description, Annotations: ann, InputSchema: schema}, h)
+	return tw.Description, schema
 }
 
 // caller is the principal of one tool call: authenticated from the call's
@@ -570,6 +583,31 @@ func (t *tools) presence(ctx context.Context, req *mcp.CallToolRequest, in prese
 	note(ctx, slog.String("presence", in.Presence))
 	noteStanding(ctx, st)
 	return text("presence: " + in.Presence + "\n" + renderStanding(st)), nil, nil
+}
+
+type feedbackIn struct {
+	Conversation string `json:"conversation"`
+	Agent        string `json:"agent"`
+	Body         string `json:"body"`
+}
+
+// feedback ends with no standing line: a note does not change the agent's
+// standing in the conversation.
+func (t *tools) feedback(ctx context.Context, req *mcp.CallToolRequest, in feedbackIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	r, err := t.svc.SubmitFeedback(ctx, p, t.ns, in.Conversation, core.FeedbackParams{Agent: in.Agent, Body: in.Body})
+	if err != nil {
+		return failure(ctx, err)
+	}
+	note(ctx, slog.Int("body_bytes", len(in.Body)), slog.Bool("replaced", r.Replaced))
+	key := wording.FeedbackRecorded
+	if r.Replaced {
+		key = wording.FeedbackReplaced
+	}
+	return text(t.w.Phrase(key, map[string]any{"Conversation": r.Feedback.Conversation})), nil, nil
 }
 
 // quiet returns a logger that passes only warnings and errors: the SDK logs

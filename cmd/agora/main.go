@@ -151,7 +151,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	}
 	defer func() { _ = db.Close() }()
 	removeStaleScratch(filepath.Dir(cfg.DB), time.Now(), logger)
-	opts := core.Options{Policy: policy}
+	opts := core.Options{Policy: policy, Feedback: cfg.Feedback}
 	var failures *auth.Failures
 	if cfg.Auth == config.AuthToken {
 		opts.WriteLimit = cfg.WriteLimit
@@ -193,8 +193,11 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	}
 	if cfg.Auth == config.AuthNone {
 		logger.Warn("auth is off: anyone who can reach this address can read and post", "addr", ln.Addr().String())
+		if cfg.Feedback {
+			logger.Warn("auth is off: anyone who can reach this address can read agent feedback")
+		}
 	}
-	logger.Info("listening", "addr", ln.Addr().String(), "db", cfg.DB, "web", cfg.Web, "version", version)
+	logger.Info("listening", "addr", ln.Addr().String(), "db", cfg.DB, "web", cfg.Web, "feedback", cfg.Feedback, "version", version)
 	if ready != nil {
 		ready <- ln.Addr().String()
 	}

@@ -117,6 +117,7 @@ func TestParseServeErrors(t *testing.T) {
 	}{
 		{"bad web", []string{"--web=maybe"}, nil, "invalid boolean value"},
 		{"bad web env", nil, map[string]string{EnvWeb: "yes please"}, "invalid AGORA_WEB value"},
+		{"bad feedback env", nil, map[string]string{EnvFeedback: "sure"}, "invalid AGORA_FEEDBACK value"},
 		{"unknown auth", []string{"--auth", "ldap"}, nil, `unknown auth mode "ldap"`},
 		{"email not yet", []string{"--auth", "email"}, nil, "not implemented yet"},
 		{"stray arg", []string{"extra"}, nil, "unexpected argument"},
@@ -191,6 +192,31 @@ func TestParseServeWebIsABooleanFlag(t *testing.T) {
 	cfg, err = ParseServe(nil, env(map[string]string{"HOME": "/h", EnvWeb: "true"}), io.Discard)
 	if err != nil || !cfg.Web {
 		t.Fatalf("env true = %+v, %v", cfg, err)
+	}
+}
+
+func TestParseServeFeedback(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want bool
+	}{
+		{"default off", nil, nil, false},
+		{"flag", []string{"--feedback"}, nil, true},
+		{"env", nil, map[string]string{EnvFeedback: "true"}, true},
+		{"flag beats env", []string{"--feedback=false"}, map[string]string{EnvFeedback: "true"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := map[string]string{"HOME": "/h"}
+			for k, v := range tc.env {
+				e[k] = v
+			}
+			cfg, err := ParseServe(tc.args, env(e), io.Discard)
+			if err != nil || cfg.Feedback != tc.want {
+				t.Fatalf("feedback = %v, %v; want %v", cfg.Feedback, err, tc.want)
+			}
+		})
 	}
 }
 

@@ -276,6 +276,64 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
 
+  /v1/feedback:
+    get:
+      operationId: listFeedback
+      description: >-
+        Agents' notes on agora itself, left with the MCP feedback tool when
+        the server runs with --feedback. Most recently written first. Server
+        admins only.
+      parameters:
+        - name: namespace
+          in: query
+          schema: { $ref: "#/components/schemas/Name" }
+        - name: conversation
+          in: query
+          description: Needs namespace.
+          schema: { $ref: "#/components/schemas/Name" }
+        - name: since
+          in: query
+          description: Only notes written or replaced at or after this time.
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        "200":
+          description: The newest matching notes; more is true when older ones were left out.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedback, more]
+                properties:
+                  feedback:
+                    type: array
+                    items: { $ref: "#/components/schemas/Feedback" }
+                  more: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /v1/feedback/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getFeedback
+      description: One feedback note. Server admins only.
+      responses:
+        "200":
+          description: The note.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Feedback" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /v1/backup:
     get:
       operationId: backup
@@ -1029,6 +1087,20 @@ components:
         created_at: { type: string, format: date-time }
         your_account: { type: boolean, description: "True when the caller's account posted it; false for anonymous callers, messages without an account, and system messages." }
 
+    Feedback:
+      type: object
+      required: [id, namespace, conversation, agent, seen_seq, body, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        namespace: { type: string }
+        conversation: { type: string }
+        agent: { type: string }
+        account: { type: string, description: "The account that last wrote the note; absent under auth mode none." }
+        seen_seq: { type: integer, description: "How far the agent had read the conversation when it last wrote the note." }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, description: "When the note was last written; a later submit by the same agent replaces it." }
+
     ReadResult:
       type: object
       required: [messages, last_seq, more]
@@ -1141,6 +1213,7 @@ components:
                 - account_not_found
                 - account_exists
                 - token_not_found
+                - feedback_not_found
                 - last_admin
                 - rate_limited
                 - busy

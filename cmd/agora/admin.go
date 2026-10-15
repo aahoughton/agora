@@ -42,6 +42,11 @@ AGORA_TOKEN):
   members set NAMESPACE ACCOUNT viewer|observer|member|admin
   members remove NAMESPACE ACCOUNT
   namespaces create NAME
+  feedback list [--in NS[/CONVERSATION]] [--since TIME] [--limit N]
+                                    agents' notes on agora (serve --feedback),
+                                    newest first; TIME is RFC 3339 or an age
+                                    such as 24h
+  feedback show ID                  one note in full, with its conversation
 
 A new token is printed once; store it where the client reads it
 (AGORA_TOKEN). Server admins manage accounts and namespaces; an account
@@ -56,7 +61,7 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 	switch args[0] {
 	case "bootstrap", "recover":
 		return runAdminLocal(ctx, args[0], args[1:], stdout, stderr)
-	case "accounts", "tokens", "members", "namespaces":
+	case "accounts", "tokens", "members", "namespaces", "feedback":
 		return runAdminRemote(ctx, args, stdout, stderr, getenv)
 	case "status":
 		return runAdminStatus(ctx, args[1:], stdout, stderr, getenv)
@@ -122,6 +127,9 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 	serverAdmin := fs.Bool("server-admin", false, "accounts add: make the account a server admin")
 	label := fs.String("label", "", "tokens issue: a label to recognize the token by")
 	ttl := fs.Duration("ttl", 0, "tokens issue: lifetime, e.g. 720h (default: never expires)")
+	fbIn := fs.String("in", "", "feedback list: only notes from this namespace, or NS/CONVERSATION")
+	fbSince := fs.String("since", "", "feedback list: only notes written at or after this RFC 3339 time, or this long ago (e.g. 24h)")
+	fbLimit := fs.Int("limit", 0, "feedback list: at most this many notes (default 50)")
 
 	setAccount := func(disabled, admin *bool) adminCommand {
 		return adminCommand{1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
@@ -210,6 +218,36 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 			fmt.Fprintf(out, "%s has no role in %s\n", a[1], a[0])
 			return nil
 		}},
+		"feedback list": {0, func(ctx context.Context, cl *client.Client, _ []string, out io.Writer) error {
+			f := core.FeedbackFilter{Limit: *fbLimit}
+			f.Namespace, f.Conversation, _ = strings.Cut(*fbIn, "/")
+			if strings.Contains(f.Conversation, "/") {
+				return fmt.Errorf("--in %q: want NAMESPACE or NAMESPACE/CONVERSATION", *fbIn)
+			}
+			if *fbSince != "" {
+				t, err := parseSince(*fbSince, time.Now())
+				if err != nil {
+					return err
+				}
+				f.Since = &t
+			}
+			page, err := cl.ListFeedback(ctx, f)
+			if err == nil {
+				printFeedbackList(out, page)
+			}
+			return err
+		}},
+		"feedback show": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+			id, err := strconv.ParseInt(a[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("feedback id %q is not a number", a[0])
+			}
+			f, err := cl.GetFeedback(ctx, id)
+			if err == nil {
+				printFeedback(out, cl.URL(), f)
+			}
+			return err
+		}},
 		"namespaces create": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			ns, err := cl.CreateNamespace(ctx, a[0])
 			if err == nil {
@@ -257,6 +295,68 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 		return exitError
 	}
 	return exitOK
+}
+
+// parseSince reads an RFC 3339 time, or a duration counted back from now.
+func parseSince(s string, now time.Time) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < 0 {
+		return time.Time{}, fmt.Errorf("--since %q: want an RFC 3339 time or a duration such as 24h", s)
+	}
+	return now.Add(-d), nil
+}
+
+// feedbackPreview is how much of a note the list shows.
+const feedbackPreview = 60
+
+func printFeedbackList(out io.Writer, page core.FeedbackPage) {
+	if len(page.Feedback) == 0 {
+		fmt.Fprintln(out, "No feedback.")
+		return
+	}
+	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tWRITTEN\tCONVERSATION\tAGENT\tACCOUNT\tNOTE")
+	for _, f := range page.Feedback {
+		note := strings.Join(strings.Fields(f.Body), " ")
+		if r := []rune(note); len(r) > feedbackPreview {
+			note = string(r[:feedbackPreview-3]) + "..."
+		}
+		fmt.Fprintf(tw, "%d\t%s\t%s/%s\t%s\t%s\t%s\n", f.ID, f.UpdatedAt.Local().Format("2006-01-02 15:04"),
+			f.Namespace, f.Conversation, shown(f.Agent), shown(cmp.Or(f.Account, "-")), shown(note))
+	}
+	_ = tw.Flush()
+	if page.More {
+		fmt.Fprintln(out, "More notes are older; narrow with --since or raise --limit.")
+	}
+}
+
+// printFeedback writes one note with what an admin needs to find its
+// context: the conversation, how far the agent had read, and the
+// conversation's viewer address (served with serve --web).
+func printFeedback(out io.Writer, base string, f core.Feedback) {
+	fmt.Fprintf(out, "feedback %d from %s", f.ID, shown(f.Agent))
+	if f.Account != "" {
+		fmt.Fprintf(out, " (account %s)", shown(f.Account))
+	}
+	fmt.Fprintf(out, "\nconversation: %s/%s, read to #%d\n", f.Namespace, f.Conversation, f.SeenSeq)
+	fmt.Fprintf(out, "viewer: %s/n/%s/c/%s\n", strings.TrimRight(base, "/"), f.Namespace, f.Conversation)
+	fmt.Fprintf(out, "written: %s", f.CreatedAt.Local().Format("2006-01-02 15:04 MST"))
+	if !f.UpdatedAt.Equal(f.CreatedAt) {
+		fmt.Fprintf(out, ", replaced %s", f.UpdatedAt.Local().Format("2006-01-02 15:04 MST"))
+	}
+	fmt.Fprintf(out, "\n\n%s\n", shownBody(f.Body))
+}
+
+// shownBody is shown for multi-line text: it keeps newlines and tabs.
+func shownBody(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = shown(strings.ReplaceAll(strings.TrimSuffix(l, "\r"), "\t", "    "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func printAccounts(out io.Writer, as []core.Account) {

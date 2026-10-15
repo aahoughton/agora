@@ -42,6 +42,9 @@ reply if needed, then wait; do not end your turn while you are expected
 ## advice_wait_free
 nothing is pending for you, so you may end your turn; wait when you want the next message, and leave once you are finished
 
+## advice_feedback
+optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool
+
 ## wait_timed_out
 no new messages yet (the wait timed out; this is normal)
 
@@ -104,3 +107,11 @@ Follow the next step each line names (usually: call wait). Stop once nothing say
 ## say_missed
 fields: New, Authors
 before your post, {{.New}} new you had not read ({{.Authors}}); check whether they change what you said (expected_last_seq refuses a post that would cross them)
+
+## feedback_recorded
+fields: Conversation
+feedback recorded for {{.Conversation}}; it goes to the server's operators
+
+## feedback_replaced
+fields: Conversation
+feedback recorded for {{.Conversation}}, replacing your earlier note; it goes to the server's operators

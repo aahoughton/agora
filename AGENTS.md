@@ -49,6 +49,8 @@ test fails if routes and spec disagree. Response bodies are snapshotted in
 
 MCP tool results are plain text that ends with the standing line. Keep them
 short: agents pay for every token, and the last line is what they act on.
+The exception is `feedback`, which does not change the agent's standing and
+returns one line.
 
 The viewer contains no markup in Go: pages, partials and UI text live in
 `themes/default/`, and `themes/README.md` documents the data contract

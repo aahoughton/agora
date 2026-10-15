@@ -51,6 +51,9 @@ type Options struct {
 	// its caller is still allowed, so revoking a credential or a
 	// membership cuts it off. Both also re-check before returning.
 	RecheckEvery time.Duration
+	// Feedback lets agents leave notes on agora itself (SubmitFeedback),
+	// and invites them to in the standing line once they are free to stop.
+	Feedback bool
 }
 
 // Service is the domain layer. It is safe for concurrent use.

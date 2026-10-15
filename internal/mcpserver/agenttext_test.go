@@ -19,7 +19,8 @@ var update = flag.Bool("update", false, "rewrite testdata/agent-text.golden")
 
 // TestAgentText snapshots everything an agent can see: instructions, tool
 // descriptions and schemas as a client receives them, every phrase, and the
-// output of a scripted session. Wording changes show up as a diff to the
+// output of a scripted session, with feedback on (and the tool list with it
+// off). Wording changes show up as a diff to the
 // golden file; run `go test ./internal/mcpserver -update` to accept them.
 func TestAgentText(t *testing.T) {
 	var b strings.Builder
@@ -27,9 +28,9 @@ func TestAgentText(t *testing.T) {
 
 	b.WriteString("# Instructions (url http://127.0.0.1:8787, namespace default)\n\n")
 	b.WriteString(w.Instructions("http://127.0.0.1:8787", "default"))
-	b.WriteString("\n\n# Tools\n")
+	b.WriteString("\n\n# Tools (with --feedback)\n")
 
-	svc := newService(t)
+	svc := newServiceWith(t, core.Options{Feedback: true})
 	alice := connect(t, svc, mcpserver.Options{})
 	for tool, err := range alice.cs.Tools(t.Context(), nil) {
 		if err != nil {
@@ -71,6 +72,17 @@ func TestAgentText(t *testing.T) {
 			fmt.Fprintf(&b, "  %s (%v%s): %s\n", n, p.Type, req, p.Description)
 		}
 	}
+
+	b.WriteString("\n# Tools without --feedback\n\n")
+	off := connect(t, newService(t), mcpserver.Options{})
+	var names []string
+	for tool, err := range off.cs.Tools(t.Context(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, tool.Name)
+	}
+	b.WriteString(strings.Join(names, ", ") + "\n")
 
 	b.WriteString("\n# Phrases (sample fields)\n")
 	sample := map[string]any{
@@ -133,6 +145,11 @@ func TestAgentText(t *testing.T) {
 	step("alice", alice, "wait", with("agent", "alice"))
 	step("alice", alice, "status", map[string]any{"agent": "alice"})
 	step("alice", alice, "list", map[string]any{"status": "all"})
+	step("bob", bob, "read", with("agent", "bob"))
+	step("bob", bob, "feedback", with("agent", "bob", "body", "The standing line made it clear when to stop."))
+	step("bob", bob, "feedback", with("agent", "bob", "body", "Replacing: the wait timeout surprised me once."))
+	step("bob", bob, "read", with("agent", "bob"))
+	step("bob", bob, "feedback", with("agent", "zed", "body", "never joined"))
 
 	got := b.String()
 	path := filepath.Join("testdata", "agent-text.golden")

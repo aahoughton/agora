@@ -451,12 +451,18 @@ func TestSkillsInstall(t *testing.T) {
 // bootstrapped server admin's token.
 func tokenServer(t *testing.T) (string, string, *core.Service) {
 	t.Helper()
+	return tokenServerWith(t, core.Options{})
+}
+
+func tokenServerWith(t *testing.T, opts core.Options) (string, string, *core.Service) {
+	t.Helper()
+	opts.Policy = core.RolePolicy()
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
+	svc := core.New(db, opts)
 	tok, err := svc.Bootstrap(t.Context(), "root")
 	if err != nil {
 		t.Fatal(err)
@@ -467,6 +473,60 @@ func tokenServer(t *testing.T) (string, string, *core.Service) {
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL, tok.Secret, svc
+}
+
+func TestAdminFeedback(t *testing.T) {
+	url, token, svc := tokenServerWith(t, core.Options{Feedback: true})
+	ctx := t.Context()
+	admin := func(args ...string) cliResult {
+		return runCLIInput(ctx, url, "", map[string]string{"AGORA_TOKEN": token}, append([]string{"admin", "feedback"}, args...)...)
+	}
+	if r := admin("list"); r.code != exitOK || r.stdout != "No feedback.\n" {
+		t.Fatalf("empty list = %+v", r)
+	}
+	root, err := svc.AuthenticateToken(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"c1", "c2"} {
+		if _, err := svc.Start(ctx, root, "default", core.StartParams{Name: c, Agent: "a", Join: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	long := "line one\n" + strings.Repeat("word ", 30) + "\x1b[31m"
+	for _, c := range []string{"c1", "c2"} {
+		if _, err := svc.SubmitFeedback(ctx, root, "default", c, core.FeedbackParams{Agent: "a", Body: c + ": " + long}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r := admin("list", "--in", "default/c1")
+	if r.code != exitOK || !strings.Contains(r.stdout, "default/c1") || strings.Contains(r.stdout, "default/c2") ||
+		!strings.Contains(r.stdout, "c1: line one word") || !strings.Contains(r.stdout, "...") || strings.Contains(r.stdout, "\x1b") {
+		t.Fatalf("list --in = %+v", r)
+	}
+	if r := admin("list", "--limit", "1"); r.code != exitOK || !strings.Contains(r.stdout, "More notes are older") {
+		t.Fatalf("list --limit = %+v", r)
+	}
+	if r := admin("list", "--since", "1h"); r.code != exitOK || !strings.Contains(r.stdout, "default/c2") {
+		t.Fatalf("list --since = %+v", r)
+	}
+	if r := admin("list", "--in", "default/c1/x"); r.code != exitError || !strings.Contains(r.stderr, "--in") {
+		t.Fatalf("bad --in = %+v", r)
+	}
+	if r := admin("list", "--since", "soon"); r.code != exitError || !strings.Contains(r.stderr, "--since") {
+		t.Fatalf("bad --since = %+v", r)
+	}
+	r = admin("show", "1")
+	if r.code != exitOK || !strings.Contains(r.stdout, "feedback 1 from a (account root)") ||
+		!strings.Contains(r.stdout, "conversation: default/c1, read to #") ||
+		!strings.Contains(r.stdout, "viewer: "+url+"/n/default/c/c1") ||
+		!strings.Contains(r.stdout, "\n\nc1: line one\nword ") || strings.Contains(r.stdout, "\x1b") {
+		t.Fatalf("show = %+v", r)
+	}
+	if r := admin("show", "9"); r.code != exitError || !strings.Contains(r.stderr, "feedback_not_found") {
+		t.Fatalf("show missing = %+v", r)
+	}
 }
 
 func TestClientsSendTheToken(t *testing.T) {

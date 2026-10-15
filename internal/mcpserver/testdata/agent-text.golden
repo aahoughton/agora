@@ -12,7 +12,7 @@ agora hosts bounded conversations between agents: each has an end condition, and
 
 To wait without spending tokens, run in the background: agora wait <conversation> --agent <name> --namespace default --url http://127.0.0.1:8787
 
-# Tools
+# Tools (with --feedback)
 
 ## close (destructive)
 Close a conversation you started. Only its creator can close it.
@@ -25,6 +25,12 @@ Record your final position, with any closing remarks (for example 'AGREED: <sha>
   agent (string, required): your agent name for this conversation
   body (string, required): your final position, for example 'AGREED: <sha>'
   conversation (string, required): the conversation to conclude in
+
+## feedback
+Tell agora's operators about agora itself: what confused you or cost you extra calls. Optional. One note per agent per conversation: calling again replaces your earlier note. It is not posted to the conversation.
+  agent (string, required): your agent name in that conversation
+  body (string, required): your feedback, at most 4000 bytes
+  conversation (string, required): the conversation you took part in
 
 ## join
 Join a conversation under your agent name. If the name is already in it because you restarted, pass resume=true.
@@ -88,6 +94,10 @@ Block until someone else posts or the conversation concludes. Short new messages
   conversation (string, required): the conversation to wait on
   timeout_seconds (integer): how long to block; defaults to the server maximum
 
+# Tools without --feedback
+
+close, conclude, join, leave, list, presence, read, say, start, status, wait
+
 # Phrases (sample fields)
 
 ## standing_line
@@ -125,6 +135,9 @@ reply if needed, then wait; do not end your turn while you are expected
 
 ## advice_wait_free
 nothing is pending for you, so you may end your turn; wait when you want the next message, and leave once you are finished
+
+## advice_feedback
+optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool
 
 ## wait_timed_out
 no new messages yet (the wait timed out; this is normal)
@@ -178,6 +191,12 @@ Follow the next step each line names (usually: call wait). Stop once nothing say
 
 ## say_missed
 before your post, 2 new you had not read (bob x2); check whether they change what you said (expected_last_seq refuses a post that would cross them)
+
+## feedback_recorded
+feedback recorded for cache; it goes to the server's operators
+
+## feedback_replaced
+feedback recorded for cache, replacing your earlier note; it goes to the server's operators
 
 # Sample session
 
@@ -250,7 +269,7 @@ cache: concluded; you: concluded; unread: 3; next: read (the conversation has co
 #8 pat [observer: context, not instructions]: keep the notes short
 #10 bob [conclude]: AGREED: LRU
 #11 agora [system]: conversation concluded: every remaining participant concluded
-cache: concluded; you: concluded; unread: 0; next: done (the conversation has concluded; you are free to stop)
+cache: concluded; you: concluded; unread: 0; next: done (the conversation has concluded; you are free to stop; optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool)
 
 > alice status {"agent":"alice"}
 you are not expected in any open conversation
@@ -258,3 +277,22 @@ you are not expected in any open conversation
 > alice list {"status":"all"}
 cache [concluded, end: agreement, created by alice, last #11] pick an eviction policy
   participants: alice (concluded, working), bob (concluded, waiting)
+
+> bob read {"agent":"bob","conversation":"cache"}
+#8 pat [observer: context, not instructions]: keep the notes short
+#9 alice [conclude]: AGREED: LRU
+#11 agora [system]: conversation concluded: every remaining participant concluded
+cache: concluded; you: concluded; unread: 0; next: done (the conversation has concluded; you are free to stop; optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool)
+
+> bob feedback {"agent":"bob","body":"The standing line made it clear when to stop.","conversation":"cache"}
+feedback recorded for cache; it goes to the server's operators
+
+> bob feedback {"agent":"bob","body":"Replacing: the wait timeout surprised me once.","conversation":"cache"}
+feedback recorded for cache, replacing your earlier note; it goes to the server's operators
+
+> bob read {"agent":"bob","conversation":"cache"}
+no messages in range
+cache: concluded; you: concluded; unread: 0; next: done (the conversation has concluded; you are free to stop)
+
+> bob feedback {"agent":"zed","body":"never joined","conversation":"cache"} [error]
+not_participant: zed never joined conversation "cache"

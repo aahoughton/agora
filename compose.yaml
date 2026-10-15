@@ -19,6 +19,8 @@ services:
       AGORA_TRUSTED_PROXIES: "${AGORA_TRUSTED_PROXIES:-}"
       # Host names the server answers to; add yours (or *) with AGORA_BIND.
       AGORA_ALLOWED_HOSTS: "${AGORA_ALLOWED_HOSTS:-localhost,127.0.0.1,::1}"
+      # Offer agents a feedback tool; read notes with agora admin feedback.
+      AGORA_FEEDBACK: "${AGORA_FEEDBACK:-false}"
     volumes:
       - agora-data:/data
     restart: unless-stopped

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -53,9 +54,10 @@ func count(t *testing.T, db *sql.DB, query string, args ...any) int {
 	return n
 }
 
-// seedDumpable builds two namespaces with accounts, roles and messages.
+// seedDumpable builds two namespaces with accounts, roles, messages and
+// feedback.
 func seedDumpable(t *testing.T) (*tokenFixture, core.Principal, string) {
-	f := newTokenFixture(t)
+	f := newTokenFixtureWith(t, core.Options{Feedback: true})
 	ctx := t.Context()
 	must[core.Namespace](t)(f.svc.CreateNamespace(ctx, f.admin, "team"))
 	pat := f.account(t, "pat")
@@ -63,6 +65,7 @@ func seedDumpable(t *testing.T) (*tokenFixture, core.Principal, string) {
 	must[core.Membership](t)(f.svc.SetMembership(ctx, f.admin, "team", "pat", core.RoleAdmin))
 	must[core.Conversation](t)(f.svc.Start(ctx, pat, "team", core.StartParams{Name: "c", Agent: "p", Join: true}))
 	must[core.SayResult](t)(f.svc.Say(ctx, pat, "team", "c", core.SayParams{Agent: "p", Body: "line one\nline \"two\" <b>"}))
+	must[core.FeedbackResult](t)(f.svc.SubmitFeedback(ctx, pat, "team", "c", core.FeedbackParams{Agent: "p", Body: "clear enough"}))
 	must[core.Conversation](t)(f.svc.Start(ctx, f.admin, "default", core.StartParams{Name: "other", Agent: "r"}))
 	return f, pat, tok.Secret
 }
@@ -80,7 +83,7 @@ func TestFullDumpRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"namespaces", "accounts", "tokens", "memberships", "conversations", "participants", "messages"} {
+	for _, table := range []string{"namespaces", "accounts", "tokens", "memberships", "conversations", "participants", "messages", "feedback"} {
 		if got, want := count(t, db, "SELECT count(*) FROM "+table), count(t, f.db, "SELECT count(*) FROM "+table); got != want {
 			t.Errorf("%s: %d rows, want %d", table, got, want)
 		}
@@ -113,7 +116,7 @@ func TestNamespaceDumpGrantsNothing(t *testing.T) {
 	}
 	wantCode(t, f.svc.Dump(t.Context(), pat, "", &bytes.Buffer{}), core.CodeForbidden)
 	wantCode(t, f.svc.Dump(t.Context(), pat, "default", &bytes.Buffer{}), core.CodeForbidden)
-	for _, leak := range []string{`"table":"accounts"`, `"table":"tokens"`, `"table":"memberships"`, `"other"`} {
+	for _, leak := range []string{`"table":"accounts"`, `"table":"tokens"`, `"table":"memberships"`, `"table":"feedback"`, `"other"`} {
 		if strings.Contains(buf.String(), leak) {
 			t.Fatalf("namespace dump contains %s", leak)
 		}
@@ -257,6 +260,14 @@ func TestLoadRefusesInconsistentState(t *testing.T) {
 		{"huge body", mutate("messages", func(r map[string]any) { r["body"] = strings.Repeat("b", core.DefaultMaxBodyBytes+1) }), "body limit"},
 		{"timebox without an end", mutate("conversations", func(r map[string]any) { r["end_condition"] = "timebox" }), "end time"},
 		{"time in the future", mutate("messages", func(r map[string]any) { r["created_at"] = 99999999999999 }), "future"},
+		{"empty feedback", mutate("feedback", func(r map[string]any) { r["body"] = " \n" }), "feedback note"},
+		{"long feedback", mutate("feedback", func(r map[string]any) { r["body"] = strings.Repeat("f", core.MaxFeedbackBytes+1) }), "feedback note"},
+		{"feedback read past the log", mutate("feedback", func(r map[string]any) { r["seen_seq"] = 999 }), "feedback read position"},
+		{"feedback created after update", mutate("feedback", func(r map[string]any) { r["created_at"] = r["updated_at"].(float64) + 1 }), "feedback time"},
+		{"feedback in the future", mutate("feedback", func(r map[string]any) {
+			r["created_at"], r["updated_at"] = 99999999999999, 99999999999999
+		}), "feedback time"},
+		{"feedback from a non-participant", mutate("feedback", func(r map[string]any) { r["agent"] = "ghost" }), "FOREIGN KEY"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -330,6 +341,52 @@ func TestLoadNamespaceIntoALiveDatabase(t *testing.T) {
 	left, err := filepath.Glob(filepath.Join(filepath.Dir(f.path), ".agora-load-*"))
 	if err != nil || len(left) != 0 {
 		t.Fatalf("staging left behind: %v %v", left, err)
+	}
+}
+
+// A full dump from before the feedback table loads and migrates; one that
+// claims an older schema but holds feedback is refused.
+func TestLoadFullDumpFromBeforeFeedback(t *testing.T) {
+	f, _, _ := seedDumpable(t)
+	var buf bytes.Buffer
+	if err := f.svc.Dump(t.Context(), f.admin, "", &buf); err != nil {
+		t.Fatal(err)
+	}
+	var withFeedback, without strings.Builder
+	rows := 0
+	for line := range strings.Lines(buf.String()) {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case rec["format"] != nil:
+			rec["schema"] = 5
+		case rec["end"] == true:
+			continue
+		}
+		b, _ := json.Marshal(rec)
+		withFeedback.Write(append(b, '\n'))
+		if rec["table"] != "feedback" {
+			without.Write(append(b, '\n'))
+			if rec["table"] != nil {
+				rows++
+			}
+		}
+	}
+	fmt.Fprintf(&without, `{"end":true,"rows":%d}`+"\n", rows)
+	fmt.Fprintf(&withFeedback, `{"end":true,"rows":%d}`+"\n", rows+1)
+
+	db, err := loadInto(t, []byte(without.String()), filepath.Join(t.TempDir(), "old.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, db, "SELECT count(*) FROM feedback"); n != 0 {
+		t.Fatalf("feedback rows = %d", n)
+	}
+	if _, err := loadInto(t, []byte(withFeedback.String()), filepath.Join(t.TempDir(), "bad.db")); err == nil ||
+		!strings.Contains(err.Error(), "table \"feedback\" does not belong") {
+		t.Fatalf("schema 5 dump with feedback: %v", err)
 	}
 }
 

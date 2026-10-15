@@ -118,6 +118,8 @@ var routes = []route{
 	{"PUT", "/v1/namespaces/{ns}/members/{account}", (*handler).setMember},
 	{"DELETE", "/v1/namespaces/{ns}/members/{account}", (*handler).removeMember},
 	{"GET", "/v1/server", (*handler).serverStatus},
+	{"GET", "/v1/feedback", (*handler).listFeedback},
+	{"GET", "/v1/feedback/{id}", (*handler).getFeedback},
 	{"GET", "/v1/backup", (*handler).backup},
 	{"GET", "/v1/dump", (*handler).dump},
 	{"POST", "/v1/load", (*handler).load},
@@ -186,7 +188,7 @@ func StatusFor(code core.Code) int {
 		return http.StatusUnauthorized
 	case core.CodeForbidden, core.CodeNotCoordinator:
 		return http.StatusForbidden
-	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, core.CodeAccountNotFound, core.CodeTokenNotFound, "not_found":
+	case core.CodeNamespaceNotFound, core.CodeConversationNotFound, core.CodeAccountNotFound, core.CodeTokenNotFound, core.CodeFeedbackNotFound, "not_found":
 		return http.StatusNotFound
 	case core.CodeNamespaceExists, core.CodeConversationExists, core.CodeConversationConcluded,
 		core.CodeNotParticipant, core.CodeNameActive, core.CodeStaleContext, core.CodeAccountExists, core.CodeLastAdmin,
