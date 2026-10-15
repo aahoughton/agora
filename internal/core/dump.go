@@ -22,8 +22,9 @@ import (
 //
 // A namespace dump is portable and grants nothing: it holds one namespace's
 // conversations, participants and messages, with every account reference
-// cleared, and no accounts, tokens or memberships. A full dump holds every
-// table except browser sessions, with IDs, roles and token hashes.
+// cleared, and no accounts, tokens, memberships or feedback. A full dump
+// holds every table except browser sessions, with IDs, roles and token
+// hashes.
 
 // DumpFormat and DumpVersion identify the dump format.
 const (
@@ -58,7 +59,7 @@ type blob struct {
 }
 
 // dumpTables lists the tables a dump may hold, in load order.
-var dumpTables = []string{"namespaces", "accounts", "tokens", "memberships", "conversations", "participants", "messages"}
+var dumpTables = []string{"namespaces", "accounts", "tokens", "memberships", "conversations", "participants", "messages", "feedback"}
 
 // accountColumnsByTable are the account references a namespace dump clears.
 var accountColumnsByTable = map[string][]string{
@@ -235,8 +236,9 @@ func LoadDump(ctx context.Context, db *sql.DB, h DumpHeader, r *bufio.Reader, no
 			ended = true
 			continue
 		}
+		// A table the dump's schema predates has no columns.
 		cols, ok := columns[dr.Table]
-		if !ok || (h.Namespace != "" && (dr.Table == "accounts" || dr.Table == "tokens" || dr.Table == "memberships")) {
+		if !ok || len(cols) == 0 || (h.Namespace != "" && (dr.Table == "accounts" || dr.Table == "tokens" || dr.Table == "memberships" || dr.Table == "feedback")) {
 			return 0, fmt.Errorf("load: record %d: table %q does not belong in this dump", line, dr.Table)
 		}
 		names := make([]string, 0, len(dr.Row))
@@ -262,7 +264,9 @@ func LoadDump(ctx context.Context, db *sql.DB, h DumpHeader, r *bufio.Reader, no
 	if !ended {
 		return 0, errors.New("load: the dump is cut off (no end record)")
 	}
-	if err := checkLoaded(ctx, tx, now); err != nil {
+	// A dump from before schema 6 is loaded into a database without the
+	// feedback table.
+	if err := checkLoaded(ctx, tx, now, len(columns["feedback"]) > 0); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO namespaces (name, created_at)
@@ -384,7 +388,7 @@ const loadClockSkew = 24 * time.Hour
 // known values, names (including message authors and creators) are valid,
 // text stays within the limits live writes enforce, a timebox has an end
 // time, and no time lies in the future.
-func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time) error {
+func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time, feedback bool) error {
 	// Times may not lie in the future beyond clock skew between servers.
 	latest := now.Add(loadClockSkew).UnixMilli()
 	checks := []struct {
@@ -423,6 +427,20 @@ func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time) error {
 			OR EXISTS (SELECT 1 FROM participants p WHERE p.conversation_id = conversations.id AND (p.joined_at > ?1 OR p.last_seen_at > ?1))`,
 			[]any{latest},
 		},
+	}
+	if feedback {
+		checks = append(checks, []struct {
+			what, query string
+			args        []any
+		}{
+			{"a feedback note that is empty or over the limit in conversation", `SELECT c.name FROM feedback f
+			JOIN conversations c ON c.id = f.conversation_id
+			WHERE trim(f.body, ' ' || char(9, 10, 13)) = '' OR length(CAST(f.body AS BLOB)) > ?`, []any{MaxFeedbackBytes}},
+			{"a feedback read position outside the log of conversation", `SELECT c.name FROM feedback f
+			JOIN conversations c ON c.id = f.conversation_id WHERE f.seen_seq < 0 OR f.seen_seq > c.last_seq`, nil},
+			{"a feedback time in the future or out of order in conversation", `SELECT c.name FROM feedback f
+			JOIN conversations c ON c.id = f.conversation_id WHERE f.updated_at > ? OR f.created_at > f.updated_at`, []any{latest}},
+		}...)
 	}
 	for _, c := range checks {
 		var name string

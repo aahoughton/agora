@@ -105,11 +105,34 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 		st.Next, advice = NextWait, wording.AdviceWaitFree
 	}
 	w := s.opts.Wording
+	adviceText := w.Phrase(advice, nil)
+	invite, err := s.inviteFeedback(ctx, q, c, pt, advice)
+	if err != nil {
+		return Standing{}, err
+	}
+	if invite {
+		adviceText += "; " + w.Phrase(wording.AdviceFeedback, nil)
+	}
 	st.Line = w.Phrase(wording.StandingLine, map[string]any{
 		"Conversation": c.Name, "Status": c.Status, "You": st.You, "Expected": st.Expected,
-		"Unread": st.Unread, "Replies": st.RepliesToYou, "Next": st.Next, "Advice": w.Phrase(advice, nil),
+		"Unread": st.Unread, "Replies": st.RepliesToYou, "Next": st.Next, "Advice": adviceText,
 	})
 	return st, nil
+}
+
+// inviteFeedback reports whether the standing line should point the agent
+// at the feedback tool: feedback is on, the agent joined, it is free to
+// stop (the conversation concluded, or it left or dropped out), and it has
+// not left a note here yet.
+func (s *Service) inviteFeedback(ctx context.Context, q querier, c *conv, pt *Participant, advice string) (bool, error) {
+	if !s.opts.Feedback || pt == nil {
+		return false, nil
+	}
+	if advice != wording.AdviceDone && advice != wording.AdviceRejoin {
+		return false, nil
+	}
+	has, err := hasFeedback(ctx, q, c.id, pt.Agent)
+	return !has, err
 }
 
 // creatorCanClose reports whether agent started this open coordinator

@@ -26,6 +26,11 @@ import (
 
 func newService(t *testing.T) *core.Service {
 	t.Helper()
+	return newServiceWith(t, core.Options{})
+}
+
+func newServiceWith(t *testing.T, opts core.Options) *core.Service {
+	t.Helper()
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +40,7 @@ func newService(t *testing.T) *core.Service {
 			t.Error(err)
 		}
 	})
-	return core.New(db, core.Options{})
+	return core.New(db, opts)
 }
 
 type session struct {

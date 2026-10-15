@@ -40,6 +40,7 @@ const (
 	AdviceWaitConcluded       = "advice_wait_concluded"
 	AdviceWaitExpected        = "advice_wait_expected"
 	AdviceWaitFree            = "advice_wait_free"
+	AdviceFeedback            = "advice_feedback"
 
 	WaitTimedOut     = "wait_timed_out"
 	WaitNothingNew   = "wait_nothing_new"
@@ -61,15 +62,19 @@ const (
 	StopHook = "stop_hook"
 
 	SayMissed = "say_missed"
+
+	FeedbackRecorded = "feedback_recorded"
+	FeedbackReplaced = "feedback_replaced"
 )
 
 // PhraseKeys lists every phrase key.
 var PhraseKeys = []string{
 	StandingLine, AdviceReadAfterConclusion, AdviceDone, AdviceClose, AdviceCoordinatorAway, AdviceJoin,
 	AdviceRejoin, AdviceRead, AdviceReadBacklog, AdviceWaitConcluded, AdviceWaitExpected, AdviceWaitFree,
+	AdviceFeedback,
 	WaitTimedOut, WaitNothingNew, ReadEmpty, ReadMore, ObserverTag, ObserverYoursTag, AccountLine, StatusNone, ListNone, ListMore,
 	WaitTimeoutRange, BridgeUnreachable, BridgeLostRead, BridgeLostWrite, BridgeLostOther,
-	StopHook, SayMissed,
+	StopHook, SayMissed, FeedbackRecorded, FeedbackReplaced,
 }
 
 // Tool is one MCP tool's wording.

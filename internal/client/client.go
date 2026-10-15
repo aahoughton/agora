@@ -263,6 +263,34 @@ func (c *Client) ServerStatus(ctx context.Context) (ServerStatus, error) {
 	return out, err
 }
 
+// ListFeedback returns agents' feedback notes, most recently written
+// first. Server admins only.
+func (c *Client) ListFeedback(ctx context.Context, f core.FeedbackFilter) (core.FeedbackPage, error) {
+	q := url.Values{}
+	if f.Namespace != "" {
+		q.Set("namespace", f.Namespace)
+	}
+	if f.Conversation != "" {
+		q.Set("conversation", f.Conversation)
+	}
+	if f.Since != nil {
+		q.Set("since", f.Since.UTC().Format(time.RFC3339))
+	}
+	if f.Limit != 0 {
+		q.Set("limit", strconv.Itoa(f.Limit))
+	}
+	var out core.FeedbackPage
+	err := c.do(ctx, http.MethodGet, "/v1/feedback", q, nil, &out)
+	return out, err
+}
+
+// GetFeedback returns one feedback note. Server admins only.
+func (c *Client) GetFeedback(ctx context.Context, id int64) (core.Feedback, error) {
+	var out core.Feedback
+	err := c.do(ctx, http.MethodGet, "/v1/feedback/"+strconv.FormatInt(id, 10), nil, nil, &out)
+	return out, err
+}
+
 // ListNamespaces returns the namespaces the caller can read.
 func (c *Client) ListNamespaces(ctx context.Context) ([]core.Namespace, error) {
 	var out struct {

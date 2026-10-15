@@ -506,7 +506,7 @@
 {
   "conversation": "design",
   "expected": false,
-  "line": "design: open; you: left; unread: 0; next: join (you left; rejoin to take part)",
+  "line": "design: open; you: left; unread: 0; next: join (you left; rejoin to take part; optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool)",
   "namespace": "default",
   "next": "join",
   "replies_to_you": 0,
@@ -632,6 +632,53 @@
   "now": "2030-01-02T03:04:05Z",
   "started_at": "2030-01-02T03:04:05Z",
   "version": "test"
+}
+
+## GET /v1/feedback -> Forbidden
+{
+  "error": {
+    "code": "forbidden",
+    "message": "only a server admin can do that"
+  }
+}
+
+## GET /v1/feedback?namespace=default&conversation=design&since=2030-01-01T00:00:00Z&limit=10 -> OK
+{
+  "feedback": [
+    {
+      "account": "pat",
+      "agent": "bob",
+      "body": "clear",
+      "conversation": "design",
+      "created_at": "2030-01-02T03:04:05Z",
+      "id": 1,
+      "namespace": "default",
+      "seen_seq": 6,
+      "updated_at": "2030-01-02T03:04:05Z"
+    }
+  ],
+  "more": false
+}
+
+## GET /v1/feedback/1 -> OK
+{
+  "account": "pat",
+  "agent": "bob",
+  "body": "clear",
+  "conversation": "design",
+  "created_at": "2030-01-02T03:04:05Z",
+  "id": 1,
+  "namespace": "default",
+  "seen_seq": 6,
+  "updated_at": "2030-01-02T03:04:05Z"
+}
+
+## GET /v1/feedback/2 -> Not Found
+{
+  "error": {
+    "code": "feedback_not_found",
+    "message": "no such feedback"
+  }
 }
 
 ## POST /v1/accounts/pat/tokens/revoke -> OK

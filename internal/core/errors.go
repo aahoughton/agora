@@ -40,6 +40,7 @@ const (
 	CodeAccountNotFound       Code = "account_not_found"
 	CodeAccountExists         Code = "account_exists"
 	CodeTokenNotFound         Code = "token_not_found"
+	CodeFeedbackNotFound      Code = "feedback_not_found"
 	CodeLastAdmin             Code = "last_admin"
 	CodeRateLimited           Code = "rate_limited"
 	// CodeBusy is a write that could not get the database (held by another

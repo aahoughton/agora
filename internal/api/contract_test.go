@@ -37,7 +37,7 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	clock := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
-	svc := core.New(db, core.Options{Policy: core.RolePolicy(), Now: func() time.Time { return clock }})
+	svc := core.New(db, core.Options{Policy: core.RolePolicy(), Now: func() time.Time { return clock }, Feedback: true})
 	root, err := svc.Bootstrap(t.Context(), "root")
 	if err != nil {
 		t.Fatal(err)
@@ -144,6 +144,20 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call("GET", "/v1/server", nil)
 	token = root.Secret
 	call("GET", "/v1/server", nil)
+	// Feedback is submitted over MCP; the API only reads it.
+	patP, err := svc.AuthenticateToken(t.Context(), issued["secret"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SubmitFeedback(t.Context(), patP, "default", "design", core.FeedbackParams{Agent: "bob", Body: "clear"}); err != nil {
+		t.Fatal(err)
+	}
+	token = issued["secret"].(string)
+	call("GET", "/v1/feedback", nil)
+	token = root.Secret
+	call("GET", "/v1/feedback?namespace=default&conversation=design&since=2030-01-01T00:00:00Z&limit=10", nil)
+	call("GET", "/v1/feedback/1", nil)
+	call("GET", "/v1/feedback/2", nil)
 	call("POST", "/v1/accounts/pat/tokens/revoke", map[string]any{})
 	call("DELETE", "/v1/namespaces/default/members/pat", nil)
 	call("POST", c+"/messages", map[string]any{"agent": "alice", "body": "late"})

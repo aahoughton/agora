@@ -31,6 +31,7 @@ const (
 	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
 
 	EnvPublicURL = "AGORA_PUBLIC_URL"
+	EnvFeedback  = "AGORA_FEEDBACK"
 
 	EnvWriteLimit       = "AGORA_WRITE_LIMIT"
 	EnvAuthFailureLimit = "AGORA_AUTH_FAILURE_LIMIT"
@@ -100,6 +101,9 @@ type Serve struct {
 	// The MCP instructions quote it, and an https URL marks the viewer's
 	// session cookie Secure.
 	PublicURL string
+	// Feedback offers agents the MCP feedback tool, for notes on agora
+	// itself that only server admins read.
+	Feedback bool
 	// LogLevel is the least severe level logged. At info the server logs
 	// each MCP tool call; at debug, each HTTP request too.
 	LogLevel slog.Level
@@ -127,6 +131,7 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	fs.StringVar(&cfg.DB, "db", "", "SQLite database path (env "+EnvDB+")")
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
+	feedback := fs.Bool("feedback", false, "offer agents a feedback tool for notes on agora itself, read with agora admin feedback (env "+EnvFeedback+"=true)")
 	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
@@ -158,14 +163,23 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	cfg.Addr = firstNonEmpty(cfg.Addr, getenv(EnvAddr), DefaultAddr)
 	cfg.ThemeDir = firstNonEmpty(cfg.ThemeDir, getenv(EnvThemeDir))
 
-	cfg.Web = *web
-	if !flagSet(fs, "web") {
-		if s := getenv(EnvWeb); s != "" {
-			w, err := strconv.ParseBool(s)
-			if err != nil {
-				return Serve{}, fmt.Errorf("serve: invalid %s value %q: want true or false", EnvWeb, s)
+	for _, b := range []struct {
+		flag, env string
+		val       bool
+		dst       *bool
+	}{
+		{"web", EnvWeb, *web, &cfg.Web},
+		{"feedback", EnvFeedback, *feedback, &cfg.Feedback},
+	} {
+		*b.dst = b.val
+		if !flagSet(fs, b.flag) {
+			if s := getenv(b.env); s != "" {
+				v, err := strconv.ParseBool(s)
+				if err != nil {
+					return Serve{}, fmt.Errorf("serve: invalid %s value %q: want true or false", b.env, s)
+				}
+				*b.dst = v
 			}
-			cfg.Web = w
 		}
 	}
 
