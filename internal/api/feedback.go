@@ -20,15 +20,15 @@ func (h *handler) listFeedback(w http.ResponseWriter, r *http.Request, p core.Pr
 		}
 		f.Since = &t
 	}
-	limit, err := queryInt(r, "limit")
-	if err != nil {
-		return err
-	}
-	if limit != nil {
-		if *limit < 1 || *limit > core.MaxFeedbackLimit {
+	if s := q.Get("limit"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return invalid("query parameter limit must be an integer")
+		}
+		if n < 1 || n > core.MaxFeedbackLimit {
 			return invalid("limit must be between 1 and %d", core.MaxFeedbackLimit)
 		}
-		f.Limit = int(*limit)
+		f.Limit = n
 	}
 	page, err := h.svc.ListFeedback(r.Context(), p, f)
 	if err != nil {
