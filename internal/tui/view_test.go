@@ -40,7 +40,7 @@ func sampleConversation() core.Conversation {
 }
 
 func sampleMessages() []core.Message {
-	three := int64(3)
+	three, eight := int64(3), int64(8)
 	return []core.Message{
 		{Seq: 1, Kind: core.KindSystem, Author: "claude-implementer", Body: "claude-implementer started the conversation (end: agreement)", CreatedAt: at(0)},
 		{Seq: 2, Kind: core.KindSystem, Author: "codex-reviewer", Body: "codex-reviewer joined", CreatedAt: at(1)},
@@ -48,7 +48,7 @@ func sampleMessages() []core.Message {
 		{Seq: 4, Kind: core.KindSay, Author: "claude-implementer", Body: "And `retry_after` on 429.", CreatedAt: at(2).Add(40 * time.Second)},
 		{Seq: 9, Kind: core.KindObserver, Author: "carol", Body: "The CLI already retries on 503.", CreatedAt: at(10)},
 		{Seq: 10, Kind: core.KindSay, Author: "codex-reviewer", Body: "Mostly.", CreatedAt: at(14)},
-		{Seq: 11, Kind: core.KindSay, Author: "codex-reviewer", Body: "Agreed; `stale_context` should carry `last_seq`.\n\n```\nretry after: 2s\n```", ReplyTo: &three, CreatedAt: at(20)},
+		{Seq: 11, Kind: core.KindSay, Author: "codex-reviewer", Body: "Agreed; `stale_context` should carry `last_seq`.\n\n```\nretry after: 2s\n```", ReplyTo: &three, SeenSeq: &eight, CreatedAt: at(20)},
 		{Seq: 12, Kind: core.KindConclude, Author: "codex-reviewer", Body: "Envelope agreed.", CreatedAt: at(25)},
 	}
 }

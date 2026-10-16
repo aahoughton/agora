@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template/parse"
@@ -511,8 +512,11 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal, account str
 		people := peopleOf(c)
 		var prev *core.Message
 		for _, m := range res.Messages {
-			data.Messages = append(data.Messages, Message{m, people, prev})
+			data.Messages = append(data.Messages, Message{Message: m, People: people, Prev: prev})
 			prev = &m
+		}
+		if _, err := v.markUnseen(r.Context(), p, ns, name, nil, data.Messages); err != nil {
+			return data, err
 		}
 	}
 	c = displayable(c)
@@ -613,7 +617,9 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The message at after, so the first one sent knows the one before it.
+	// known holds the latest messages sent, for marking unseen ones.
 	var prev *core.Message
+	var known []core.Message
 	if after > 0 {
 		from := after - 1
 		res, err := v.svc.Read(r.Context(), p, ns, name, core.ReadParams{After: &from, Limit: 1})
@@ -665,11 +671,19 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		people := peopleOf(c)
-		for _, m := range batch.Messages {
-			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), Message{m, people, prev}); err != nil {
+		msgs := make([]Message, len(batch.Messages))
+		for i, m := range batch.Messages {
+			msgs[i] = Message{Message: m, People: people, Prev: prev}
+			prev = &batch.Messages[i]
+		}
+		if known, err = v.markUnseen(r.Context(), p, ns, name, known, msgs); err != nil {
+			return
+		}
+		for _, m := range msgs {
+			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), m); err != nil {
 				return
 			}
-			after, prev = m.Seq, &m
+			after = m.Seq
 		}
 		if fresh {
 			if v.snapshot(w, c) != nil {
@@ -717,6 +731,43 @@ func displayable(c core.Conversation) core.Conversation {
 	}
 	c.Participants = ps
 	return c
+}
+
+// keepKnown bounds the messages an event stream keeps for marking unseen
+// ones; markUnseen reads older ones from the store when it needs them.
+const keepKnown = 300
+
+// markUnseen sets Unseen on msgs, which follow known in the log without a
+// gap (known may be empty). Messages it needs from before both are read
+// from the store, at most core.MaxReadLimit of them; any older ones are not
+// reported. It returns the latest messages, up to keepKnown, to pass as
+// known with the next batch.
+func (v *viewer) markUnseen(ctx context.Context, p core.Principal, ns, name string, known []core.Message, msgs []Message) ([]core.Message, error) {
+	if len(msgs) == 0 {
+		return known, nil
+	}
+	all := slices.Clone(known)
+	for _, m := range msgs {
+		all = append(all, m.Message)
+	}
+	first := all[0].Seq
+	from := first - 1
+	for _, m := range msgs {
+		if m.SeenSeq != nil && *m.SeenSeq < from {
+			from = *m.SeenSeq
+		}
+	}
+	if from = max(from, first-1-core.MaxReadLimit); from < first-1 {
+		res, err := v.svc.Read(ctx, p, ns, name, core.ReadParams{After: &from, Limit: int(first - 1 - from)})
+		if err != nil {
+			return known, err
+		}
+		all = append(res.Messages, all...)
+	}
+	for i := range msgs {
+		msgs[i].Unseen = core.Unseen(msgs[i].Message, all)
+	}
+	return all[max(len(all)-keepKnown, 0):], nil
 }
 
 // event writes one server-sent event whose data is the named template

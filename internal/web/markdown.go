@@ -19,6 +19,9 @@ type Message struct {
 	// Prev is the message before this one, or nil for the first message
 	// on a page and when the one before it is not at hand.
 	Prev *core.Message
+	// Unseen holds the seqs of messages from others that the author had
+	// not read when posting this one (see core.Unseen).
+	Unseen []int64
 }
 
 // Continues reports whether m continues a run of messages from one

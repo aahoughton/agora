@@ -28,7 +28,7 @@ var textKeys = []string{
 	"participants_title", "participants_empty", "participant_state", "participant_stale",
 	"participant_yours", "participants_yours_note",
 	"observers_title", "observer_summary",
-	"kind_conclude", "kind_observer", "reply_to", "gap",
+	"kind_conclude", "kind_observer", "reply_to", "gap", "missed",
 	"new_below", "following", "loading",
 	"composer_placeholder", "composer_as", "composer_name_prompt", "composer_name_invalid",
 	"composer_closed", "composer_sending",
@@ -41,7 +41,7 @@ var textKeys = []string{
 
 // Palette keys. LoadSkin requires exactly these sections in tui/palette.md.
 var paletteKeys = func() []string {
-	keys := []string{"fg", "muted", "faint", "line", "accent", "open", "done", "observer"}
+	keys := []string{"fg", "muted", "faint", "line", "accent", "open", "done", "observer", "missed"}
 	for i := range tone.Count {
 		keys = append(keys, fmt.Sprintf("tone_%d", i))
 	}
@@ -136,9 +136,9 @@ func (s *Skin) loadGlyphs() (glyphs, error) {
 // styles are the lipgloss styles for one terminal background, and the
 // glyphs drawn with them.
 type styles struct {
-	g                                                    glyphs
-	fg, muted, faint, line, accent, open, done, observer lipgloss.Style
-	tones                                                [tone.Count]lipgloss.Style
+	g                                                            glyphs
+	fg, muted, faint, line, accent, open, done, observer, missed lipgloss.Style
+	tones                                                        [tone.Count]lipgloss.Style
 }
 
 func (s *Skin) styles(dark bool) styles {
@@ -150,7 +150,7 @@ func (s *Skin) styles(dark bool) styles {
 	st := styles{
 		g:  s.g,
 		fg: fg("fg"), muted: fg("muted"), faint: fg("faint"), line: fg("line"),
-		accent: fg("accent"), open: fg("open"), done: fg("done"), observer: fg("observer"),
+		accent: fg("accent"), open: fg("open"), done: fg("done"), observer: fg("observer"), missed: fg("missed"),
 	}
 	for i := range st.tones {
 		st.tones[i] = fg(fmt.Sprintf("tone_%d", i))

@@ -19,6 +19,7 @@
   --observer: #a3600b;
   --observer-bg: #fff7e6;
   --observer-line: #f2c46d;
+  --missed: #b4235b;
   --conclude-bg: #effaf4;
   --code-bg: #f3f1ee;
   --shadow: 0 1px 2px rgb(35 32 28 / 0.06), 0 1px 1px rgb(35 32 28 / 0.04);
@@ -54,6 +55,7 @@
     --observer: #f5b54a;
     --observer-bg: #2b2210;
     --observer-line: #6b4f17;
+    --missed: #f472b6;
     --conclude-bg: #13261b;
     --code-bg: #262320;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -170,6 +172,9 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 .card .author { font-weight: 650; color: var(--tone, var(--fg)); }
 .card .tag { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .card .reply { font-size: 0.8rem; }
+/* A message posted before its author had read the ones it lists. */
+.card .unseen { font-size: 0.78rem; color: var(--missed); }
+.card .unseen a { color: inherit; text-decoration: underline dotted; }
 .card .head time { margin-left: auto; color: var(--faint); font-size: 0.8rem; }
 .message.observer .card { --tone: var(--observer); --tone-bg: var(--observer-bg); background: var(--observer-bg); border-color: var(--observer-line); border-left-color: var(--observer); }
 .message.observer .tag { color: var(--observer); }

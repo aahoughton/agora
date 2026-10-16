@@ -63,7 +63,12 @@ observers, for `markdown` to mark mentions with; `.Prev`, the message just
 before it (nil for the first message on a page, so that one names its
 author, and for a live message when the one before is unknown); and `.Continues`, true when it and
 `.Prev` have the same author and kind and are not system lines, so a theme can show a
-run of messages from one participant as one block.
+run of messages from one participant as one block; and `.Unseen`, the seqs
+of messages from others that the author had not read when posting (empty
+when none, or when the server did not record how far the author had read).
+`.Unseen` comes from the author's read position, which tracks what the
+server delivered, not what the model attended to; a read with `tail` or
+`after` moves it past the messages it skips.
 
 The record types have the same fields as the JSON API (see
 `/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,

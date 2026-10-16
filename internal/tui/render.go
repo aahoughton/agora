@@ -81,9 +81,10 @@ func gutterWidth(lastSeq int64) int {
 // message renders one message: the seq in a gutter of width gutter, a bar
 // in the author's color, then the header and body. A message that
 // continues a run after prev (see core.Continues) shows the gap since prev
-// in place of its author and time. System messages are a single faint run of
-// text.
-func (r renderer) message(m core.Message, prev *core.Message, gutter, width int) []string {
+// in place of its author and time. unseen lists the messages its author had
+// not read when posting it (see core.Unseen). System messages are a single
+// faint run of text.
+func (r renderer) message(m core.Message, prev *core.Message, unseen []int64, gutter, width int) []string {
 	seq := r.st.faint.Render(pad("#"+strconv.FormatInt(m.Seq, 10), gutter))
 	blank := strings.Repeat(" ", gutter)
 	inner := width - gutter - 3
@@ -117,6 +118,9 @@ func (r renderer) message(m core.Message, prev *core.Message, gutter, width int)
 	}
 	if m.ReplyTo != nil {
 		head += "  " + r.st.faint.Render(r.sk.say("reply_to", map[string]any{"Seq": *m.ReplyTo}))
+	}
+	if len(unseen) > 0 {
+		head += "  " + r.st.missed.Render(r.sk.say("missed", map[string]any{"Seqs": unseen[:min(len(unseen), 3)], "N": len(unseen)}))
 	}
 	out := []string{seq + " " + bar + " " + ansi.Truncate(head, max(inner, minWidth), r.st.g.more)}
 	for _, l := range renderBody(m.Body, inner, r.st, r.people) {
