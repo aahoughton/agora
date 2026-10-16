@@ -30,6 +30,9 @@ theme's two files in step. `tone_0` to `tone_7` color participants.
 ## observer
 #a3600b #f5b54a
 
+## missed
+#b4235b #f472b6
+
 ## tone_0
 #4f46e5 #8b8cf6
 

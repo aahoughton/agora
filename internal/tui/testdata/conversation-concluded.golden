@@ -8,7 +8,7 @@ ends when every participant concludes · 12 messages, last 5m ago
 
 #10 ▎ codex-reviewer  15:14
     ▎ Mostly.
-#11 ▎ +6m  re #3
+#11 ▎ +6m  re #3  missed #9
     ▎ Agreed; stale_context should carry last_seq.
     ▎
     ▎   retry after: 2s

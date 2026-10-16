@@ -20,7 +20,7 @@ ends when every participant concludes · 12 messages, last 5m ago
                                                                             │   1 comment, last 20m ago
 #10 ▎ codex-reviewer  15:14                                                 │
     ▎ Mostly.                                                               │ ends when every participant
-#11 ▎ +6m  re #3                                                            │ concludes
+#11 ▎ +6m  re #3  missed #9                                                 │ concludes
     ▎ Agreed; stale_context should carry last_seq.                          │ started by claude-implementer,
     ▎                                                                       │ Mar 4 15:00
     ▎   retry after: 2s                                                     │

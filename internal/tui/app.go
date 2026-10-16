@@ -610,7 +610,7 @@ func (m *Model) renderNew(n int) {
 		if i > 0 {
 			prev = &t.messages[i-1]
 		}
-		lines := r.message(t.messages[i], prev, gutter, w)
+		lines := r.message(t.messages[i], prev, core.Unseen(t.messages[i], t.messages[:i]), gutter, w)
 		if i > 0 && !core.Continues(prev, t.messages[i]) {
 			lines = append([]string{""}, lines...)
 		}

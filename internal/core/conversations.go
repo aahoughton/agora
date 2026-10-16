@@ -77,11 +77,17 @@ const SystemAuthor = "agora"
 // Message is one entry in a conversation's append-only log. System messages
 // about one agent (joined, left, ...) carry that agent as Author.
 type Message struct {
-	Seq       int64     `json:"seq"`
-	Kind      string    `json:"kind"`
-	Author    string    `json:"author"`
-	Body      string    `json:"body"`
-	ReplyTo   *int64    `json:"reply_to,omitempty"`
+	Seq     int64  `json:"seq"`
+	Kind    string `json:"kind"`
+	Author  string `json:"author"`
+	Body    string `json:"body"`
+	ReplyTo *int64 `json:"reply_to,omitempty"`
+	// SeenSeq is the author's read position (participants.read_seq) when
+	// posting a say or conclude message; nil for other kinds and older
+	// messages. Messages from others after it and before Seq went unseen
+	// (see Unseen). A read with Tail or After can move the read position
+	// past messages it did not return, and those then count as seen.
+	SeenSeq   *int64    `json:"seen_seq,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	// YourAccount is true when the caller's account posted the message.
 	YourAccount bool `json:"your_account"`
@@ -96,6 +102,26 @@ type Message struct {
 // followed by a conclusion. The viewers show a run as one block.
 func Continues(prev *Message, m Message) bool {
 	return prev != nil && m.Kind != KindSystem && prev.Kind == m.Kind && prev.Author == m.Author
+}
+
+// Unseen returns the seqs of the messages in others that m's author had not
+// read when posting m: those after m.SeenSeq and before m, other than the
+// author's own messages and system lines. Observer comments count whoever
+// wrote them. It is nil when m has no SeenSeq. others may hold any
+// messages of the conversation; those outside the range are ignored, and a
+// message missing from others is not reported.
+func Unseen(m Message, others []Message) []int64 {
+	if m.SeenSeq == nil {
+		return nil
+	}
+	var out []int64
+	for _, o := range others {
+		if o.Seq <= *m.SeenSeq || o.Seq >= m.Seq || o.Kind == KindSystem || (o.Author == m.Author && o.Kind != KindObserver) {
+			continue
+		}
+		out = append(out, o.Seq)
+	}
+	return out
 }
 
 // conv is a conversation loaded with its row ids.
@@ -218,14 +244,16 @@ func (s *Service) concludeConv(ctx context.Context, tx *wtx, c *conv, reason str
 // appendMsg assigns the next seq and appends to the log. The caller holds the
 // write transaction, so c.LastSeq is current.
 func (s *Service) appendMsg(ctx context.Context, tx *wtx, c *conv, kind, author, body string, replyTo *int64) (Message, error) {
+	return s.appendPost(ctx, tx, c, kind, author, body, replyTo, nil)
+}
+
+// appendPost is appendMsg for an agent's say or conclude message, recording
+// seen, the author's read position before posting (nil if unknown).
+func (s *Service) appendPost(ctx context.Context, tx *wtx, c *conv, kind, author, body string, replyTo, seen *int64) (Message, error) {
 	now := s.now()
-	m := Message{Seq: c.LastSeq + 1, Kind: kind, Author: author, Body: body, ReplyTo: replyTo, CreatedAt: fromMS(ms(now)), account: tx.account}
-	var rt sql.NullInt64
-	if replyTo != nil {
-		rt = sql.NullInt64{Int64: *replyTo, Valid: true}
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO messages (conversation_id, seq, kind, author, body, reply_to, created_at, account_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, c.id, m.Seq, kind, author, body, rt, ms(now), tx.account); err != nil {
+	m := Message{Seq: c.LastSeq + 1, Kind: kind, Author: author, Body: body, ReplyTo: replyTo, SeenSeq: seen, CreatedAt: fromMS(ms(now)), account: tx.account}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO messages (conversation_id, seq, kind, author, body, reply_to, seen_seq, created_at, account_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, c.id, m.Seq, kind, author, body, replyTo, seen, ms(now), tx.account); err != nil {
 		return Message{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE conversations SET last_seq = ?, last_at = ? WHERE id = ?`,

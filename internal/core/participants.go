@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 )
@@ -361,7 +362,7 @@ func (s *Service) Leave(ctx context.Context, p Principal, ns, name string, lp Le
 				}
 				pt.State = StateActive
 			}
-			if _, err := s.appendMsg(ctx, tx, c, KindSay, lp.Agent, lp.Body, nil); err != nil {
+			if _, err := s.appendPost(ctx, tx, c, KindSay, lp.Agent, lp.Body, nil, &pt.ReadSeq); err != nil {
 				return err
 			}
 		}
@@ -503,10 +504,11 @@ func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp
 		if err := openOrError(c); err != nil {
 			return err
 		}
-		if _, err := s.member(ctx, tx, c, cp.Agent); err != nil {
+		pt, err := s.member(ctx, tx, c, cp.Agent)
+		if err != nil {
 			return err
 		}
-		if _, err := s.appendMsg(ctx, tx, c, KindConclude, cp.Agent, cp.Body, nil); err != nil {
+		if _, err := s.appendPost(ctx, tx, c, KindConclude, cp.Agent, cp.Body, nil, &pt.ReadSeq); err != nil {
 			return err
 		}
 		if err := s.setState(ctx, tx, c, cp.Agent, StateConcluded, PresenceWaiting); err != nil {
@@ -561,7 +563,13 @@ func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp Cl
 			return errorf(CodeNotCoordinator, "only %s, who started conversation %q, can close it", c.CreatedBy, name)
 		}
 		if cp.Body != "" {
-			if _, err := s.appendMsg(ctx, tx, c, KindConclude, cp.Agent, cp.Body, nil); err != nil {
+			// A coordinator who never joined has no read position.
+			var seen *int64
+			if err := tx.QueryRowContext(ctx, `SELECT read_seq FROM participants WHERE conversation_id = ? AND agent = ?`,
+				c.id, cp.Agent).Scan(&seen); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if _, err := s.appendPost(ctx, tx, c, KindConclude, cp.Agent, cp.Body, nil, seen); err != nil {
 				return err
 			}
 		}

@@ -230,6 +230,7 @@
     "body": "LRU or LFU?",
     "created_at": "2030-01-02T03:04:05Z",
     "kind": "say",
+    "seen_seq": 0,
     "seq": 4,
     "your_account": true
   },
@@ -310,6 +311,7 @@
       "body": "LRU or LFU?",
       "created_at": "2030-01-02T03:04:05Z",
       "kind": "say",
+      "seen_seq": 0,
       "seq": 4,
       "your_account": false
     },
@@ -346,6 +348,7 @@
     "created_at": "2030-01-02T03:04:05Z",
     "kind": "say",
     "reply_to": 3,
+    "seen_seq": 5,
     "seq": 6,
     "your_account": true
   },
@@ -398,6 +401,7 @@
       "created_at": "2030-01-02T03:04:05Z",
       "kind": "say",
       "reply_to": 3,
+      "seen_seq": 5,
       "seq": 6,
       "your_account": true
     }
@@ -465,6 +469,7 @@
       "created_at": "2030-01-02T03:04:05Z",
       "kind": "say",
       "reply_to": 3,
+      "seen_seq": 5,
       "seq": 6,
       "your_account": true
     }

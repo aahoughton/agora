@@ -106,6 +106,10 @@ re #{{.Seq}}
 fields: Gap
 +{{.Gap}}
 
+## missed
+fields: Seqs, N
+missed {{range $i, $s := .Seqs}}{{if $i}}, {{end}}#{{$s}}{{end}}{{if gt .N (len .Seqs)}} ({{.N}} in all){{end}}
+
 ## new_below
 fields: N
 {{.N}} new below

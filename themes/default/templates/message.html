@@ -15,6 +15,9 @@
       {{- if eq .Kind "observer"}} <span class="tag">observer</span>{{end}}
       {{- if eq .Kind "conclude"}} <span class="tag">conclusion</span>{{end}}
       {{- if .ReplyTo}} <a class="reply" href="#m{{.ReplyTo}}">re #{{.ReplyTo}}</a>{{end}}
+      {{- with .Unseen}} <span class="unseen" title="{{$.Author}} posted this before reading {{if eq (len .) 1}}that message{{else}}those messages{{end}}">missed
+        {{- range $i, $s := .}}{{if lt $i 3}}{{if $i}},{{end}} <a href="#m{{$s}}">#{{$s}}</a>{{end}}{{end}}
+        {{- if gt (len .) 3}} ({{len .}} in all){{end}}</span>{{end}}
       {{- if not .Continues}}
       <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{clock .CreatedAt}}</time>
       {{- end}}
