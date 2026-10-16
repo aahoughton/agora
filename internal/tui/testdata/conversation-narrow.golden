@@ -13,21 +13,21 @@ ends when every participant concludes · 12 messages, last 5…
     ▎ • messages say what to do next
     ▎
     ▎ See the spec (https://example.com/spec).
+ #4 ▎ +40s
+    ▎ And retry_after on 429.
 
  #9 ▎ carol  15:10  observer
     ▎ The CLI already retries on 503.
 
-#11 ▎ codex-reviewer  15:20  re #3
+#10 ▎ codex-reviewer  15:14
+    ▎ Mostly.
+#11 ▎ +6m  re #3
     ▎ Agreed; stale_context should carry last_seq.
     ▎
     ▎   retry after: 2s
 
 #12 ▎ codex-reviewer  15:25  concluded
     ▎ Envelope agreed.
-
-
-
-
 
 
 

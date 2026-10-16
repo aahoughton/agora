@@ -45,7 +45,9 @@ func sampleMessages() []core.Message {
 		{Seq: 1, Kind: core.KindSystem, Author: "claude-implementer", Body: "claude-implementer started the conversation (end: agreement)", CreatedAt: at(0)},
 		{Seq: 2, Kind: core.KindSystem, Author: "codex-reviewer", Body: "codex-reviewer joined", CreatedAt: at(1)},
 		{Seq: 3, Kind: core.KindSay, Author: "claude-implementer", Body: "Proposal: every error is `{code, message}`.\n\n- codes are **stable**\n- messages say what to do next\n\nSee [the spec](https://example.com/spec).", CreatedAt: at(2)},
+		{Seq: 4, Kind: core.KindSay, Author: "claude-implementer", Body: "And `retry_after` on 429.", CreatedAt: at(2).Add(40 * time.Second)},
 		{Seq: 9, Kind: core.KindObserver, Author: "carol", Body: "The CLI already retries on 503.", CreatedAt: at(10)},
+		{Seq: 10, Kind: core.KindSay, Author: "codex-reviewer", Body: "Mostly.", CreatedAt: at(14)},
 		{Seq: 11, Kind: core.KindSay, Author: "codex-reviewer", Body: "Agreed; `stale_context` should carry `last_seq`.\n\n```\nretry after: 2s\n```", ReplyTo: &three, CreatedAt: at(20)},
 		{Seq: 12, Kind: core.KindConclude, Author: "codex-reviewer", Body: "Envelope agreed.", CreatedAt: at(25)},
 	}
@@ -127,6 +129,45 @@ func TestViews(t *testing.T) {
 		conv.Status = core.StatusConcluded
 		m.Update(followMsg{gen: m.gen, res: client.FollowResult{ReadResult: core.ReadResult{LastSeq: 12}, Conversation: conv}})
 		golden(t, "conversation-concluded", shot(m))
+	})
+	// A message that arrives later joins the run of the one before it.
+	t.Run("live run", func(t *testing.T) {
+		m := openThread(t, 80, 60, "")
+		conv := sampleConversation()
+		conv.LastSeq = 14
+		m.Update(followMsg{gen: m.gen, res: client.FollowResult{
+			ReadResult: core.ReadResult{Messages: []core.Message{
+				{Seq: 13, Kind: core.KindSay, Author: "gemini-helper", Body: "late one", CreatedAt: at(26)},
+			}, LastSeq: 13},
+			Conversation: conv,
+		}})
+		m.Update(followMsg{gen: m.gen, res: client.FollowResult{
+			ReadResult: core.ReadResult{Messages: []core.Message{
+				{Seq: 14, Kind: core.KindSay, Author: "gemini-helper", Body: "late two", CreatedAt: at(29)},
+			}, LastSeq: 14},
+			Conversation: conv,
+		}})
+		got := shot(m)
+		if !strings.Contains(got, "late one\n#14 ▎ +3m\n    ▎ late two\n") {
+			t.Fatalf("no run:\n%s", got)
+		}
+	})
+	// A second conclusion from the same author continues the first and
+	// keeps its tag.
+	t.Run("conclusion run", func(t *testing.T) {
+		m := openThread(t, 80, 60, "")
+		conv := sampleConversation()
+		conv.LastSeq = 13
+		m.Update(followMsg{gen: m.gen, res: client.FollowResult{
+			ReadResult: core.ReadResult{Messages: []core.Message{
+				{Seq: 13, Kind: core.KindConclude, Author: "codex-reviewer", Body: "Envelope agreed, again.", CreatedAt: at(26)},
+			}, LastSeq: 13},
+			Conversation: conv,
+		}})
+		got := shot(m)
+		if !strings.Contains(got, "Envelope agreed.\n#13 ▎ +1m  concluded\n") {
+			t.Fatalf("no run:\n%s", got)
+		}
 	})
 	t.Run("conversation list", func(t *testing.T) {
 		m := newTestModel(t, Options{Namespace: "default"}, 90, 10)
