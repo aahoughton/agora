@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,7 +35,12 @@ type env struct {
 	svc *core.Service
 	url string
 	c   *http.Client
+	// offset is how far the service's clock has moved past fixed.
+	offset *atomic.Int64
 }
+
+// advance moves the service's clock forward by d.
+func (e *env) advance(d time.Duration) { e.offset.Add(int64(d)) }
 
 func newEnv(t *testing.T, opts web.Options) *env {
 	t.Helper()
@@ -43,7 +49,8 @@ func newEnv(t *testing.T, opts web.Options) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	svc := core.New(db, core.Options{Now: func() time.Time { return fixed }})
+	offset := new(atomic.Int64)
+	svc := core.New(db, core.Options{Now: func() time.Time { return fixed.Add(time.Duration(offset.Load())) }})
 	if opts.Now == nil {
 		opts.Now = func() time.Time { return fixed.Add(10 * time.Minute) }
 		opts.Location = time.UTC
@@ -60,7 +67,7 @@ func newEnv(t *testing.T, opts web.Options) *env {
 		t.Fatal(err)
 	}
 	c := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return &env{t: t, svc: svc, url: srv.URL, c: c}
+	return &env{t: t, svc: svc, url: srv.URL, c: c, offset: offset}
 }
 
 func (e *env) get(path string) (int, string) {
@@ -321,11 +328,17 @@ func TestBrokenThemesFailAtStartup(t *testing.T) {
 func TestGoldenPages(t *testing.T) {
 	e := newEnv(t, web.Options{})
 	e.seed()
-	for name, path := range map[string]string{
-		"conversations": "/n/default",
-		"conversation":  "/n/default/c/cache",
+	runs := newEnv(t, web.Options{})
+	runs.seedRuns()
+	for name, page := range map[string]struct {
+		e    *env
+		path string
+	}{
+		"conversations":     {e, "/n/default"},
+		"conversation":      {e, "/n/default/c/cache"},
+		"conversation-runs": {runs, "/n/default/c/runs"},
 	} {
-		_, body := e.get(path)
+		_, body := page.e.get(page.path)
 		file := filepath.Join("testdata", name+".golden.html")
 		if *update {
 			must(t, os.MkdirAll("testdata", 0o755))

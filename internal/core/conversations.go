@@ -89,6 +89,15 @@ type Message struct {
 	account sql.NullInt64
 }
 
+// Continues reports whether m continues a run of messages from one
+// participant after prev: both have the same author and the same kind, and
+// neither is a system line. Any other message in between, a system line
+// included, ends the run, as does a change of kind, such as a message
+// followed by a conclusion. The viewers show a run as one block.
+func Continues(prev *Message, m Message) bool {
+	return prev != nil && m.Kind != KindSystem && prev.Kind == m.Kind && prev.Author == m.Author
+}
+
 // conv is a conversation loaded with its row ids.
 type conv struct {
 	id   int64

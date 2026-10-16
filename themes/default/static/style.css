@@ -179,6 +179,17 @@ main.with-aside > .notice { grid-column: 1 / -1; }
 .message.conclude .card { background: var(--conclude-bg); }
 .message.conclude .tag { color: var(--open); }
 .message:target .card { box-shadow: 0 0 0 2px var(--accent); }
+/* A run: messages in a row from one participant share one block. Each
+   keeps its seq and its own slim header, which shows the gap since the
+   message before it instead of the author. */
+.message.continues { margin-top: 0; }
+.message:has(+ .message.continues) { margin-bottom: 0; }
+.message:has(+ .message.continues) .card { border-bottom: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
+.message:target:has(+ .message.continues) .card { box-shadow: 0 0 0 2px var(--accent); }
+.message.continues .card { border-top: 1px dashed var(--line); border-top-left-radius: 0; border-top-right-radius: 0; padding-top: 0.45rem; }
+.message.continues .seq { padding-top: 0.5rem; }
+.message.continues .head { margin-bottom: 0.2rem; }
+.card .head .gap { margin-left: 0; color: var(--faint); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 
 .body > :first-child { margin-top: 0; }
 .body > :last-child { margin-bottom: 0; }

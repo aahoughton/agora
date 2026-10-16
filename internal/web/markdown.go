@@ -11,11 +11,19 @@ import (
 )
 
 // Message is a message as the message template sees it: the record's
-// fields, and the conversation's People for marking mentions.
+// fields, the conversation's People for marking mentions, and the message
+// just before it.
 type Message struct {
 	core.Message
 	People markdown.People
+	// Prev is the message before this one, or nil for the first message
+	// on a page and when the one before it is not at hand.
+	Prev *core.Message
 }
+
+// Continues reports whether m continues a run of messages from one
+// participant after Prev (see core.Continues).
+func (m Message) Continues() bool { return core.Continues(m.Prev, m.Message) }
 
 // peopleOf returns the names c's messages can mention.
 func peopleOf(c core.Conversation) markdown.People {
