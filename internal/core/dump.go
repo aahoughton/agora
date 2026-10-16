@@ -264,9 +264,9 @@ func LoadDump(ctx context.Context, db *sql.DB, h DumpHeader, r *bufio.Reader, no
 	if !ended {
 		return 0, errors.New("load: the dump is cut off (no end record)")
 	}
-	// A dump from before schema 6 is loaded into a database without the
-	// feedback table.
-	if err := checkLoaded(ctx, tx, now, len(columns["feedback"]) > 0); err != nil {
+	// A dump from an older schema is loaded into a database without the
+	// later tables and columns, such as feedback (6) and seen_seq (7).
+	if err := checkLoaded(ctx, tx, now, columns); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO namespaces (name, created_at)
@@ -387,8 +387,9 @@ const loadClockSkew = 24 * time.Hour
 // read positions lie within the log, replies point back, enumerations hold
 // known values, names (including message authors and creators) are valid,
 // text stays within the limits live writes enforce, a timebox has an end
-// time, and no time lies in the future.
-func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time, feedback bool) error {
+// time, and no time lies in the future. columns holds the loaded tables'
+// columns; checks of a table or column it lacks are skipped.
+func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time, columns map[string]map[string]bool) error {
 	// Times may not lie in the future beyond clock skew between servers.
 	latest := now.Add(loadClockSkew).UnixMilli()
 	checks := []struct {
@@ -428,7 +429,15 @@ func checkLoaded(ctx context.Context, tx *sql.Tx, now time.Time, feedback bool) 
 			[]any{latest},
 		},
 	}
-	if feedback {
+	if columns["messages"]["seen_seq"] {
+		checks = append(checks, struct {
+			what, query string
+			args        []any
+		}{"an invalid message read position in conversation", `SELECT c.name FROM messages m
+			JOIN conversations c ON c.id = m.conversation_id WHERE m.seen_seq IS NOT NULL
+			AND (typeof(m.seen_seq) != 'integer' OR m.kind NOT IN ('say', 'conclude') OR m.seen_seq < 0 OR m.seen_seq >= m.seq)`, nil})
+	}
+	if len(columns["feedback"]) > 0 {
 		checks = append(checks, []struct {
 			what, query string
 			args        []any

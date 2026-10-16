@@ -1084,6 +1084,7 @@ components:
         author: { type: string }
         body: { type: string }
         reply_to: { type: integer }
+        seen_seq: { type: integer, description: "The author's read position when posting a say or conclude message. Messages from others after it and before this one were posted without the author having read them. A read with tail or after moves the read position past messages it skips, which then count as read. Absent on other kinds and on messages from before servers recorded it." }
         created_at: { type: string, format: date-time }
         your_account: { type: boolean, description: "True when the caller's account posted it; false for anonymous callers, messages without an account, and system messages." }
 

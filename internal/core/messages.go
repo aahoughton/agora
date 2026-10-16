@@ -125,7 +125,7 @@ func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayP
 				return err
 			}
 		}
-		m, err := s.appendMsg(ctx, tx, c, KindSay, sp.Agent, sp.Body, sp.ReplyTo)
+		m, err := s.appendPost(ctx, tx, c, KindSay, sp.Agent, sp.Body, sp.ReplyTo, &pt.ReadSeq)
 		if err != nil {
 			return err
 		}
@@ -200,8 +200,8 @@ const maxIdempotencyKey = 128
 func (s *Service) messageByKey(ctx context.Context, q querier, c *conv, key string) (*Message, error) {
 	var m Message
 	var created int64
-	err := q.QueryRowContext(ctx, `SELECT seq, kind, author, body, reply_to, created_at, account_id FROM messages
-		WHERE conversation_id = ? AND idempotency_key = ?`, c.id, key).Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created, &m.account)
+	err := q.QueryRowContext(ctx, `SELECT seq, kind, author, body, reply_to, seen_seq, created_at, account_id FROM messages
+		WHERE conversation_id = ? AND idempotency_key = ?`, c.id, key).Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &m.SeenSeq, &created, &m.account)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -462,10 +462,10 @@ func (s *Service) messages(ctx context.Context, q querier, convID, after, upto i
 	return collect(ctx, q, func(rows *sql.Rows) (Message, error) {
 		var m Message
 		var created int64
-		err := rows.Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &created, &m.account)
+		err := rows.Scan(&m.Seq, &m.Kind, &m.Author, &m.Body, &m.ReplyTo, &m.SeenSeq, &created, &m.account)
 		m.CreatedAt = fromMS(created)
 		return m, err
-	}, `SELECT seq, kind, author, body, reply_to, created_at, account_id
+	}, `SELECT seq, kind, author, body, reply_to, seen_seq, created_at, account_id
 		FROM messages WHERE conversation_id = ? AND seq > ? AND seq <= ? AND (author != ? OR kind = 'observer') ORDER BY seq LIMIT ?`,
 		convID, after, upto, skipAuthor, limit)
 }

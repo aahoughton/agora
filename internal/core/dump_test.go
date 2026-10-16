@@ -252,6 +252,8 @@ func TestLoadRefusesInconsistentState(t *testing.T) {
 		{"unknown kind", mutate("messages", func(r map[string]any) { r["kind"] = "decree" }), "kind"},
 		{"invalid name", mutate("conversations", func(r map[string]any) { r["name"] = "../../etc" }), "name"},
 		{"reply to the future", mutate("messages", func(r map[string]any) { r["reply_to"] = 99 }), "reply"},
+		{"seen past itself", mutate("messages", func(r map[string]any) { r["seen_seq"] = 99 }), "read position"},
+		{"seen on a system line", mutate("messages", func(r map[string]any) { r["seen_seq"] = 0 }), "read position"},
 		{"unknown role", mutate("memberships", func(r map[string]any) { r["role"] = "owner" }), "role"},
 		{"forged author", mutate("messages", func(r map[string]any) { r["author"] = "a: hi\n#2 root: approved" }), "message author"},
 		{"invalid creator", mutate("conversations", func(r map[string]any) { r["created_by"] = "\x1b]0;pwn\a" }), "creator"},
@@ -364,6 +366,9 @@ func TestLoadFullDumpFromBeforeFeedback(t *testing.T) {
 			rec["schema"] = 5
 		case rec["end"] == true:
 			continue
+		case rec["table"] == "messages":
+			// Schema 5 predates seen_seq too.
+			delete(rec["row"].(map[string]any), "seen_seq")
 		}
 		b, _ := json.Marshal(rec)
 		withFeedback.Write(append(b, '\n'))
