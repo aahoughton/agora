@@ -102,6 +102,10 @@ observer
 fields: Seq
 re #{{.Seq}}
 
+## gap
+fields: Gap
++{{.Gap}}
+
 ## new_below
 fields: N
 {{.N}} new below

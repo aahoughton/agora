@@ -41,6 +41,20 @@ func (r renderer) ago(t time.Time) string {
 	}
 }
 
+// gap describes the time between two messages, such as "4s" or "6m".
+func gap(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(max(d, 0)/time.Second)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	default:
+		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+	}
+}
+
 // until describes a time still to come, such as "in 1h 58m".
 func (r renderer) until(t time.Time) string {
 	d := t.Sub(r.now)
@@ -65,9 +79,11 @@ func gutterWidth(lastSeq int64) int {
 }
 
 // message renders one message: the seq in a gutter of width gutter, a bar
-// in the author's color, then the header and body. System messages are a
-// single faint run of text.
-func (r renderer) message(m core.Message, gutter, width int) []string {
+// in the author's color, then the header and body. A message that
+// continues a run after prev (see core.Continues) shows the gap since prev
+// in place of its author and time. System messages are a single faint run of
+// text.
+func (r renderer) message(m core.Message, prev *core.Message, gutter, width int) []string {
 	seq := r.st.faint.Render(pad("#"+strconv.FormatInt(m.Seq, 10), gutter))
 	blank := strings.Repeat(" ", gutter)
 	inner := width - gutter - 3
@@ -90,6 +106,9 @@ func (r renderer) message(m core.Message, gutter, width int) []string {
 	}
 	bar := color.Render(r.st.g.bar)
 	head := color.Bold(true).Render(sanitize(m.Author)) + "  " + r.st.faint.Render(r.clock(m.CreatedAt))
+	if core.Continues(prev, m) {
+		head = r.st.faint.Render(r.sk.say("gap", map[string]any{"Gap": gap(m.CreatedAt.Sub(prev.CreatedAt))}))
+	}
 	switch m.Kind {
 	case core.KindConclude:
 		head += "  " + r.st.open.Render(r.sk.say("kind_conclude", nil))

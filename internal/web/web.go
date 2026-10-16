@@ -185,6 +185,7 @@ func (v *viewer) funcs() template.FuncMap {
 		"clock":    func(t any) string { return timeOf(t).In(v.opts.Location).Format("15:04") },
 		"ago":      func(t any) string { return ago(v.opts.Now().Sub(timeOf(t))) },
 		"until":    func(t any) string { return until(timeOf(t).Sub(v.opts.Now())) },
+		"gap":      func(from, to any) string { return gap(timeOf(to).Sub(timeOf(from))) },
 		"tone":     toneClass,
 		"initials": initials,
 		"datetime": func(t any) string { return timeOf(t).In(v.opts.Location).Format("Jan 2 15:04") },
@@ -213,6 +214,20 @@ func ago(d time.Duration) string {
 		return strconv.Itoa(int(d/time.Hour)) + "h ago"
 	default:
 		return strconv.Itoa(int(d/(24*time.Hour))) + "d ago"
+	}
+}
+
+// gap describes the time between two messages, such as "4s" or "6m".
+func gap(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(max(d, 0)/time.Second)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	default:
+		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
 	}
 }
 
@@ -491,9 +506,13 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal, account str
 		if err != nil {
 			return data, err
 		}
+		// The first message shown has no Prev, so it names its author
+		// even when it continues a run from the page before.
 		people := peopleOf(c)
+		var prev *core.Message
 		for _, m := range res.Messages {
-			data.Messages = append(data.Messages, Message{m, people})
+			data.Messages = append(data.Messages, Message{m, people, prev})
+			prev = &m
 		}
 	}
 	c = displayable(c)
@@ -593,6 +612,19 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), StatusOf(err))
 		return
 	}
+	// The message at after, so the first one sent knows the one before it.
+	var prev *core.Message
+	if after > 0 {
+		from := after - 1
+		res, err := v.svc.Read(r.Context(), p, ns, name, core.ReadParams{After: &from, Limit: 1})
+		if err != nil {
+			http.Error(w, err.Error(), StatusOf(err))
+			return
+		}
+		if len(res.Messages) == 1 && res.Messages[0].Seq == after {
+			prev = &res.Messages[0]
+		}
+	}
 	// The stream holds one viewer slot for as long as it is connected.
 	viewer, err := v.svc.OpenViewer(r.Context(), p, ns, name)
 	if err != nil {
@@ -634,10 +666,10 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 		}
 		people := peopleOf(c)
 		for _, m := range batch.Messages {
-			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), Message{m, people}); err != nil {
+			if err := v.event(w, "message", strconv.FormatInt(m.Seq, 10), Message{m, people, prev}); err != nil {
 				return
 			}
-			after = m.Seq
+			after, prev = m.Seq, &m
 		}
 		if fresh {
 			if v.snapshot(w, c) != nil {

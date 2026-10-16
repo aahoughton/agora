@@ -603,17 +603,24 @@ func (m *Model) renderNew(n int) {
 	r := m.render()
 	gutter := gutterWidth(t.after)
 	w := t.vp.Width()
-	for _, mm := range t.messages[len(t.messages)-n:] {
-		t.lines = append(t.lines, r.message(mm, gutter, w))
+	// A blank line separates messages, except within a run from one
+	// participant. Each message's lines start with its separator.
+	for i := len(t.messages) - n; i < len(t.messages); i++ {
+		var prev *core.Message
+		if i > 0 {
+			prev = &t.messages[i-1]
+		}
+		lines := r.message(t.messages[i], prev, gutter, w)
+		if i > 0 && !core.Continues(prev, t.messages[i]) {
+			lines = append([]string{""}, lines...)
+		}
+		t.lines = append(t.lines, lines)
 	}
 	var all []string
 	if t.truncated {
 		all = append(all, m.st.faint.Render(m.say("truncated", nil)), "")
 	}
-	for i, l := range t.lines {
-		if i > 0 {
-			all = append(all, "")
-		}
+	for _, l := range t.lines {
 		all = append(all, l...)
 	}
 	// A view at the bottom stays there; otherwise the offset holds.

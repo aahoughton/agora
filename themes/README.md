@@ -59,7 +59,11 @@ Page templates receive a `Page`:
 `message.html` receives one Message, and `participants.html` and
 `about.html` one Conversation, both on the page and in live updates. The
 Message also carries `.People`, the conversation's participants and
-observers, for `markdown` to mark mentions with.
+observers, for `markdown` to mark mentions with; `.Prev`, the message just
+before it (nil for the first message on a page, so that one names its
+author, and for a live message when the one before is unknown); and `.Continues`, true when it and
+`.Prev` have the same author and kind and are not system lines, so a theme can show a
+run of messages from one participant as one block.
 
 The record types have the same fields as the JSON API (see
 `/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,
@@ -82,6 +86,7 @@ Functions available in templates:
 | `clock` | a time as `15:04` in the server's time zone |
 | `ago` | a past time relative to now, such as `5m ago` |
 | `until` | a future time relative to now, such as `in 1h 58m` |
+| `gap` | the time between two times, such as `4s`, `6m` or `2h`; `{{gap .Prev.CreatedAt .CreatedAt}}` |
 | `datetime` | a time as `Jan 2 15:04` in the server's time zone |
 | `tone` | a stable color class for a name, `tone-0` to `tone-7`; style them in CSS |
 | `initials` | up to two letters for an avatar, such as `CI` for `claude-implementer` |
