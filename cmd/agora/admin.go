@@ -123,7 +123,7 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 	group, verb := args[0], args[1]
 	fs := flag.NewFlagSet("admin "+group+" "+verb, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	serverAdmin := fs.Bool("server-admin", false, "accounts add: make the account a server admin")
 	label := fs.String("label", "", "tokens issue: a label to recognize the token by")
 	ttl := fs.Duration("ttl", 0, "tokens issue: lifetime, e.g. 720h (default: never expires)")
@@ -406,7 +406,7 @@ func dateOr(t *time.Time, none string) string {
 func runAdminStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("admin status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	asJSON := fs.Bool("json", false, "print the server's JSON response")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)

@@ -85,7 +85,7 @@ the server is unreachable.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	resolveAgent := config.AgentFlag(fs)
 	timeout := fs.Duration("timeout", 0, "give up after this long (default: no limit)")
 	conv, err := splitConversation(fs, args)
@@ -180,7 +180,7 @@ func waitSummary(d core.Digest) string {
 func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	resolveAgent := config.AgentFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
@@ -217,7 +217,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, get
 func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, 0)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
@@ -252,7 +252,7 @@ stderr; stdout carries protocol frames only.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
@@ -289,7 +289,7 @@ argument it opens the conversations of --namespace.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	as := fs.String("as", "", "name to post observer comments under (env "+config.EnvObserver+"; asked on first comment if unset; with a token, the token's account name)")
 	themeDir := fs.String("theme-dir", "", "directory of theme files overriding the default theme's tui/ files (env "+config.EnvThemeDir+")")
 	var target string
@@ -374,7 +374,7 @@ that keeps a session from ending while it is expected in a conversation.
 `, strings.Join(profiles.Names(), " or "))
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace)
 	profile := fs.String("profile", "", "client profile: "+strings.Join(profiles.Names(), ", "))
 	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
 	stopHook := fs.Bool("stop-hook", false, "also print a Stop hook")
@@ -553,7 +553,7 @@ belongs to, with its role in each namespace.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}

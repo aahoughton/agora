@@ -19,12 +19,14 @@ func TestClientFlags(t *testing.T) {
 		{"env", nil, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://h:1", Namespace: "team"}, ""},
 		{"flag beats env", []string{"--url", "http://f:2", "--namespace", "f"}, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://f:2", Namespace: "f"}, ""},
 		{"bad namespace", []string{"--namespace", "../x"}, nil, Client{}, "invalid namespace"},
+		{"token", []string{"--token", "t"}, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "t"}, ""},
+		{"token from env", nil, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "env"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := flag.NewFlagSet("x", flag.ContinueOnError)
 			fs.SetOutput(io.Discard)
-			resolve := ClientFlags(fs)
+			resolve := ClientFlags(fs, WithNamespace|WithToken)
 			if err := fs.Parse(tt.args); err != nil {
 				t.Fatal(err)
 			}
@@ -39,6 +41,26 @@ func TestClientFlags(t *testing.T) {
 				t.Fatalf("got %+v, %v", got, err)
 			}
 		})
+	}
+}
+
+func TestClientFlagsOnlyWhatIsAsked(t *testing.T) {
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	resolve := ClientFlags(fs, 0)
+	for _, name := range []string{"namespace", "token"} {
+		if fs.Lookup(name) != nil {
+			t.Errorf("--%s is registered", name)
+		}
+	}
+	if err := fs.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	// An invalid namespace in the environment does not matter to a
+	// command that has no namespace.
+	got, err := resolve(env(map[string]string{EnvNamespace: "bad/name", EnvToken: "t"}))
+	if err != nil || got != (Client{URL: DefaultURL}) {
+		t.Fatalf("got %+v, %v", got, err)
 	}
 }
 

@@ -57,7 +57,7 @@ and start it again. The file is written with mode 0600.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	out := fs.String("o", "", "file to write (required; must not exist)")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
@@ -96,7 +96,7 @@ including token hashes. The file is written with mode 0600.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs) // --namespace names the namespace to dump
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken) // --namespace names the namespace to dump
 	all := fs.Bool("all", false, "dump everything instead of one namespace")
 	out := fs.String("o", "", "file to write (required; must not exist)")
 	if err := fs.Parse(args); err != nil {
@@ -145,7 +145,7 @@ must not exist there yet.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	dbPath := fs.String("db", "", "database file to create (must not exist)")
 	as := fs.String("as", "", "without --db: the namespace's name on the server (default: the dump's)")
 	in := fs.String("i", "", "dump file to read (default: standard input)")

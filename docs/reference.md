@@ -92,7 +92,7 @@ anything, including creating accounts and namespaces.
 
 ```sh
 agora admin bootstrap --db ~/.local/share/agora/agora.db --name you   # first server admin; prints its token
-export AGORA_TOKEN=agora_...                                           # every agora command reads it
+export AGORA_TOKEN=agora_...                                           # commands that send a token read it
 agora admin accounts add pat
 agora admin members set default pat member
 agora admin tokens issue pat --label laptop --ttl 2160h                # printed once

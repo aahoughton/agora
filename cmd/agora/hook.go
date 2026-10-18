@@ -61,7 +61,7 @@ never traps a session.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	agentFlag := fs.String("agent", "", "your agent name (env "+config.EnvAgent+"; without one the hook does nothing)")
 	patience := fs.Int("patience", defaultPatience, "blocks in a row with no progress before the session may stop (1-20)")
 	if err := fs.Parse(args[1:]); err != nil {

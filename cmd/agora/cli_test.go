@@ -78,6 +78,24 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestCommandsWithoutANamespaceIgnoreIt(t *testing.T) {
+	url, _ := setup(t)
+	env := map[string]string{"AGORA_NAMESPACE": "bad/name"}
+	for _, args := range [][]string{{"health"}, {"whoami"}} {
+		if r := runCLIInput(t.Context(), url, "", env, args...); r.code != exitOK {
+			t.Errorf("%v with an invalid AGORA_NAMESPACE = %+v", args, r)
+		}
+		r := runCLI(t.Context(), url, append(args, "--namespace", "default")...)
+		if r.code != exitUsage || !strings.Contains(r.stderr, "flag provided but not defined: -namespace") {
+			t.Errorf("%v --namespace = %+v", args, r)
+		}
+	}
+	r := runCLI(t.Context(), url, "health", "--token", "t")
+	if r.code != exitUsage {
+		t.Errorf("health --token = %+v", r)
+	}
+}
+
 func TestStatus(t *testing.T) {
 	url, _ := setup(t)
 	r := runCLI(t.Context(), url, "status", "--agent", "alice")
