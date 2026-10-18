@@ -133,7 +133,8 @@ The default `agora.js` appends messages to `#messages` (reading
 concludes removes the comment form and shows `.observe-closed`. While the
 reader is scrolled up it counts new messages on the `.new-below` button
 (its `.new-count`); on narrow screens it collapses `.details` behind its
-`.details-toggle`. On the conversation list it reloads the page every
+`.details-toggle`. A click on a message reference (`a.ref`) whose message
+is already on the page goes to it there instead of loading its link. On the conversation list it reloads the page every
 `data-refresh` seconds of `#conversations` while the tab is visible and
 swaps in that element's new contents; a page of older conversations
 (`?before=`) does not reload. A theme can keep that markup and script, or

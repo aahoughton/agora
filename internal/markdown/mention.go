@@ -64,7 +64,8 @@ func (n *Mention) Dump(src []byte, level int) {
 
 // mentions marks "@name" in plain text. Code, links and autolinks are left
 // alone. The "@" must start the text or follow a character that cannot be
-// in a name, so an email address is not a mention. Trailing '.', '_' or
+// in a name, so an email address is not a mention, and "\@name" (an
+// escape) is not one either. Trailing '.', '_' or
 // '-' may end the sentence rather than the name, so "@ca-one." mentions
 // ca-one.
 type mentions struct{}
@@ -104,7 +105,7 @@ func splitMentions(t *ast.Text, src []byte, people People) {
 	var nodes []ast.Node
 	from := seg.Start
 	for i := seg.Start; i < seg.Stop; i++ {
-		if src[i] != '@' || (i > 0 && nameByte(src[i-1])) {
+		if src[i] != '@' || (i > 0 && (nameByte(src[i-1]) || src[i-1] == '\\')) {
 			continue
 		}
 		end := i + 1
