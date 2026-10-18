@@ -816,7 +816,8 @@ func firstNonEmpty(vals ...string) string {
 // character or backslash is refused.
 func returnTo(next string) string {
 	u, err := url.Parse(next)
-	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") ||
+	if err != nil || u.Scheme != "" || u.Host != "" || next == "" || next[0] != '/' ||
+		len(next) > 1 && (next[1] == '/' || next[1] == '\\') ||
 		strings.ContainsFunc(next, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '\\' }) {
 		return "/"
 	}
