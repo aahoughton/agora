@@ -555,7 +555,7 @@
 {
   "conversation": "design",
   "expected": false,
-  "line": "design: open; you: concluded; unread: 0; next: wait (you concluded; wait in case someone replies or withdraws)",
+  "line": "design: open; you: concluded; unread: 0; next: wait (you concluded; wait until the conversation concludes, since conclusions that differ make you active again; do not end your turn)",
   "namespace": "default",
   "next": "wait",
   "replies_to_you": 0,

@@ -1,6 +1,7 @@
 package core_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aahoughton/agora/internal/core"
@@ -91,4 +92,23 @@ func TestAgreementNeedsAPosition(t *testing.T) {
 	// Other end conditions take any conclusion.
 	f.start(t, "free", core.EndNone, "a")
 	must[core.Standing](t)(f.svc.Conclude(t.Context(), f.p, "default", "free", core.ConcludeParams{Agent: "a", Body: "done"}))
+}
+
+func TestConcludedAdviceInAnAgreement(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	for _, tc := range []struct {
+		end  core.EndCondition
+		want string
+	}{
+		{core.EndAgreement, "conclusions that differ make you active again; do not end your turn"},
+		{core.EndCoordinator, "wait in case someone replies or withdraws"},
+	} {
+		name := string(tc.end)
+		f.start(t, name, tc.end, "a", "b")
+		f.read(t, name, "b")
+		st := must[core.Standing](t)(f.svc.Conclude(t.Context(), f.p, "default", name, core.ConcludeParams{Agent: "b", Body: "AGREED: #1"}))
+		if st.Expected || !strings.Contains(st.Line, tc.want) {
+			t.Errorf("%s: %s", tc.end, st.Line)
+		}
+	}
 }
