@@ -181,6 +181,7 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 	addTool(reg, s, "say", write, t.say)
 	addTool(reg, s, "wait", write, t.wait)
 	addTool(reg, s, "status", readOnly, t.status)
+	addTool(reg, s, "search", readOnly, t.search)
 	addTool(reg, s, "conclude", write, t.conclude)
 	addTool(reg, s, "leave", write, t.leave)
 	addTool(reg, s, "close", destructive, t.closeConv)
@@ -319,6 +320,67 @@ func (t *tools) list(ctx context.Context, req *mcp.CallToolRequest, in listIn) (
 	}
 	note(ctx, slog.Int("conversations", len(page.Conversations)), slog.Bool("more", page.Next != ""))
 	return text(renderList(t.w, page)), nil, nil
+}
+
+type searchIn struct {
+	Query        string `json:"query"`
+	Conversation string `json:"conversation,omitempty"`
+	Author       string `json:"author,omitempty"`
+	Since        string `json:"since,omitempty"`
+	Until        string `json:"until,omitempty"`
+	Order        string `json:"order,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+	Cursor       string `json:"cursor,omitempty"`
+}
+
+// Agents get a few matches unless they ask for more: every hit costs them
+// tokens.
+const defaultSearchLimit = 10
+
+func (t *tools) search(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, any, error) {
+	p, cerr := t.caller(ctx, req)
+	if cerr != nil {
+		return failure(ctx, cerr)
+	}
+	sp := core.SearchParams{
+		Query: in.Query, Conversation: in.Conversation, Author: in.Author,
+		Order: in.Order, Limit: in.Limit, Cursor: in.Cursor,
+	}
+	if sp.Limit == 0 {
+		sp.Limit = defaultSearchLimit
+	}
+	var err error
+	if sp.Since, err = searchTime("since", in.Since, false); err != nil {
+		return failure(ctx, err)
+	}
+	if sp.Until, err = searchTime("until", in.Until, true); err != nil {
+		return failure(ctx, err)
+	}
+	page, err := t.svc.Search(ctx, p, t.ns, sp)
+	if err != nil {
+		return failure(ctx, err)
+	}
+	note(ctx, slog.Int("hits", len(page.Hits)), slog.Int("total", page.Total))
+	return text(renderSearch(t.w, page)), nil, nil
+}
+
+// searchTime reads an RFC 3339 time or a YYYY-MM-DD date (UTC). A date
+// as an upper bound means the end of that day.
+func searchTime(name, s string, end bool) (*time.Time, error) {
+	if s == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t, nil
+	}
+	d, err := time.Parse(time.DateOnly, s)
+	if err != nil {
+		return nil, &core.Error{Code: core.CodeInvalid, Message: name + " must be an RFC 3339 time or a YYYY-MM-DD date"}
+	}
+	if end {
+		d = d.AddDate(0, 0, 1).Add(-time.Millisecond)
+	}
+	return &d, nil
 }
 
 type startIn struct {
