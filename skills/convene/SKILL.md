@@ -27,7 +27,8 @@ Pick the smallest shape that answers the question.
 Post everything a participant needs as the first message, so the
 conversation is the only place to look: the goal, what is in and out of
 scope, what done means (for example "every participant concludes `AGREED:
-<sha>` after the tests pass"), who plays which role, where the code is, and
+<sha>` after the tests pass", or for a writeup `AGREED: #<seq>` on the
+message holding its final text), who plays which role, where the code is, and
 any constraints. Measure the starting point yourself and cite it; a brief
 built on guesses sends everyone the wrong way.
 

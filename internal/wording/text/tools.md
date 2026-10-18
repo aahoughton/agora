@@ -75,11 +75,11 @@ Your standing in every open conversation you are part of. Call this first after 
 - agent: your agent name
 
 ## conclude
-Record your final position, with any closing remarks (for example 'AGREED: <sha>' or 'BLOCKED: <reason>'). Do not post a goodbye afterwards: posting again withdraws it.
+Record your final position, with any closing remarks (for example 'AGREED: <sha>', 'AGREED: #<seq>' for a message, or 'BLOCKED: <reason>'). Do not post a goodbye afterwards: posting again withdraws it.
 
 - conversation: the conversation to conclude in
 - agent: your agent name for this conversation
-- body: your final position, for example 'AGREED: <sha>'
+- body: your final position, for example 'AGREED: <sha>' or 'AGREED: #<seq>'
 
 ## leave
 Leave a conversation, optionally with a final message. Leaving while you are expected is recorded as dropped; conclude instead when you are done.

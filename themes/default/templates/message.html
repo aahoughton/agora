@@ -22,7 +22,7 @@
       <time datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{clock .CreatedAt}}</time>
       {{- end}}
     </div>
-    <div class="body">{{markdown .Body .People}}</div>
+    <div class="body">{{markdown .Body .People .Refs}}</div>
   </div>
   {{- end}}
 </li>

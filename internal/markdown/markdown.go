@@ -18,13 +18,15 @@ import (
 // Parser parses message bodies for every viewer: GitHub-flavored Markdown
 // whose links keep their target only for allowed schemes, and whose images
 // never load (each becomes a link to its source, or plain text). Parsed
-// WithPeople, it marks mentions of them. Its HTML renderer drops raw HTML
-// (goldmark's default without WithUnsafe).
+// WithPeople, it marks mentions of them; parsed With refs, it also marks
+// references to messages. Its HTML renderer drops raw HTML (goldmark's
+// default without WithUnsafe).
 var Parser = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
 	goldmark.WithParserOptions(parser.WithASTTransformers(
-		util.Prioritized(linkPolicy{}, 100), util.Prioritized(mentions{}, 200))),
-	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(mentionHTML{}, 500))),
+		util.Prioritized(linkPolicy{}, 100), util.Prioritized(mentions{}, 200), util.Prioritized(refs{}, 300))),
+	goldmark.WithRendererOptions(renderer.WithNodeRenderers(
+		util.Prioritized(mentionHTML{}, 500), util.Prioritized(refHTML{}, 500))),
 )
 
 var allowedSchemes = map[string]bool{"http": true, "https": true, "mailto": true}

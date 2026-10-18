@@ -32,9 +32,14 @@ func NewPeople(participants, observers []string) People {
 var peopleKey = parser.NewContextKey()
 
 // WithPeople makes a parse mark "@name" as a Mention for each of people.
-func WithPeople(p People) parser.ParseOption {
+func WithPeople(p People) parser.ParseOption { return With(p, Refs{}) }
+
+// With makes a parse mark mentions of people and the references refs
+// allows.
+func With(p People, refs Refs) parser.ParseOption {
 	ctx := parser.NewContext()
 	ctx.Set(peopleKey, p)
+	ctx.Set(refsKey, refs)
 	return parser.WithContext(ctx)
 }
 
@@ -122,10 +127,16 @@ func splitMentions(t *ast.Text, src []byte, people People) {
 		nodes = append(nodes, m)
 		from, i = end, end-1
 	}
+	splice(t, nodes, from)
+}
+
+// splice replaces t with nodes followed by the text of t from from on,
+// which keeps t's line breaks. Without nodes, t stays.
+func splice(t *ast.Text, nodes []ast.Node, from int) {
 	if len(nodes) == 0 {
 		return
 	}
-	last := ast.NewTextSegment(text.NewSegment(from, seg.Stop))
+	last := ast.NewTextSegment(text.NewSegment(from, t.Segment.Stop))
 	last.SetSoftLineBreak(t.SoftLineBreak())
 	last.SetHardLineBreak(t.HardLineBreak())
 	nodes = append(nodes, last)

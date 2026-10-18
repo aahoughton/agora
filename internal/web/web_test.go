@@ -114,7 +114,7 @@ func (e *env) seed() {
 	}
 	for _, s := range []core.SayParams{
 		{Agent: "alice", Body: "**LRU** or LFU? See [notes](https://example.com/notes).\n\n<script>alert(1)</script>"},
-		{Agent: "bob", Body: "@alice LRU:\n\n```\nevict(oldest)\n```", ReplyTo: ptr(int64(4))},
+		{Agent: "bob", Body: "@alice LRU, as in #4:\n\n```\nevict(oldest)\n```", ReplyTo: ptr(int64(4))},
 	} {
 		if _, err := e.svc.Say(ctx, p, "default", "cache", s); err != nil {
 			e.t.Fatal(err)
@@ -123,7 +123,7 @@ func (e *env) seed() {
 	if _, err := e.svc.Observe(ctx, p, "default", "cache", core.ObserveParams{Name: "pat", Body: "mind the memory budget, @bob"}); err != nil {
 		e.t.Fatal(err)
 	}
-	if _, err := e.svc.Conclude(ctx, p, "default", "cache", core.ConcludeParams{Agent: "alice", Body: "AGREED: LRU"}); err != nil {
+	if _, err := e.svc.Conclude(ctx, p, "default", "cache", core.ConcludeParams{Agent: "alice", Body: "AGREED: #5, LRU"}); err != nil {
 		e.t.Fatal(err)
 	}
 }
@@ -163,6 +163,8 @@ func TestConversationPage(t *testing.T) {
 		`class="message observer tone-`,
 		`class="message conclude tone-`,
 		`href="#m4">re #4</a>`,
+		"LRU, as in #4:",
+		`AGREED: <a class="ref" href="/n/default/c/cache?before=26#m5">#5</a>, LRU`,
 		`data-last-seq="7"`,
 		`<form class="observe"`,
 		`<p class="observe-closed" hidden>`,
