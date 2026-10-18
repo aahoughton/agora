@@ -1,6 +1,7 @@
 {{define "content" -}}
 <div class="page-head">
   <h1>Search</h1>
+  <a class="toggle" href="/n/{{.Namespace}}">All conversations</a>
 </div>
 <form class="search" method="get" action="/n/{{.Namespace}}/search" role="search">
   <input type="search" name="q" value="{{.Query}}" maxlength="500" placeholder="words, &quot;a phrase&quot;, or word*" aria-label="Search messages" autofocus>
