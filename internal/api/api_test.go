@@ -564,6 +564,10 @@ func TestReadTail(t *testing.T) {
 	}
 	c.wantError("GET", conv+"/messages?tail=0", nil, 400, "invalid")
 	c.wantError("GET", conv+"/messages?tail=2&after=1", nil, 400, "invalid")
+	// 2^32+1 would truncate to 1 in a 32-bit int.
+	c.wantError("GET", conv+"/messages?tail=4294967297", nil, 400, "invalid")
+	c.wantError("GET", conv+"/messages?limit=4294967297", nil, 400, "invalid")
+	c.wantError("GET", "/v1/namespaces/default/conversations?limit=4294967297", nil, 400, "invalid")
 }
 
 // Reading as an agent changes state, so it is a POST; the GET refuses an

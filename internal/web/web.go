@@ -575,7 +575,7 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 	if account == "" {
 		http.SetCookie(w, &http.Cookie{
 			Name: observerCookie, Value: observer, Path: "/", MaxAge: 365 * 24 * 3600,
-			HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: v.opts.SecureCookies,
 		})
 	}
 	// The page's script posts in the background and needs success told
@@ -816,7 +816,8 @@ func firstNonEmpty(vals ...string) string {
 // character or backslash is refused.
 func returnTo(next string) string {
 	u, err := url.Parse(next)
-	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") ||
+	if err != nil || u.Scheme != "" || u.Host != "" || next == "" || next[0] != '/' ||
+		len(next) > 1 && (next[1] == '/' || next[1] == '\\') ||
 		strings.ContainsFunc(next, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '\\' }) {
 		return "/"
 	}

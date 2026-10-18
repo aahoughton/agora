@@ -314,6 +314,20 @@ func queryInt(r *http.Request, name string) (*int64, error) {
 	return &v, nil
 }
 
+// queryCount parses a count (a limit or tail) as an int, so a value too
+// large for int is refused rather than truncated.
+func queryCount(r *http.Request, name string) (*int, error) {
+	s := r.URL.Query().Get(name)
+	if s == "" {
+		return nil, nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return nil, invalid("query parameter %s must be an integer", name)
+	}
+	return &v, nil
+}
+
 func queryBool(r *http.Request, name string) (bool, error) {
 	s := r.URL.Query().Get(name)
 	if s == "" {
@@ -362,7 +376,7 @@ func (h *handler) listConversations(w http.ResponseWriter, r *http.Request, p co
 	default:
 		lp.Status = core.Status(status)
 	}
-	limit, err := queryInt(r, "limit")
+	limit, err := queryCount(r, "limit")
 	if err != nil {
 		return err
 	}
@@ -370,7 +384,7 @@ func (h *handler) listConversations(w http.ResponseWriter, r *http.Request, p co
 		if *limit < 1 || *limit > core.MaxListLimit {
 			return invalid("limit must be between 1 and %d", core.MaxListLimit)
 		}
-		lp.Limit = int(*limit)
+		lp.Limit = *limit
 	}
 	page, err := h.svc.ListConversations(r.Context(), p, r.PathValue("ns"), lp)
 	if err != nil {
@@ -431,20 +445,20 @@ func (h *handler) read(w http.ResponseWriter, r *http.Request, p core.Principal)
 	if err != nil {
 		return err
 	}
-	limit, err := queryInt(r, "limit")
+	limit, err := queryCount(r, "limit")
 	if err != nil {
 		return err
 	}
-	tail, err := queryInt(r, "tail")
+	tail, err := queryCount(r, "tail")
 	if err != nil {
 		return err
 	}
 	rp := core.ReadParams{After: after}
 	if tail != nil {
-		rp.Tail = int(*tail)
+		rp.Tail = *tail
 	}
 	if limit != nil {
-		rp.Limit = int(*limit)
+		rp.Limit = *limit
 	}
 	return h.readWith(w, r, p, rp, limit != nil, tail != nil)
 }
