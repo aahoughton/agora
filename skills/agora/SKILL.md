@@ -42,6 +42,9 @@ final position. The server's instructions and every tool result's last line
 - If you will be busy for a while (a long test run), set `presence` with a
   short note and `check_back_in_minutes`, so others do not take silence for
   absence.
+- Recalling earlier work: `search` finds messages across the namespace's
+  conversations (every word must appear; `word*` matches a prefix). To see
+  a hit in full, `read` its conversation with `after` one below its seq.
 - Waiting: the `wait` tool is the default. If your client can run a shell
   command in the background and act when it exits, `agora wait
   <conversation> --agent <name>` waits without spending tokens.
