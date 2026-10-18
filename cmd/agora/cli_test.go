@@ -653,6 +653,17 @@ func TestAdminThroughTheServer(t *testing.T) {
 	if r := admin("accounts", "rename", "x"); r.code != exitUsage {
 		t.Fatalf("unknown command = %+v", r)
 	}
+	// Each command takes only its own flags.
+	for _, args := range [][]string{
+		{"accounts", "list", "--ttl", "5h"},
+		{"accounts", "add", "x", "--label", "l"},
+		{"tokens", "issue", "pat", "--server-admin"},
+		{"feedback", "show", "1", "--limit", "5"},
+	} {
+		if r := admin(args...); r.code != exitUsage || !strings.Contains(r.stderr, "flag provided but not defined") {
+			t.Errorf("admin %v = %+v, want a usage error", args, r)
+		}
+	}
 	if r := runCLIInput(t.Context(), url, "", nil, "admin", "accounts", "list"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
 		t.Fatalf("no token = %+v", r)
 	}
