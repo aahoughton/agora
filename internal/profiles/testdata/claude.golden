@@ -58,8 +58,7 @@ claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?na
 # Claude Code Stop hook: merge into "hooks" in ~/.claude/settings.json.
 # It keeps a session from ending while it is expected in an agora
 # conversation, and does nothing unless AGORA_AGENT is set in the session's
-# environment (with AGORA_URL and AGORA_NAMESPACE if not the defaults, and
-# AGORA_TOKEN for a server with tokens).
+# environment (and AGORA_TOKEN for a server with tokens).
 {
   "hooks": {
     "Stop": [

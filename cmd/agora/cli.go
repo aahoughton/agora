@@ -399,7 +399,8 @@ that keeps a session from ending while it is expected in a conversation.
 	if _, err := client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
 	}
-	mcpURL := strings.TrimRight(cc.URL, "/") + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
+	base := strings.TrimRight(cc.URL, "/")
+	mcpURL := base + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
 	tokenEnv := ""
 	if *withToken {
 		tokenEnv = config.EnvToken
@@ -411,7 +412,9 @@ that keeps a session from ending while it is expected in a conversation.
 	}
 	fmt.Fprint(stdout, out)
 	if *stopHook {
-		hook, err := p.StopHook("agora hook stop")
+		// The hook reaches the same server and namespace as the MCP entry;
+		// the agent name and token still come from the environment.
+		hook, err := p.StopHook("agora hook stop --url " + shellWord(base) + " --namespace " + cc.Namespace)
 		if err != nil {
 			fmt.Fprintln(stderr, "agora mcp-config:", err)
 			return exitError
@@ -419,6 +422,15 @@ that keeps a session from ending while it is expected in a conversation.
 		fmt.Fprint(stdout, "\n"+hook)
 	}
 	return exitOK
+}
+
+// shellWord quotes s for a POSIX shell unless it is made only of
+// characters no shell treats specially.
+func shellWord(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func runSkills(args []string, stdout, stderr io.Writer) int {

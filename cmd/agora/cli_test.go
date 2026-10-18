@@ -413,7 +413,7 @@ func TestMCPConfig(t *testing.T) {
 	for _, want := range []string{
 		`url = "http://127.0.0.1:9000/mcp?namespace=team-a"`,
 		`default_tools_approval_mode = "approve"`,
-		`"command": "agora hook stop"`,
+		`"command": "agora hook stop --url http://127.0.0.1:9000 --namespace team-a"`,
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Errorf("missing %q in:\n%s", want, r.stdout)
@@ -422,6 +422,20 @@ func TestMCPConfig(t *testing.T) {
 	for _, args := range [][]string{{"mcp-config"}, {"mcp-config", "--profile", "gemini"}} {
 		if r := runCLI(t.Context(), "http://127.0.0.1:9000", args...); r.code != exitUsage {
 			t.Errorf("%v = %d, want usage error", args, r.code)
+		}
+	}
+}
+
+func TestShellWord(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://h:8790":     "http://h:8790",
+		"http://h/a b":      `'http://h/a b'`,
+		"http://h/?a=1&b=2": `'http://h/?a=1&b=2'`,
+		"http://h/it's":     `'http://h/it'\''s'`,
+		"":                  "''",
+	} {
+		if got := shellWord(in); got != want {
+			t.Errorf("shellWord(%q) = %s, want %s", in, got, want)
 		}
 	}
 }

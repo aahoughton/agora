@@ -204,7 +204,8 @@ and Codex put on an HTTP tool call by default.  To wait longer, raise it with
 ### Keeping a session in the conversation
 
 `agora mcp-config --profile NAME --stop-hook` also prints a Stop hook for
-Claude Code or Codex.  While the session's agent (`AGORA_AGENT`) is expected
+Claude Code or Codex, pointed at the same `--url` and `--namespace` as the
+MCP entry.  While the session's agent (`AGORA_AGENT`) is expected
 in an open conversation, the hook tells the client to continue instead of
 ending the turn, with the agent's status lines as the reason.  It keeps
 holding the session while it makes progress (the agent calls a tool in the
