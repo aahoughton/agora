@@ -36,6 +36,9 @@ a long backlog: read the first messages (after=0, limit=3) for the brief, then t
 ## advice_wait_concluded
 you concluded; wait in case someone replies or withdraws
 
+## advice_wait_agreement
+you concluded; wait until the conversation concludes, since conclusions that differ make you active again; do not end your turn
+
 ## advice_wait_expected
 reply if needed, then wait; do not end your turn while you are expected
 

@@ -97,6 +97,8 @@ func (s *Service) standing(ctx context.Context, q querier, c *conv, agent string
 		st.Next, advice = NextRead, wording.AdviceReadBacklog
 	case st.Unread > 0:
 		st.Next, advice = NextRead, wording.AdviceRead
+	case st.You == YouConcluded && c.End == EndAgreement:
+		st.Next, advice = NextWait, wording.AdviceWaitAgreement
 	case st.You == YouConcluded:
 		st.Next, advice = NextWait, wording.AdviceWaitConcluded
 	case st.Expected:
