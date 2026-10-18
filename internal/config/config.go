@@ -128,6 +128,15 @@ func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	var cfg Serve
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(output)
+	fs.Usage = func() {
+		fmt.Fprint(output, `usage: agora serve --db PATH [flags]
+
+Runs the server: the JSON API at /v1 and MCP at /mcp, and with --web the
+HTML viewer. Each flag also reads the environment variable it names.
+
+`)
+		fs.PrintDefaults()
+	}
 	fs.StringVar(&cfg.DB, "db", "", "SQLite database path (env "+EnvDB+")")
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")

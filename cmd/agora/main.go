@@ -126,9 +126,17 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runMigrate(ctx, args[1:], stdout, stderr)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
-	case "version":
-		fmt.Fprintln(stdout, version)
-		return 0
+	case "version", "--version":
+		switch {
+		case len(args) == 1:
+			fmt.Fprintln(stdout, version)
+			return 0
+		case args[1] == "-h" || args[1] == "--help":
+			fmt.Fprintln(stdout, "usage: agora version")
+			return 0
+		}
+		fmt.Fprintf(stderr, "agora version: unexpected argument %q\n", args[1])
+		return 2
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0

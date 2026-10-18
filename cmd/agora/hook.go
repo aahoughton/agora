@@ -38,9 +38,8 @@ type hookState struct {
 }
 
 func runHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv config.Getenv) int {
-	if len(args) == 0 || args[0] != "stop" {
-		fmt.Fprintln(stderr, "usage: agora hook stop [--agent NAME] [flags]")
-		return exitUsage
+	if code, ok := groupUsage(args, "stop", "usage: agora hook stop [--agent NAME] [flags]\n", stdout, stderr); !ok {
+		return code
 	}
 	fs := flag.NewFlagSet("hook stop", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -66,6 +65,9 @@ never traps a session.
 	patience := fs.Int("patience", defaultPatience, "blocks in a row with no progress before the session may stop (1-20)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
 	}
 	if *patience < 1 || *patience > 20 {
 		return flagError(stderr, errors.New("--patience must be between 1 and 20"))

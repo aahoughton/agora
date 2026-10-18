@@ -180,6 +180,15 @@ func waitSummary(d core.Digest) string {
 func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora status --agent NAME [flags]
+
+Prints the agent's status line in each open conversation of the namespace
+where it is expected.
+
+`)
+		fs.PrintDefaults()
+	}
 	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	resolveAgent := config.AgentFlag(fs)
 	if err := fs.Parse(args); err != nil {
@@ -217,9 +226,21 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, get
 func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora health [--url URL]
+
+Checks that the server answers GET /healthz, which needs no token. Exits 0
+when it does, 1 when it does not.
+
+`)
+		fs.PrintDefaults()
+	}
 	resolveClient := config.ClientFlags(fs, 0)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
 	}
 	cc, err := resolveClient(getenv)
 	if err != nil {
@@ -433,10 +454,30 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+const skillsUsage = "usage: agora skills install --client NAME [--dir DIR] [--force]\n"
+
+// groupUsage handles a command group's first argument. It reports ok when
+// args start with the group's one subcommand; otherwise it prints usage, to
+// stdout with exit 0 when asked for help and to stderr with exit 2 when not.
+func groupUsage(args []string, sub, usage string, stdout, stderr io.Writer) (int, bool) {
+	switch {
+	case len(args) > 0 && args[0] == sub:
+		return 0, true
+	case len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
+		fmt.Fprint(stdout, usage)
+		return exitOK, false
+	case len(args) > 0:
+		fmt.Fprintf(stderr, "unknown command %q\n%s", args[0], usage)
+		return exitUsage, false
+	default:
+		fmt.Fprint(stderr, usage)
+		return exitUsage, false
+	}
+}
+
 func runSkills(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "install" {
-		fmt.Fprintln(stderr, "usage: agora skills install --client NAME [--dir DIR] [--force]")
-		return exitUsage
+	if code, ok := groupUsage(args, "install", skillsUsage, stdout, stderr); !ok {
+		return code
 	}
 	fs := flag.NewFlagSet("skills install", flag.ContinueOnError)
 	fs.SetOutput(stderr)

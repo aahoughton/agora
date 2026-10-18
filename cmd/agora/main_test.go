@@ -39,7 +39,20 @@ func TestRunDispatch(t *testing.T) {
 		{"version", []string{"version"}, 0, "dev\n", ""},
 		{"unknown", []string{"bogus"}, 2, "", `unknown command "bogus"`},
 		{"serve bad flag", []string{"serve", "--auth", "ldap"}, 2, "", "unknown auth mode"},
-		{"serve help", []string{"serve", "-h"}, 0, "", "-db"},
+		{"serve help", []string{"serve", "-h"}, 0, "", "usage: agora serve"},
+		{"version flag", []string{"--version"}, 0, "dev\n", ""},
+		{"version help", []string{"version", "-h"}, 0, "usage: agora version", ""},
+		{"version argument", []string{"version", "x"}, 2, "", "unexpected argument"},
+		{"status help", []string{"status", "-h"}, 0, "", "usage: agora status"},
+		{"health help", []string{"health", "-h"}, 0, "", "usage: agora health"},
+		{"health argument", []string{"health", "x"}, 2, "", "unexpected argument"},
+		{"skills help", []string{"skills", "-h"}, 0, "usage: agora skills install", ""},
+		{"skills alone", []string{"skills"}, 2, "", "usage: agora skills install"},
+		{"skills unknown", []string{"skills", "remove"}, 2, "", `unknown command "remove"`},
+		{"hook help", []string{"hook", "--help"}, 0, "usage: agora hook stop", ""},
+		{"admin leaf help", []string{"admin", "tokens", "issue", "-h"}, 0, "", "usage: agora admin tokens issue ACCOUNT"},
+		{"admin status help", []string{"admin", "status", "-h"}, 0, "", "usage: agora admin status"},
+		{"admin bootstrap help", []string{"admin", "bootstrap", "-h"}, 0, "", "usage: agora admin bootstrap --db PATH"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
