@@ -494,6 +494,63 @@
   ]
 }
 
+## GET /v1/namespaces/default/search?q=lru&order=oldest&limit=1 -> OK
+{
+  "hits": [
+    {
+      "author": "alice",
+      "conversation": "design",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "say",
+      "seq": 4,
+      "snippet": [
+        {
+          "match": true,
+          "text": "LRU"
+        },
+        {
+          "text": " or LFU?"
+        }
+      ],
+      "your_account": false
+    }
+  ],
+  "next": "o1893553445000.4",
+  "total": 2
+}
+
+## GET /v1/namespaces/default/search?q=budget&author=root -> OK
+{
+  "hits": [
+    {
+      "author": "root",
+      "conversation": "design",
+      "created_at": "2030-01-02T03:04:05Z",
+      "kind": "observer",
+      "seq": 5,
+      "snippet": [
+        {
+          "text": "mind the "
+        },
+        {
+          "match": true,
+          "text": "budget"
+        }
+      ],
+      "your_account": false
+    }
+  ],
+  "total": 1
+}
+
+## GET /v1/namespaces/default/search?q=%22%22 -> Bad Request
+{
+  "error": {
+    "code": "invalid",
+    "message": "query has no words to search for"
+  }
+}
+
 ## POST /v1/namespaces/default/conversations/design/conclude -> OK
 {
   "conversation": "design",
@@ -607,7 +664,7 @@
       "client": "Go-http-client/1.1",
       "first_seen": "2030-01-02T03:04:05Z",
       "last_seen": "2030-01-02T03:04:05Z",
-      "requests": 11,
+      "requests": 14,
       "surface": "api"
     }
   ],

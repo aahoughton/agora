@@ -321,6 +321,29 @@ func (c *Client) ListConversations(ctx context.Context, ns string, lp core.ListP
 	return out, err
 }
 
+// Search returns a page of the messages in namespace ns that match
+// sp.Query.
+func (c *Client) Search(ctx context.Context, ns string, sp core.SearchParams) (core.SearchPage, error) {
+	q := url.Values{"q": {sp.Query}}
+	for k, v := range map[string]string{"conversation": sp.Conversation, "author": sp.Author, "order": sp.Order, "cursor": sp.Cursor} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if sp.Since != nil {
+		q.Set("since", sp.Since.Format(time.RFC3339Nano))
+	}
+	if sp.Until != nil {
+		q.Set("until", sp.Until.Format(time.RFC3339Nano))
+	}
+	if sp.Limit != 0 {
+		q.Set("limit", strconv.Itoa(sp.Limit))
+	}
+	var out core.SearchPage
+	err := c.do(ctx, http.MethodGet, "/v1/namespaces/"+url.PathEscape(ns)+"/search", q, nil, &out)
+	return out, err
+}
+
 // GetConversation returns one conversation with its participants.
 func (c *Client) GetConversation(ctx context.Context, ns, conv string) (core.Conversation, error) {
 	var out core.Conversation

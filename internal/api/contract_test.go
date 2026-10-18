@@ -129,6 +129,9 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call("GET", c+"/messages?tail=2", nil)
 	call("GET", c+"/follow?after=4&timeout=0", nil)
 	call("GET", "/v1/namespaces/default/status?agent=bob", nil)
+	call("GET", "/v1/namespaces/default/search?q=lru&order=oldest&limit=1", nil)
+	call("GET", "/v1/namespaces/default/search?q=budget&author=root", nil)
+	call("GET", "/v1/namespaces/default/search?q=%22%22", nil)
 	call("POST", c+"/conclude", map[string]any{"agent": "bob", "body": "AGREED: LRU"})
 	call("POST", c+"/leave", map[string]any{"agent": "bob"})
 	token = root.Secret

@@ -94,6 +94,7 @@ var routes = []route{
 	{"GET", "/v1/namespaces/{ns}/conversations", (*handler).listConversations},
 	{"POST", "/v1/namespaces/{ns}/conversations", (*handler).start},
 	{"GET", "/v1/namespaces/{ns}/status", (*handler).status},
+	{"GET", "/v1/namespaces/{ns}/search", (*handler).search},
 	{"GET", convPath, (*handler).getConversation},
 	{"GET", convPath + "/messages", (*handler).read},
 	{"POST", convPath + "/messages", (*handler).say},
