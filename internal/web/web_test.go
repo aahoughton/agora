@@ -717,3 +717,27 @@ func TestViewerStatusesMatchTheAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestObserverCookieFollowsSecureCookies(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		t.Run(fmt.Sprint(secure), func(t *testing.T) {
+			e := newEnv(t, web.Options{SecureCookies: secure})
+			e.seed()
+			form := url.Values{"name": {"sam"}, "body": {"try ARC too"}}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, e.url+"/n/default/c/cache/observe", strings.NewReader(form.Encode()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			resp, err := e.c.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			cookie := resp.Header.Get("Set-Cookie")
+			if !strings.Contains(cookie, "sam") || strings.Contains(cookie, "Secure") != secure {
+				t.Fatalf("Set-Cookie = %q", cookie)
+			}
+		})
+	}
+}

@@ -575,7 +575,7 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 	if account == "" {
 		http.SetCookie(w, &http.Cookie{
 			Name: observerCookie, Value: observer, Path: "/", MaxAge: 365 * 24 * 3600,
-			HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: v.opts.SecureCookies,
 		})
 	}
 	// The page's script posts in the background and needs success told
