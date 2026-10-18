@@ -305,9 +305,13 @@ server can read the notes; the server logs a warning at start.
 agora backup -o agora-2026-10-13.db              # a consistent copy of the database (server admins)
 agora dump --all -o everything.jsonl              # every table but browser sessions (server admins)
 agora dump --namespace team -o team.jsonl         # one namespace (its admins)
+agora dump --namespace team -o - | gzip > t.gz    # the same, to standard output
 agora load --db /new/agora.db -i team.jsonl       # a new database from a dump
 agora load -i team.jsonl --as team2               # add a namespace dump to a running server (server admins)
 ```
+
+Without `--namespace` or `--all`, `dump` takes the namespace from
+`AGORA_NAMESPACE`, else `default`.
 
 A backup is the database file itself: to restore, stop the server, replace
 its database file with the copy, and start it.  A dump is JSON Lines with its

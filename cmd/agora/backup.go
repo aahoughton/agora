@@ -85,29 +85,43 @@ func runDump(ctx context.Context, args []string, stdout, stderr io.Writer, geten
 	fs := flag.NewFlagSet("dump", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora dump (--namespace NAME | --all) -o FILE [flags]
+		fmt.Fprint(stderr, `usage: agora dump [--namespace NAME | --all] -o FILE [flags]
 
 Downloads a dump of one namespace (namespace admins) or of everything
 (server admins), for agora load. A namespace dump carries conversations,
 participants and messages without any account, role or token, so loading
 it grants nothing. A full dump carries everything but browser sessions,
-including token hashes. The file is written with mode 0600.
+including token hashes. The file is written with mode 0600; -o - writes
+the dump to standard output instead.
 
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken) // --namespace names the namespace to dump
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	all := fs.Bool("all", false, "dump everything instead of one namespace")
-	out := fs.String("o", "", "file to write (required; must not exist)")
+	out := fs.String("o", "", "file to write (required; must not exist), or - for standard output")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
-	nsSet := false
-	fs.Visit(func(f *flag.Flag) { nsSet = nsSet || f.Name == "namespace" })
-	if fs.NArg() > 0 || *out == "" || *all == nsSet {
-		return flagError(stderr, errors.New("give exactly one of --namespace NAME or --all, and -o FILE"))
+	nsFlag := false
+	fs.Visit(func(f *flag.Flag) { nsFlag = nsFlag || f.Name == "namespace" })
+	if fs.NArg() > 0 || *out == "" {
+		return flagError(stderr, errors.New("-o FILE is required, and nothing else"))
 	}
-	cc, err := resolveClient(getenv)
+	if *all && nsFlag {
+		return flagError(stderr, errors.New("give --namespace or --all, not both"))
+	}
+	env := getenv
+	if *all {
+		// --all overrides a namespace from the environment, valid or not.
+		env = func(k string) string {
+			if k == config.EnvNamespace {
+				return ""
+			}
+			return getenv(k)
+		}
+	}
+	cc, err := resolveClient(env)
 	if err != nil {
 		return flagError(stderr, err)
 	}
@@ -118,6 +132,13 @@ including token hashes. The file is written with mode 0600.
 	ns := ""
 	if !*all {
 		ns = cc.Namespace
+	}
+	if *out == "-" {
+		if err := cl.Dump(ctx, ns, stdout); err != nil {
+			fmt.Fprintln(stderr, "agora dump:", err)
+			return exitError
+		}
+		return exitOK
 	}
 	if err := writeNewFile(*out, func(w io.Writer) error { return cl.Dump(ctx, ns, w) }); err != nil {
 		fmt.Fprintln(stderr, "agora dump:", err)

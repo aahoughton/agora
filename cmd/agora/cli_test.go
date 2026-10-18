@@ -700,17 +700,51 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	}
 	_ = db.Close()
 
-	for _, bad := range [][]string{{"dump", "-o", "x"}, {"dump", "--all", "--namespace", "default", "-o", "x"}, {"dump", "--all"}} {
+	for _, bad := range [][]string{{"dump", "--all", "--namespace", "default", "-o", "x"}, {"dump", "--all"}, {"dump"}} {
 		if r := cli(with, bad...); r.code != exitUsage {
 			t.Fatalf("%v = %+v", bad, r)
 		}
 	}
 	full, part := filepath.Join(dir, "full.jsonl"), filepath.Join(dir, "default.jsonl")
-	if r := cli(with, "dump", "--all", "-o", full); r.code != exitOK {
+	// --all wins over a namespace from the environment.
+	withNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "elsewhere"}
+	if r := cli(withNS, "dump", "--all", "-o", full); r.code != exitOK {
 		t.Fatalf("dump --all = %+v", r)
+	}
+	badNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "bad/name"}
+	if r := cli(badNS, "dump", "--all", "-o", filepath.Join(dir, "all2.jsonl")); r.code != exitOK {
+		t.Fatalf("dump --all with an invalid AGORA_NAMESPACE = %+v", r)
 	}
 	if r := cli(with, "dump", "--namespace", "default", "-o", part); r.code != exitOK {
 		t.Fatalf("dump --namespace = %+v", r)
+	}
+	// Without --namespace, the namespace comes from the environment, then
+	// the default.
+	fromEnv := filepath.Join(dir, "env.jsonl")
+	envDefault := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "default"}
+	if r := cli(envDefault, "dump", "-o", fromEnv); r.code != exitOK {
+		t.Fatalf("dump with AGORA_NAMESPACE = %+v", r)
+	}
+	if r := cli(withNS, "dump", "-o", filepath.Join(dir, "missing.jsonl")); r.code != exitError {
+		t.Fatalf("dump of a missing namespace from the environment = %+v", r)
+	}
+	plain := filepath.Join(dir, "plain.jsonl")
+	if r := cli(with, "dump", "-o", plain); r.code != exitOK {
+		t.Fatalf("dump of the default namespace = %+v", r)
+	}
+	for _, f := range []string{fromEnv, plain} {
+		if got, want := dumpBody(t, f), dumpBody(t, part); got != want {
+			t.Fatalf("%s differs from the --namespace default dump:\n%s\nwant\n%s", f, got, want)
+		}
+	}
+	// -o - writes the dump to stdout, which load reads from stdin.
+	r := cli(with, "dump", "--namespace", "default", "-o", "-")
+	if r.code != exitOK || !strings.HasPrefix(r.stdout, "{") {
+		t.Fatalf("dump -o - = %+v", r)
+	}
+	piped := filepath.Join(dir, "piped.db")
+	if r := runCLIInput(t.Context(), url, r.stdout, nil, "load", "--db", piped); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
+		t.Fatalf("load of a piped dump = %+v", r)
 	}
 
 	loaded := filepath.Join(dir, "loaded.db")
@@ -755,6 +789,18 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("a failed load left %s: %v", target, err)
 	}
+}
+
+// dumpBody is a dump file without its header line, which records when it
+// was made.
+func dumpBody(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ := strings.Cut(string(raw), "\n")
+	return body
 }
 
 func TestMigrate(t *testing.T) {
