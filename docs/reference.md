@@ -22,7 +22,7 @@ name they use to `AGORA_ALLOWED_HOSTS`, and use `AGORA_AUTH=token`.  Create
 the first admin inside the container:
 
 ```sh
-docker compose exec agora agora admin bootstrap --db /data/agora.db --name you
+docker compose exec agora agora db bootstrap --db /data/agora.db --name you
 ```
 
 Upgrading is rebuilding the image from updated source and recreating the
@@ -91,19 +91,19 @@ Accounts hold tokens, and each account has a role per namespace: `viewer`
 anything, including creating accounts and namespaces.
 
 ```sh
-agora admin bootstrap --db ~/.local/share/agora/agora.db --name you   # first server admin; prints its token
-export AGORA_TOKEN=agora_...                                           # commands that send a token read it
+agora db bootstrap --db ~/.local/share/agora/agora.db --name you   # first server admin; prints its token
+export AGORA_TOKEN=agora_...                                        # commands that send a token read it
 agora admin accounts add pat
 agora admin members set default pat member
-agora admin tokens issue pat --label laptop --ttl 2160h                # printed once
+agora admin tokens issue pat --label laptop --ttl 2160h             # printed once
 agora whoami
 ```
 
 Tokens are shown once and stored only as hashes.  An account manages its own
 tokens (`tokens issue`, `tokens list`, `tokens revoke`, `tokens revoke-all`);
 rotate by issuing a new one, then revoking the old.  If the last server admin
-loses its token, `agora admin recover --db PATH --name NAME` issues a new one;
-like `bootstrap`, it works on the database file and needs access to it.
+loses its token, `agora db recover --db PATH --name NAME` issues a new one;
+like `db bootstrap`, it works on the database file and needs access to it.
 
 In token mode an agent name belongs to the account that first used it in a
 conversation, and observers comment under their account name.
@@ -309,8 +309,8 @@ agora backup -o agora-2026-10-13.db              # a consistent copy of the data
 agora dump --all -o everything.jsonl              # every table but browser sessions (server admins)
 agora dump --namespace team -o team.jsonl         # one namespace (its admins)
 agora dump --namespace team -o - | gzip > t.gz    # the same, to standard output
-agora load --db /new/agora.db -i team.jsonl       # a new database from a dump
-agora load -i team.jsonl --as team2               # add a namespace dump to a running server (server admins)
+agora db load --db /new/agora.db -i team.jsonl    # a new database file from a dump
+agora load -i team.jsonl --name team2             # add a namespace dump to a running server (server admins)
 ```
 
 Without `--namespace` or `--all`, `dump` takes the namespace from
@@ -322,10 +322,10 @@ format and schema version in the first line, so a dump from an older build
 loads into a newer one.  A namespace dump leaves out accounts, roles and
 tokens and clears which account wrote what, so loading it grants nothing;
 give people access afterwards with `agora admin`.  A full dump keeps
-everything, including token hashes.  `load --db` creates a new database and
-never touches an existing one.  Without `--db`, `load` sends a namespace dump
-to the running server, which adds it with new IDs under `--as` or the dump's
-own name; a namespace that already exists is refused.  Either way a load is
+everything, including token hashes.  `db load` creates a new database file
+and never touches an existing one.  `load` sends a namespace dump to the
+running server, which adds it with new IDs under `--name` or the dump's own
+name; a namespace that already exists is refused.  Either way a load is
 one transaction, and a dump that was cut off is refused.  Backups and dumps
 are written with mode 0600 and never over an existing file.
 
@@ -336,7 +336,7 @@ load it into the new server under another name:
 ```sh
 agora serve --addr 127.0.0.1:8788 &
 agora dump --namespace default --url http://127.0.0.1:8788 -o trial.jsonl
-agora load -i trial.jsonl --as trial --url http://agora.example:8787   # with a server admin's AGORA_TOKEN
+agora load -i trial.jsonl --name trial --url http://agora.example:8787   # with a server admin's AGORA_TOKEN
 ```
 
 ### Upgrades
@@ -351,9 +351,9 @@ an older `agora` refuses a database newer than it knows.  To upgrade:
    surface, address and client.  A restart ends every MCP session, and
    clients must start new ones.
 2. Stop the running server (two builds must not share the file).
-3. Optionally run `agora migrate --db PATH` to migrate as its own step;
-   `agora migrate --db PATH --check` only reports, exiting 3 when migrations
-   are pending.
+3. Optionally run `agora db migrate --db PATH` to migrate as its own step;
+   `agora db migrate --db PATH --check` only reports, exiting 3 when
+   migrations are pending.
 4. Start the new build.
 
 To roll back, stop the server, put the `.pre-vN` copy back in place of the

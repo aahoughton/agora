@@ -627,7 +627,7 @@ func (s *Service) ListMemberships(ctx context.Context, p Principal, ns string) (
 }
 
 // Bootstrap creates the first account, a server admin, and its first token.
-// It refuses if any account exists. It is for `agora admin bootstrap`,
+// It refuses if any account exists. It is for `agora db bootstrap`,
 // which runs against the database directly.
 func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, error) {
 	var t IssuedToken
@@ -637,7 +637,7 @@ func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, erro
 			return err
 		}
 		if n > 0 {
-			return errorf(CodeAccountExists, "accounts already exist; use agora admin with a server admin's token, or agora admin recover")
+			return errorf(CodeAccountExists, "accounts already exist; use agora admin with a server admin's token, or agora db recover")
 		}
 		a, err := s.insertAccount(ctx, tx, name, true)
 		if err != nil {
@@ -650,7 +650,7 @@ func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, erro
 }
 
 // Recover re-enables an account, makes it a server admin and issues it a
-// new token. It is for `agora admin recover`, which runs against the
+// new token. It is for `agora db recover`, which runs against the
 // database directly, for when no usable server admin token is left.
 func (s *Service) Recover(ctx context.Context, name string) (IssuedToken, error) {
 	var t IssuedToken

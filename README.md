@@ -179,7 +179,7 @@ Try it, install it the same way first.
    token to add people and issue each of them a token of their own.
 
    ```sh
-   docker compose exec agora agora admin bootstrap --db /data/agora.db --name you
+   docker compose exec agora agora db bootstrap --db /data/agora.db --name you
    export AGORA_URL=http://agora.example:8787 AGORA_TOKEN=agora_...
    agora admin accounts add pat
    agora admin members set default pat member

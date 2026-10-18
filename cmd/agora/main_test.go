@@ -52,7 +52,13 @@ func TestRunDispatch(t *testing.T) {
 		{"hook help", []string{"hook", "--help"}, 0, "usage: agora hook stop", ""},
 		{"admin leaf help", []string{"admin", "tokens", "issue", "-h"}, 0, "", "usage: agora admin tokens issue ACCOUNT"},
 		{"admin status help", []string{"admin", "status", "-h"}, 0, "", "usage: agora admin status"},
-		{"admin bootstrap help", []string{"admin", "bootstrap", "-h"}, 0, "", "usage: agora admin bootstrap --db PATH"},
+		{"db bootstrap help", []string{"db", "bootstrap", "-h"}, 0, "", "usage: agora db bootstrap --db PATH"},
+		{"db help", []string{"db", "help"}, 0, "usage: agora db", ""},
+		{"db alone", []string{"db"}, 2, "", "usage: agora db"},
+		{"db load argument", []string{"db", "load", "--db", "x.db", "extra"}, 2, "", `unexpected argument "extra"`},
+		{"db migrate argument", []string{"db", "migrate", "--db", "x.db", "extra"}, 2, "", `unexpected argument "extra"`},
+		{"old migrate", []string{"migrate", "--db", "x"}, 2, "", `unknown command "migrate"`},
+		{"old admin bootstrap", []string{"admin", "bootstrap", "--db", "x", "--name", "n"}, 2, "", `unknown command "bootstrap"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

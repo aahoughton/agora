@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,18 +16,14 @@ import (
 	"github.com/aahoughton/agora/internal/client"
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
 )
 
 const adminUsage = `usage: agora admin <command> [flags]
 
-Against the database file, for setting up and recovering a server in
-auth mode token (they work while the server runs):
-  bootstrap --db PATH --name NAME   create the first server admin and its token
-  recover   --db PATH --name NAME   re-enable an account as server admin, with a new token
-
 Through a running server (--url or AGORA_URL), with a token (--token or
-AGORA_TOKEN):
+AGORA_TOKEN). To create the first server admin, or recover one, use agora
+db bootstrap or agora db recover.
+
   status [--json]                   who is using the server: recent callers,
                                     open MCP sessions, waiting agents, viewers
   accounts list
@@ -59,8 +54,6 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 		return exitUsage
 	}
 	switch args[0] {
-	case "bootstrap", "recover":
-		return runAdminLocal(ctx, args[0], args[1:], stdout, stderr)
 	case "accounts", "tokens", "members", "namespaces", "feedback":
 		return runAdminRemote(ctx, args, stdout, stderr, getenv)
 	case "status":
@@ -72,45 +65,6 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 		fmt.Fprintf(stderr, "agora admin: unknown command %q\n\n%s", args[0], adminUsage)
 		return exitUsage
 	}
-}
-
-func runAdminLocal(ctx context.Context, cmd string, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("admin "+cmd, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprintf(stderr, "usage: agora admin %s --db PATH --name NAME\n\n", cmd)
-		fs.PrintDefaults()
-	}
-	dbPath := fs.String("db", "", "the server's database file (required; it must exist)")
-	name := fs.String("name", "", "account name (required)")
-	if err := fs.Parse(args); err != nil {
-		return flagError(stderr, err)
-	}
-	if fs.NArg() > 0 {
-		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
-	}
-	if *dbPath == "" || *name == "" {
-		return flagError(stderr, errors.New("--db and --name are required"))
-	}
-	db, err := store.OpenExisting(ctx, *dbPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "agora admin:", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-	svc := core.New(db, core.Options{Policy: core.RolePolicy()})
-	var tok core.IssuedToken
-	if cmd == "bootstrap" {
-		tok, err = svc.Bootstrap(ctx, *name)
-	} else {
-		tok, err = svc.Recover(ctx, *name)
-	}
-	if err != nil {
-		fmt.Fprintln(stderr, "agora admin:", err)
-		return exitError
-	}
-	fmt.Fprintf(stdout, "%s is a server admin. Its token (shown once):\n%s\n", tok.Account, tok.Secret)
-	return exitOK
 }
 
 // adminRun is what a remote admin command does with its arguments.

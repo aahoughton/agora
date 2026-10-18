@@ -88,9 +88,9 @@ func runDump(ctx context.Context, args []string, stdout, stderr io.Writer, geten
 		fmt.Fprint(stderr, `usage: agora dump [--namespace NAME | --all] -o FILE [flags]
 
 Downloads a dump of one namespace (namespace admins) or of everything
-(server admins), for agora load. A namespace dump carries conversations,
-participants and messages without any account, role or token, so loading
-it grants nothing. A full dump carries everything but browser sessions,
+(server admins), for agora load or agora db load. A namespace dump
+carries conversations, participants and messages without any account,
+role or token, so loading it grants nothing. A full dump carries everything but browser sessions,
 including token hashes. The file is written with mode 0600; -o - writes
 the dump to standard output instead.
 
@@ -152,23 +152,18 @@ func runLoad(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	fs := flag.NewFlagSet("load", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora load --db PATH [-i FILE]
-       agora load [--as NAME] [-i FILE]
+		fmt.Fprint(stderr, `usage: agora load [-i FILE] [--name NAME] [flags]
 
-With --db, creates a new database at PATH from a dump (agora dump), in one
-transaction, then migrates it to this build's schema. PATH must not
-exist. Point agora serve at it to use it.
-
-Without --db, adds a namespace dump to a running server (--url, with a
-server admin's --token), as namespace --as or the dump's own name, which
-must not exist there yet.
+Adds a namespace dump (agora dump --namespace) to a running server, with a
+server admin's token, as namespace --name or the dump's own name, which must
+not exist there yet. To make a new database file from a dump, use agora db
+load.
 
 `)
 		fs.PrintDefaults()
 	}
 	resolveClient := config.ClientFlags(fs, config.WithToken)
-	dbPath := fs.String("db", "", "database file to create (must not exist)")
-	as := fs.String("as", "", "without --db: the namespace's name on the server (default: the dump's)")
+	name := fs.String("name", "", "the namespace's name on the server (default: the dump's)")
 	in := fs.String("i", "", "dump file to read (default: standard input)")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
@@ -176,58 +171,40 @@ must not exist there yet.
 	if fs.NArg() > 0 {
 		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
 	}
-	src := stdin
-	if *in != "" {
-		f, err := os.Open(*in)
-		if err != nil {
-			fmt.Fprintln(stderr, "agora load:", err)
-			return exitError
-		}
-		defer func() { _ = f.Close() }()
-		src = f
-	}
-	if *dbPath == "" {
-		cc, err := resolveClient(getenv)
-		if err != nil {
-			return flagError(stderr, err)
-		}
-		cl, err := client.New(cc.URL, cc.Token)
-		if err != nil {
-			return flagError(stderr, err)
-		}
-		res, err := cl.LoadNamespace(ctx, src, *as)
-		if err != nil {
-			fmt.Fprintln(stderr, "agora load:", err)
-			return exitError
-		}
-		fmt.Fprintf(stdout, "loaded namespace %s into %s: %d conversations, %d messages\n",
-			res.Namespace, cl.URL(), res.Conversations, res.Messages)
-		return exitOK
-	}
-	if *as != "" {
-		return flagError(stderr, errors.New("--as applies only when loading into a server (without --db)"))
-	}
-	if _, err := os.Lstat(*dbPath); err == nil {
-		fmt.Fprintf(stderr, "agora load: %s exists; load creates a new database\n", *dbPath)
-		return exitError
-	}
-	r := bufio.NewReaderSize(src, 1<<20)
-	h, err := core.ReadDumpHeader(r, store.LatestVersion())
+	cc, err := resolveClient(getenv)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora", err)
-		return exitError
+		return flagError(stderr, err)
 	}
-	n, err := loadNew(ctx, *dbPath, h, r)
+	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora", err)
+		return flagError(stderr, err)
+	}
+	src, closeSrc, err := openInput(*in, stdin)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora load:", err)
 		return exitError
 	}
-	scope := "everything"
-	if h.Namespace != "" {
-		scope = "namespace " + h.Namespace
+	defer closeSrc()
+	res, err := cl.LoadNamespace(ctx, src, *name)
+	if err != nil {
+		fmt.Fprintln(stderr, "agora load:", err)
+		return exitError
 	}
-	fmt.Fprintf(stdout, "loaded %d rows (%s, schema %d) into %s\n", n, scope, h.Schema, *dbPath)
+	fmt.Fprintf(stdout, "loaded namespace %s into %s: %d conversations, %d messages\n",
+		res.Namespace, cl.URL(), res.Conversations, res.Messages)
 	return exitOK
+}
+
+// openInput opens path, or returns stdin when path is empty.
+func openInput(path string, stdin io.Reader) (io.Reader, func(), error) {
+	if path == "" {
+		return stdin, func() {}, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, func() { _ = f.Close() }, nil
 }
 
 // loadNew builds the database in a private directory beside path, from a
@@ -275,7 +252,7 @@ func loadNew(ctx context.Context, path string, h core.DumpHeader, r *bufio.Reade
 	}
 	if err := os.Link(tmp, path); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return 0, fmt.Errorf("load: %s exists; load creates a new database", path)
+			return 0, fmt.Errorf("%s exists; db load creates a new database", path)
 		}
 		return 0, err
 	}
