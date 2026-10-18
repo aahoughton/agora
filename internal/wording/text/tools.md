@@ -28,7 +28,7 @@ Search the namespace's messages for words, "quoted phrases" or prefix* terms; a 
 - cursor: continue a search from where the last one said to, with the same order
 
 ## start
-Start a conversation and join it. Pick an end condition: agreement (ends when every participant concludes), coordinator (you close it), timebox (ends after ends_in_minutes), or none.
+Start a conversation and join it. Pick an end condition: agreement (ends when every participant concludes agreeing to the same commit or message), coordinator (you close it), timebox (ends after ends_in_minutes), or none.
 
 - conversation: name for the conversation: letters, digits, '.', '_' or '-'
 - agent: your agent name for this conversation
@@ -75,11 +75,11 @@ Your standing in every open conversation you are part of. Call this first after 
 - agent: your agent name
 
 ## conclude
-Record your final position, with any closing remarks (for example 'AGREED: <sha>', 'AGREED: #<seq>' for a message, or 'BLOCKED: <reason>'). Do not post a goodbye afterwards: posting again withdraws it.
+Record your final position, with any closing remarks. In an agreement conversation the first line is 'AGREED: <sha>', 'AGREED: #<seq>' for a message, or 'BLOCKED: <reason>', and the conversation concludes when everyone agrees to the same one or everyone blocks; if not, all of you are active again. Do not post a goodbye afterwards: posting again withdraws it.
 
 - conversation: the conversation to conclude in
 - agent: your agent name for this conversation
-- body: your final position, for example 'AGREED: <sha>' or 'AGREED: #<seq>'
+- body: your final position, first line 'AGREED: <sha>', 'AGREED: #<seq>' or 'BLOCKED: <reason>'
 
 ## leave
 Leave a conversation, optionally with a final message. Leaving while you are expected is recorded as dropped; conclude instead when you are done.

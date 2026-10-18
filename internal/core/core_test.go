@@ -390,7 +390,7 @@ func TestAgreementLifecycle(t *testing.T) {
 	ctx := t.Context()
 	f.start(t, "c", core.EndAgreement, "alice", "bob")
 
-	st := must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc123"}))
+	st := must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}))
 	if st.You != core.YouConcluded || st.Expected || st.Status != core.StatusOpen {
 		t.Fatalf("after alice concludes: %+v", st)
 	}
@@ -401,8 +401,8 @@ func TestAgreementLifecycle(t *testing.T) {
 		t.Fatalf("after withdraw: %+v", res.Standing)
 	}
 
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: def456"}))
-	st = must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "AGREED: def456"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: def4567"}))
+	st = must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "AGREED: def4567"}))
 	// bob has not read alice's messages yet, so he is told to read first.
 	if st.Status != core.StatusConcluded || st.Next != core.NextRead {
 		t.Fatalf("after both conclude: %+v", st)
@@ -436,7 +436,7 @@ func TestLeavingWhileExpectedIsDropped(t *testing.T) {
 		t.Fatalf("host: %+v", st)
 	}
 
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "done"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}))
 	st = must[core.Standing](t)(f.svc.Leave(ctx, f.p, "default", "c", core.LeaveParams{Agent: "bob"}))
 	if st.You != core.YouDropped {
 		t.Fatalf("bob: %+v", st)
@@ -624,7 +624,7 @@ func TestListFiltersByStatus(t *testing.T) {
 	f := newFixture(t, core.Options{})
 	ctx := t.Context()
 	f.start(t, "done", core.EndAgreement, "alice")
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "done", core.ConcludeParams{Agent: "alice", Body: "ok"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "done", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}))
 	must[core.Standing](t)(f.svc.Leave(ctx, f.p, "default", "done", core.LeaveParams{Agent: "alice"}))
 	f.clock.Advance(time.Minute)
 	must[core.Conversation](t)(f.svc.Start(ctx, f.p, "default", core.StartParams{
@@ -928,8 +928,8 @@ func TestConcludedWithUnreadSaysRead(t *testing.T) {
 	ctx := t.Context()
 	f.start(t, "c", core.EndAgreement, "alice", "bob")
 	must[core.ReadResult](t)(f.svc.Read(ctx, f.p, "default", "c", core.ReadParams{Agent: "alice", Limit: core.MaxReadLimit}))
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED"}))
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "AGREED, with caveat X"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: #3"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "AGREED: #3, with caveat X"}))
 
 	d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "alice", Timeout: time.Second}))
 	if d.Standing.Status != core.StatusConcluded || d.Standing.Next != core.NextRead || d.Standing.Unread == 0 {
@@ -989,7 +989,7 @@ func TestLeavingWithAMessageWithdrawsAConclusion(t *testing.T) {
 	f := newFixture(t, core.Options{})
 	ctx := t.Context()
 	f.start(t, "c", core.EndAgreement, "host", "alice", "bob")
-	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}))
 
 	st := must[core.Standing](t)(f.svc.Leave(ctx, f.p, "default", "c", core.LeaveParams{Agent: "alice", Body: "I withdraw my approval"}))
 	if st.You != core.YouDropped {

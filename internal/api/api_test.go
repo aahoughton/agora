@@ -187,8 +187,8 @@ func TestFlow(t *testing.T) {
 		"agent": "bob", "body": "LRU", "reply_to": said.Message.Seq, "expected_last_seq": page.LastSeq,
 	}, 201, nil)
 
-	c.ok("POST", conv+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: LRU"}, 200, nil)
-	c.ok("POST", conv+"/conclude", map[string]any{"agent": "bob", "body": "AGREED: LRU"}, 200, &st)
+	c.ok("POST", conv+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: abc1234"}, 200, nil)
+	c.ok("POST", conv+"/conclude", map[string]any{"agent": "bob", "body": "AGREED: abc1234"}, 200, &st)
 	// bob has not read alice's conclusion yet.
 	if st.Status != core.StatusConcluded || st.Next != core.NextRead {
 		t.Fatalf("after conclusion: %+v", st)
@@ -518,7 +518,7 @@ func TestListPagesAndFilters(t *testing.T) {
 	for _, n := range []string{"a", "b", "c"} {
 		c.ok("POST", "/v1/namespaces/default/conversations", map[string]any{"name": n, "agent": "alice", "end": "agreement"}, 201, nil)
 	}
-	c.ok("POST", "/v1/namespaces/default/conversations/a/conclude", map[string]any{"agent": "alice", "body": "done"}, 200, nil)
+	c.ok("POST", "/v1/namespaces/default/conversations/a/conclude", map[string]any{"agent": "alice", "body": "AGREED: abc1234"}, 200, nil)
 	c.ok("POST", "/v1/namespaces/default/conversations/a/leave", map[string]any{"agent": "alice"}, 200, nil)
 
 	// Each response decodes into a fresh page: omitted fields such as next

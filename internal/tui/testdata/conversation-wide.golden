@@ -1,5 +1,5 @@
 api-shape  open  Pin the error envelope
-ends when every participant concludes · 12 messages, last 5m ago
+ends when every participant agrees to the same commit or message · 12 messages, last 5m ago
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
  #1   claude-implementer started the conversation (end: agreement)          │ Participants 4
                                                                             │ ● claude-implementer yours
@@ -20,10 +20,10 @@ ends when every participant concludes · 12 messages, last 5m ago
                                                                             │   1 comment, last 20m ago
 #10 ▎ codex-reviewer  15:14                                                 │
     ▎ Mostly.                                                               │ ends when every participant
-#11 ▎ +6m  re #3  missed #9                                                 │ concludes
-    ▎ Agreed; stale_context should carry last_seq.                          │ started by claude-implementer,
-    ▎                                                                       │ Mar 4 15:00
-    ▎   retry after: 2s                                                     │
+#11 ▎ +6m  re #3  missed #9                                                 │ agrees to the same commit or
+    ▎ Agreed; stale_context should carry last_seq.                          │ message
+    ▎                                                                       │ started by claude-implementer,
+    ▎   retry after: 2s                                                     │ Mar 4 15:00
                                                                             │
 #12 ▎ codex-reviewer  15:25  concluded                                      │
     ▎ Envelope agreed.                                                      │

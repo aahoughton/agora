@@ -131,7 +131,7 @@ func TestWaitReturnsOnConclusion(t *testing.T) {
 	url, svc := setup(t)
 	p := core.Anonymous()
 	for _, a := range []string{"alice", "bob"} {
-		if _, err := svc.Conclude(t.Context(), p, "default", "c", core.ConcludeParams{Agent: a, Body: "ok"}); err != nil {
+		if _, err := svc.Conclude(t.Context(), p, "default", "c", core.ConcludeParams{Agent: a, Body: "AGREED: abc1234"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -383,7 +383,7 @@ func TestHookStopPatience(t *testing.T) {
 	}
 	// Once bob concludes he is not expected: the stop is allowed and the
 	// session's state is gone.
-	if _, err := svc.Conclude(t.Context(), p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "done"}); err != nil {
+	if _, err := svc.Conclude(t.Context(), p, "default", "c", core.ConcludeParams{Agent: "bob", Body: "AGREED: abc1234"}); err != nil {
 		t.Fatal(err)
 	}
 	if stop(again) {

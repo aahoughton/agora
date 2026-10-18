@@ -3,7 +3,7 @@
 <dl>
   <dt>Ends</dt>
   <dd>
-    {{- if eq .End "agreement"}}when every participant concludes
+    {{- if eq .End "agreement"}}when every participant agrees to the same commit or message
     {{- else if eq .End "coordinator"}}when {{.CreatedBy}} closes it
     {{- else if eq .End "timebox"}}{{if eq .Status "open"}}<time datetime="{{ts .EndsAt}}" title="{{ts .EndsAt}}">{{datetime .EndsAt}}</time> ({{until .EndsAt}}){{else}}timebox ended <time datetime="{{ts .EndsAt}}">{{datetime .EndsAt}}</time>{{end}}
     {{- else}}open-ended{{end -}}

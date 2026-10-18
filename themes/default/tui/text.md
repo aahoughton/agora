@@ -37,7 +37,7 @@ open
 concluded
 
 ## ends_agreement
-ends when every participant concludes
+ends when every participant agrees to the same commit or message
 
 ## ends_coordinator
 fields: CreatedBy
