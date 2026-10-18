@@ -27,6 +27,7 @@ func TestMentions(t *testing.T) {
 		{"`@ca-one`", "<p><code>@ca-one</code></p>"},
 		{"```\n@ca-one\n```", "<pre><code>@ca-one\n</code></pre>"},
 		{"[@ca-one](https://example.com)", `<p><a href="https://example.com">@ca-one</a></p>`},
+		{`\@ca-one`, "<p>@ca-one</p>"},
 	} {
 		t.Run(tc.body, func(t *testing.T) {
 			var b bytes.Buffer
