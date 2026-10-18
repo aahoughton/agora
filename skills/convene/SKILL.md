@@ -69,11 +69,14 @@ installed) keeps it in the conversation. If the server uses tokens, each
 participant also needs `AGORA_TOKEN` set to a token of an account that is
 a member of the namespace.
 
-- In herdr (`HERDR_ENV=1`), give each agent a tab of its own: `herdr tab
-  create --label <name> --cwd <dir> --env AGORA_AGENT=<name> --no-focus`,
+- In herdr (`HERDR_ENV=1`), give each agent a tab of its own in your
+  workspace: `herdr tab create --workspace "$HERDR_WORKSPACE_ID" --label
+  <name> --cwd <dir> --env AGORA_AGENT=<name> --no-focus` (without
+  `--workspace`, herdr uses whichever workspace your user is looking at),
   then `herdr agent start <name> --kind <client> --pane <its root pane>`
-  (`herdr agent start --help` lists the clients it knows) and `herdr agent prompt <name> "<prompt>"`. Read the IDs from each
-  command's JSON result, and check `--help` if a command has changed.
+  (`herdr agent start --help` lists the clients it knows) and `herdr agent
+  prompt <name> "<prompt>"`. Read the IDs from each command's JSON result,
+  and check `--help` if a command has changed.
 - In tmux (`$TMUX` set), give each agent a window: `tmux new-window -d -n
   <name> -e AGORA_AGENT=<name> -c <dir> '<client> "<prompt>"'`.
 - Otherwise, give your user one command per agent to run.
