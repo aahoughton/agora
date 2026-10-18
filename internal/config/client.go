@@ -28,20 +28,40 @@ type Client struct {
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// ClientFlags registers --url, --namespace and --token on fs. Call the
-// returned function after fs.Parse to resolve flag > env > default.
-func ClientFlags(fs *flag.FlagSet) func(Getenv) (Client, error) {
+// ClientFlag selects the optional flags ClientFlags registers.
+type ClientFlag int
+
+const (
+	// WithNamespace registers --namespace, resolved from EnvNamespace
+	// and validated.
+	WithNamespace ClientFlag = 1 << iota
+	// WithToken registers --token, resolved from EnvToken.
+	WithToken
+)
+
+// ClientFlags registers --url on fs, plus --namespace and --token when
+// with asks for them. Call the returned function after fs.Parse to resolve
+// flag > env > default. A flag that is not registered is not read from the
+// environment either, and its field in Client stays empty.
+func ClientFlags(fs *flag.FlagSet, with ClientFlag) func(Getenv) (Client, error) {
 	u := fs.String("url", "", "server URL (env "+EnvURL+", default "+DefaultURL+")")
-	ns := fs.String("namespace", "", "namespace (env "+EnvNamespace+", default default)")
-	tok := fs.String("token", "", "bearer token for a server with --auth token (env "+EnvToken+"; prefer the env var, since flags show in process listings)")
+	var ns, tok *string
+	if with&WithNamespace != 0 {
+		ns = fs.String("namespace", "", "namespace (env "+EnvNamespace+", default default)")
+	}
+	if with&WithToken != 0 {
+		tok = fs.String("token", "", "bearer token for a server with --auth token (env "+EnvToken+"; prefer the env var, since flags show in process listings)")
+	}
 	return func(getenv Getenv) (Client, error) {
-		c := Client{
-			URL:       firstNonEmpty(*u, getenv(EnvURL), DefaultURL),
-			Namespace: firstNonEmpty(*ns, getenv(EnvNamespace), "default"),
-			Token:     firstNonEmpty(*tok, getenv(EnvToken)),
+		c := Client{URL: firstNonEmpty(*u, getenv(EnvURL), DefaultURL)}
+		if ns != nil {
+			c.Namespace = firstNonEmpty(*ns, getenv(EnvNamespace), "default")
+			if !nameRE.MatchString(c.Namespace) {
+				return Client{}, fmt.Errorf("invalid namespace %q", c.Namespace)
+			}
 		}
-		if !nameRE.MatchString(c.Namespace) {
-			return Client{}, fmt.Errorf("invalid namespace %q", c.Namespace)
+		if tok != nil {
+			c.Token = firstNonEmpty(*tok, getenv(EnvToken))
 		}
 		return c, nil
 	}

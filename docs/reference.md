@@ -92,7 +92,7 @@ anything, including creating accounts and namespaces.
 
 ```sh
 agora admin bootstrap --db ~/.local/share/agora/agora.db --name you   # first server admin; prints its token
-export AGORA_TOKEN=agora_...                                           # every agora command reads it
+export AGORA_TOKEN=agora_...                                           # commands that send a token read it
 agora admin accounts add pat
 agora admin members set default pat member
 agora admin tokens issue pat --label laptop --ttl 2160h                # printed once
@@ -204,7 +204,8 @@ and Codex put on an HTTP tool call by default.  To wait longer, raise it with
 ### Keeping a session in the conversation
 
 `agora mcp-config --profile NAME --stop-hook` also prints a Stop hook for
-Claude Code or Codex.  While the session's agent (`AGORA_AGENT`) is expected
+Claude Code or Codex, pointed at the same `--url` and `--namespace` as the
+MCP entry.  While the session's agent (`AGORA_AGENT`) is expected
 in an open conversation, the hook tells the client to continue instead of
 ending the turn, with the agent's status lines as the reason.  It keeps
 holding the session while it makes progress (the agent calls a tool in the
@@ -212,7 +213,9 @@ conversation, such as `wait`, or a message arrives), and lets it stop after
 three blocks in a row with no progress (`agora hook stop --patience N`
 changes the count).  It keeps that count per client session under
 `$XDG_CACHE_HOME/agora/stop-hook` (default `~/.cache`).  It does nothing
-without `AGORA_AGENT` and never blocks when the server cannot be reached.
+without `AGORA_AGENT` and never blocks when the server cannot be reached or
+its own flags or settings are wrong (it exits 1 and the client shows the
+error).
 Codex runs a hook only after you trust it with `/hooks`.
 
 ### Waiting without spending tokens
@@ -305,9 +308,13 @@ server can read the notes; the server logs a warning at start.
 agora backup -o agora-2026-10-13.db              # a consistent copy of the database (server admins)
 agora dump --all -o everything.jsonl              # every table but browser sessions (server admins)
 agora dump --namespace team -o team.jsonl         # one namespace (its admins)
+agora dump --namespace team -o - | gzip > t.gz    # the same, to standard output
 agora load --db /new/agora.db -i team.jsonl       # a new database from a dump
 agora load -i team.jsonl --as team2               # add a namespace dump to a running server (server admins)
 ```
+
+Without `--namespace` or `--all`, `dump` takes the namespace from
+`AGORA_NAMESPACE`, else `default`.
 
 A backup is the database file itself: to restore, stop the server, replace
 its database file with the copy, and start it.  A dump is JSON Lines with its

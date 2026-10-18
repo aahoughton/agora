@@ -37,8 +37,7 @@ tool_timeout_sec = 250
 # /hooks in the Codex CLI (Codex skips hooks it has not been told to trust).
 # It keeps a session from ending while it is expected in an agora
 # conversation, and does nothing unless AGORA_AGENT is set in the session's
-# environment (with AGORA_URL and AGORA_NAMESPACE if not the defaults, and
-# AGORA_TOKEN for a server with tokens).
+# environment (and AGORA_TOKEN for a server with tokens).
 {
   "hooks": {
     "Stop": [

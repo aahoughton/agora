@@ -78,6 +78,24 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestCommandsWithoutANamespaceIgnoreIt(t *testing.T) {
+	url, _ := setup(t)
+	env := map[string]string{"AGORA_NAMESPACE": "bad/name"}
+	for _, args := range [][]string{{"health"}, {"whoami"}} {
+		if r := runCLIInput(t.Context(), url, "", env, args...); r.code != exitOK {
+			t.Errorf("%v with an invalid AGORA_NAMESPACE = %+v", args, r)
+		}
+		r := runCLI(t.Context(), url, append(args, "--namespace", "default")...)
+		if r.code != exitUsage || !strings.Contains(r.stderr, "flag provided but not defined: -namespace") {
+			t.Errorf("%v --namespace = %+v", args, r)
+		}
+	}
+	r := runCLI(t.Context(), url, "health", "--token", "t")
+	if r.code != exitUsage {
+		t.Errorf("health --token = %+v", r)
+	}
+}
+
 func TestStatus(t *testing.T) {
 	url, _ := setup(t)
 	r := runCLI(t.Context(), url, "status", "--agent", "alice")
@@ -381,8 +399,15 @@ func TestHookStopPatience(t *testing.T) {
 		if !stop(`{"session_id":"s3"}`, "--patience", "1") || stop(`{"session_id":"s3"}`, "--patience", "1") {
 			t.Fatal("--patience 1 did not block exactly once")
 		}
-		if r := runCLIInput(t.Context(), url, `{}`, env, "hook", "stop", "--patience", "0"); r.code != exitUsage {
-			t.Fatalf("--patience 0 = %+v", r)
+	})
+	// Exit 2 from a Stop hook keeps the session going, so a mistake in the
+	// hook's command line must not exit 2.
+	t.Run("usage errors exit 1", func(t *testing.T) {
+		env["AGORA_AGENT"] = "alice"
+		for _, args := range [][]string{{"hook"}, {"hook", "start"}, {"hook", "stop", "--patience", "0"}, {"hook", "stop", "--bogus"}, {"hook", "stop", "extra"}, {"hook", "stop", "--namespace", "../x"}, {"hook", "stop", "--url", "ftp://x"}} {
+			if r := runCLIInput(t.Context(), url, `{"session_id":"s4"}`, env, args...); r.code != exitError || r.stderr == "" {
+				t.Errorf("%v = %+v, want exit 1 with the error", args, r)
+			}
 		}
 	})
 }
@@ -395,7 +420,7 @@ func TestMCPConfig(t *testing.T) {
 	for _, want := range []string{
 		`url = "http://127.0.0.1:9000/mcp?namespace=team-a"`,
 		`default_tools_approval_mode = "approve"`,
-		`"command": "agora hook stop"`,
+		`"command": "agora hook stop --url http://127.0.0.1:9000 --namespace team-a"`,
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Errorf("missing %q in:\n%s", want, r.stdout)
@@ -404,6 +429,20 @@ func TestMCPConfig(t *testing.T) {
 	for _, args := range [][]string{{"mcp-config"}, {"mcp-config", "--profile", "gemini"}} {
 		if r := runCLI(t.Context(), "http://127.0.0.1:9000", args...); r.code != exitUsage {
 			t.Errorf("%v = %d, want usage error", args, r.code)
+		}
+	}
+}
+
+func TestShellWord(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://h:8790":     "http://h:8790",
+		"http://h/a b":      `'http://h/a b'`,
+		"http://h/?a=1&b=2": `'http://h/?a=1&b=2'`,
+		"http://h/it's":     `'http://h/it'\''s'`,
+		"":                  "''",
+	} {
+		if got := shellWord(in); got != want {
+			t.Errorf("shellWord(%q) = %s, want %s", in, got, want)
 		}
 	}
 }
@@ -621,6 +660,17 @@ func TestAdminThroughTheServer(t *testing.T) {
 	if r := admin("accounts", "rename", "x"); r.code != exitUsage {
 		t.Fatalf("unknown command = %+v", r)
 	}
+	// Each command takes only its own flags.
+	for _, args := range [][]string{
+		{"accounts", "list", "--ttl", "5h"},
+		{"accounts", "add", "x", "--label", "l"},
+		{"tokens", "issue", "pat", "--server-admin"},
+		{"feedback", "show", "1", "--limit", "5"},
+	} {
+		if r := admin(args...); r.code != exitUsage || !strings.Contains(r.stderr, "flag provided but not defined") {
+			t.Errorf("admin %v = %+v, want a usage error", args, r)
+		}
+	}
 	if r := runCLIInput(t.Context(), url, "", nil, "admin", "accounts", "list"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
 		t.Fatalf("no token = %+v", r)
 	}
@@ -682,17 +732,51 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	}
 	_ = db.Close()
 
-	for _, bad := range [][]string{{"dump", "-o", "x"}, {"dump", "--all", "--namespace", "default", "-o", "x"}, {"dump", "--all"}} {
+	for _, bad := range [][]string{{"dump", "--all", "--namespace", "default", "-o", "x"}, {"dump", "--all"}, {"dump"}} {
 		if r := cli(with, bad...); r.code != exitUsage {
 			t.Fatalf("%v = %+v", bad, r)
 		}
 	}
 	full, part := filepath.Join(dir, "full.jsonl"), filepath.Join(dir, "default.jsonl")
-	if r := cli(with, "dump", "--all", "-o", full); r.code != exitOK {
+	// --all wins over a namespace from the environment.
+	withNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "elsewhere"}
+	if r := cli(withNS, "dump", "--all", "-o", full); r.code != exitOK {
 		t.Fatalf("dump --all = %+v", r)
+	}
+	badNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "bad/name"}
+	if r := cli(badNS, "dump", "--all", "-o", filepath.Join(dir, "all2.jsonl")); r.code != exitOK {
+		t.Fatalf("dump --all with an invalid AGORA_NAMESPACE = %+v", r)
 	}
 	if r := cli(with, "dump", "--namespace", "default", "-o", part); r.code != exitOK {
 		t.Fatalf("dump --namespace = %+v", r)
+	}
+	// Without --namespace, the namespace comes from the environment, then
+	// the default.
+	fromEnv := filepath.Join(dir, "env.jsonl")
+	envDefault := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "default"}
+	if r := cli(envDefault, "dump", "-o", fromEnv); r.code != exitOK {
+		t.Fatalf("dump with AGORA_NAMESPACE = %+v", r)
+	}
+	if r := cli(withNS, "dump", "-o", filepath.Join(dir, "missing.jsonl")); r.code != exitError {
+		t.Fatalf("dump of a missing namespace from the environment = %+v", r)
+	}
+	plain := filepath.Join(dir, "plain.jsonl")
+	if r := cli(with, "dump", "-o", plain); r.code != exitOK {
+		t.Fatalf("dump of the default namespace = %+v", r)
+	}
+	for _, f := range []string{fromEnv, plain} {
+		if got, want := dumpBody(t, f), dumpBody(t, part); got != want {
+			t.Fatalf("%s differs from the --namespace default dump:\n%s\nwant\n%s", f, got, want)
+		}
+	}
+	// -o - writes the dump to stdout, which load reads from stdin.
+	r := cli(with, "dump", "--namespace", "default", "-o", "-")
+	if r.code != exitOK || !strings.HasPrefix(r.stdout, "{") {
+		t.Fatalf("dump -o - = %+v", r)
+	}
+	piped := filepath.Join(dir, "piped.db")
+	if r := runCLIInput(t.Context(), url, r.stdout, nil, "load", "--db", piped); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
+		t.Fatalf("load of a piped dump = %+v", r)
 	}
 
 	loaded := filepath.Join(dir, "loaded.db")
@@ -737,6 +821,18 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("a failed load left %s: %v", target, err)
 	}
+}
+
+// dumpBody is a dump file without its header line, which records when it
+// was made.
+func dumpBody(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ := strings.Cut(string(raw), "\n")
+	return body
 }
 
 func TestMigrate(t *testing.T) {

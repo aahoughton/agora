@@ -77,6 +77,10 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 func runAdminLocal(ctx context.Context, cmd string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("admin "+cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "usage: agora admin %s --db PATH --name NAME\n\n", cmd)
+		fs.PrintDefaults()
+	}
 	dbPath := fs.String("db", "", "the server's database file (required; it must exist)")
 	name := fs.String("name", "", "account name (required)")
 	if err := fs.Parse(args); err != nil {
@@ -109,10 +113,21 @@ func runAdminLocal(ctx context.Context, cmd string, args []string, stdout, stder
 	return exitOK
 }
 
-// adminCommand is one remote admin command: its arity and what it does.
+// adminRun is what a remote admin command does with its arguments.
+type adminRun func(ctx context.Context, cl *client.Client, args []string, out io.Writer) error
+
+// adminCommand is one remote admin command: its arguments for usage, their
+// count, and setup, which registers the command's own flags and returns
+// what it runs.
 type adminCommand struct {
-	args int
-	run  func(ctx context.Context, cl *client.Client, args []string, out io.Writer) error
+	usage string
+	args  int
+	setup func(fs *flag.FlagSet) adminRun
+}
+
+// noFlags is an adminCommand that takes no flags of its own.
+func noFlags(usage string, args int, run adminRun) adminCommand {
+	return adminCommand{usage, args, func(*flag.FlagSet) adminRun { return run }}
 }
 
 func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
@@ -121,60 +136,58 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 		return exitUsage
 	}
 	group, verb := args[0], args[1]
-	fs := flag.NewFlagSet("admin "+group+" "+verb, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
-	serverAdmin := fs.Bool("server-admin", false, "accounts add: make the account a server admin")
-	label := fs.String("label", "", "tokens issue: a label to recognize the token by")
-	ttl := fs.Duration("ttl", 0, "tokens issue: lifetime, e.g. 720h (default: never expires)")
-	fbIn := fs.String("in", "", "feedback list: only notes from this namespace, or NS/CONVERSATION")
-	fbSince := fs.String("since", "", "feedback list: only notes written at or after this RFC 3339 time, or this long ago (e.g. 24h)")
-	fbLimit := fs.Int("limit", 0, "feedback list: at most this many notes (default 50)")
 
 	setAccount := func(disabled, admin *bool) adminCommand {
-		return adminCommand{1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		return noFlags("NAME", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			acct, err := cl.UpdateAccount(ctx, a[0], disabled, admin)
 			if err == nil {
 				printAccounts(out, []core.Account{acct})
 			}
 			return err
-		}}
+		})
 	}
 	yes, no := true, false
 	commands := map[string]adminCommand{
-		"accounts list": {0, func(ctx context.Context, cl *client.Client, _ []string, out io.Writer) error {
+		"accounts list": noFlags("", 0, func(ctx context.Context, cl *client.Client, _ []string, out io.Writer) error {
 			as, err := cl.ListAccounts(ctx)
 			if err == nil {
 				printAccounts(out, as)
 			}
 			return err
-		}},
-		"accounts add": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
-			acct, err := cl.CreateAccount(ctx, a[0], *serverAdmin)
-			if err == nil {
-				printAccounts(out, []core.Account{acct})
+		}),
+		"accounts add": {"NAME [--server-admin]", 1, func(fs *flag.FlagSet) adminRun {
+			serverAdmin := fs.Bool("server-admin", false, "make the account a server admin")
+			return func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+				acct, err := cl.CreateAccount(ctx, a[0], *serverAdmin)
+				if err == nil {
+					printAccounts(out, []core.Account{acct})
+				}
+				return err
 			}
-			return err
 		}},
 		"accounts disable": setAccount(&yes, nil),
 		"accounts enable":  setAccount(&no, nil),
 		"accounts promote": setAccount(nil, &yes),
 		"accounts demote":  setAccount(nil, &no),
-		"tokens list": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		"tokens list": noFlags("ACCOUNT", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			ts, err := cl.ListTokens(ctx, a[0])
 			if err == nil {
 				printTokens(out, ts)
 			}
 			return err
-		}},
-		"tokens issue": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
-			t, err := cl.IssueToken(ctx, a[0], *label, *ttl)
-			if err == nil {
-				fmt.Fprintf(out, "token %d for %s (shown once):\n%s\n", t.ID, t.Account, t.Secret)
+		}),
+		"tokens issue": {"ACCOUNT [--label TEXT] [--ttl DURATION]", 1, func(fs *flag.FlagSet) adminRun {
+			label := fs.String("label", "", "a label to recognize the token by")
+			ttl := fs.Duration("ttl", 0, "lifetime, e.g. 720h (default: never expires)")
+			return func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+				t, err := cl.IssueToken(ctx, a[0], *label, *ttl)
+				if err == nil {
+					fmt.Fprintf(out, "token %d for %s (shown once):\n%s\n", t.ID, t.Account, t.Secret)
+				}
+				return err
 			}
-			return err
 		}},
-		"tokens revoke": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		"tokens revoke": noFlags("ID", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			id, err := strconv.ParseInt(a[0], 10, 64)
 			if err != nil {
 				return fmt.Errorf("token id %q is not a number", a[0])
@@ -184,15 +197,15 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 			}
 			fmt.Fprintf(out, "revoked token %d\n", id)
 			return nil
-		}},
-		"tokens revoke-all": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		}),
+		"tokens revoke-all": noFlags("ACCOUNT", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			n, err := cl.RevokeAllTokens(ctx, a[0])
 			if err == nil {
 				fmt.Fprintf(out, "revoked %d tokens of %s\n", n, a[0])
 			}
 			return err
-		}},
-		"members list": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		}),
+		"members list": noFlags("NAMESPACE", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			ms, err := cl.ListMembers(ctx, a[0])
 			if err != nil {
 				return err
@@ -203,41 +216,46 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 				fmt.Fprintf(tw, "%s\t%s\n", m.Account, m.Role)
 			}
 			return tw.Flush()
-		}},
-		"members set": {3, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		}),
+		"members set": noFlags("NAMESPACE ACCOUNT viewer|observer|member|admin", 3, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			m, err := cl.SetMember(ctx, a[0], a[1], core.Role(a[2]))
 			if err == nil {
 				fmt.Fprintf(out, "%s is %s in %s\n", m.Account, m.Role, m.Namespace)
 			}
 			return err
-		}},
-		"members remove": {2, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		}),
+		"members remove": noFlags("NAMESPACE ACCOUNT", 2, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			if err := cl.RemoveMember(ctx, a[0], a[1]); err != nil {
 				return err
 			}
 			fmt.Fprintf(out, "%s has no role in %s\n", a[1], a[0])
 			return nil
-		}},
-		"feedback list": {0, func(ctx context.Context, cl *client.Client, _ []string, out io.Writer) error {
-			f := core.FeedbackFilter{Limit: *fbLimit}
-			f.Namespace, f.Conversation, _ = strings.Cut(*fbIn, "/")
-			if strings.Contains(f.Conversation, "/") {
-				return fmt.Errorf("--in %q: want NAMESPACE or NAMESPACE/CONVERSATION", *fbIn)
-			}
-			if *fbSince != "" {
-				t, err := parseSince(*fbSince, time.Now())
-				if err != nil {
-					return err
+		}),
+		"feedback list": {"[--in NS[/CONVERSATION]] [--since TIME] [--limit N]", 0, func(fs *flag.FlagSet) adminRun {
+			in := fs.String("in", "", "only notes from this namespace, or NS/CONVERSATION")
+			since := fs.String("since", "", "only notes written at or after this RFC 3339 time, or this long ago (e.g. 24h)")
+			limit := fs.Int("limit", 0, "at most this many notes (default 50)")
+			return func(ctx context.Context, cl *client.Client, _ []string, out io.Writer) error {
+				f := core.FeedbackFilter{Limit: *limit}
+				f.Namespace, f.Conversation, _ = strings.Cut(*in, "/")
+				if strings.Contains(f.Conversation, "/") {
+					return fmt.Errorf("--in %q: want NAMESPACE or NAMESPACE/CONVERSATION", *in)
 				}
-				f.Since = &t
+				if *since != "" {
+					t, err := parseSince(*since, time.Now())
+					if err != nil {
+						return err
+					}
+					f.Since = &t
+				}
+				page, err := cl.ListFeedback(ctx, f)
+				if err == nil {
+					printFeedbackList(out, page)
+				}
+				return err
 			}
-			page, err := cl.ListFeedback(ctx, f)
-			if err == nil {
-				printFeedbackList(out, page)
-			}
-			return err
 		}},
-		"feedback show": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		"feedback show": noFlags("ID", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			id, err := strconv.ParseInt(a[0], 10, 64)
 			if err != nil {
 				return fmt.Errorf("feedback id %q is not a number", a[0])
@@ -247,20 +265,28 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 				printFeedback(out, cl.URL(), f)
 			}
 			return err
-		}},
-		"namespaces create": {1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
+		}),
+		"namespaces create": noFlags("NAME", 1, func(ctx context.Context, cl *client.Client, a []string, out io.Writer) error {
 			ns, err := cl.CreateNamespace(ctx, a[0])
 			if err == nil {
 				fmt.Fprintf(out, "created namespace %s\n", ns.Name)
 			}
 			return err
-		}},
+		}),
 	}
 	cmd, ok := commands[group+" "+verb]
 	if !ok {
 		fmt.Fprintf(stderr, "agora admin: unknown command %q\n\n%s", group+" "+verb, adminUsage)
 		return exitUsage
 	}
+	fs := flag.NewFlagSet("admin "+group+" "+verb, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "usage: agora admin %s %s %s\n\n", group, verb, strings.TrimSpace(cmd.usage+" [flags]"))
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs, config.WithToken)
+	run := cmd.setup(fs)
 	if err := fs.Parse(args[2:]); err != nil {
 		return flagError(stderr, err)
 	}
@@ -290,7 +316,7 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := cmd.run(ctx, cl, positional, stdout); err != nil {
+	if err := run(ctx, cl, positional, stdout); err != nil {
 		fmt.Fprintln(stderr, "agora admin:", err)
 		return exitError
 	}
@@ -406,7 +432,16 @@ func dateOr(t *time.Time, none string) string {
 func runAdminStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("admin status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora admin status [--json] [flags]
+
+Shows who is using the server: recent callers, open MCP sessions, waiting
+agents and viewers.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	asJSON := fs.Bool("json", false, "print the server's JSON response")
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)

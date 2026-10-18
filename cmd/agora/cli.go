@@ -85,7 +85,7 @@ the server is unreachable.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	resolveAgent := config.AgentFlag(fs)
 	timeout := fs.Duration("timeout", 0, "give up after this long (default: no limit)")
 	conv, err := splitConversation(fs, args)
@@ -180,7 +180,16 @@ func waitSummary(d core.Digest) string {
 func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora status --agent NAME [flags]
+
+Prints the agent's status line in each open conversation of the namespace
+where it is expected.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	resolveAgent := config.AgentFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
@@ -217,9 +226,21 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, get
 func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	resolveClient := config.ClientFlags(fs)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, `usage: agora health [--url URL]
+
+Checks that the server answers GET /healthz, which needs no token. Exits 0
+when it does, 1 when it does not.
+
+`)
+		fs.PrintDefaults()
+	}
+	resolveClient := config.ClientFlags(fs, 0)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
+	}
+	if fs.NArg() > 0 {
+		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
 	}
 	cc, err := resolveClient(getenv)
 	if err != nil {
@@ -252,7 +273,7 @@ stderr; stdout carries protocol frames only.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
@@ -289,7 +310,7 @@ argument it opens the conversations of --namespace.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	as := fs.String("as", "", "name to post observer comments under (env "+config.EnvObserver+"; asked on first comment if unset; with a token, the token's account name)")
 	themeDir := fs.String("theme-dir", "", "directory of theme files overriding the default theme's tui/ files (env "+config.EnvThemeDir+")")
 	var target string
@@ -374,7 +395,7 @@ that keeps a session from ending while it is expected in a conversation.
 `, strings.Join(profiles.Names(), " or "))
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithNamespace)
 	profile := fs.String("profile", "", "client profile: "+strings.Join(profiles.Names(), ", "))
 	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
 	stopHook := fs.Bool("stop-hook", false, "also print a Stop hook")
@@ -399,7 +420,8 @@ that keeps a session from ending while it is expected in a conversation.
 	if _, err := client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
 	}
-	mcpURL := strings.TrimRight(cc.URL, "/") + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
+	base := strings.TrimRight(cc.URL, "/")
+	mcpURL := base + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
 	tokenEnv := ""
 	if *withToken {
 		tokenEnv = config.EnvToken
@@ -411,7 +433,9 @@ that keeps a session from ending while it is expected in a conversation.
 	}
 	fmt.Fprint(stdout, out)
 	if *stopHook {
-		hook, err := p.StopHook("agora hook stop")
+		// The hook reaches the same server and namespace as the MCP entry;
+		// the agent name and token still come from the environment.
+		hook, err := p.StopHook("agora hook stop --url " + shellWord(base) + " --namespace " + cc.Namespace)
 		if err != nil {
 			fmt.Fprintln(stderr, "agora mcp-config:", err)
 			return exitError
@@ -421,10 +445,39 @@ that keeps a session from ending while it is expected in a conversation.
 	return exitOK
 }
 
+// shellWord quotes s for a POSIX shell unless it is made only of
+// characters no shell treats specially.
+func shellWord(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+const skillsUsage = "usage: agora skills install --client NAME [--dir DIR] [--force]\n"
+
+// groupUsage handles a command group's first argument. It reports ok when
+// args start with the group's one subcommand; otherwise it prints usage, to
+// stdout with exit 0 when asked for help and to stderr with exit 2 when not.
+func groupUsage(args []string, sub, usage string, stdout, stderr io.Writer) (int, bool) {
+	switch {
+	case len(args) > 0 && args[0] == sub:
+		return 0, true
+	case len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
+		fmt.Fprint(stdout, usage)
+		return exitOK, false
+	case len(args) > 0:
+		fmt.Fprintf(stderr, "unknown command %q\n%s", args[0], usage)
+		return exitUsage, false
+	default:
+		fmt.Fprint(stderr, usage)
+		return exitUsage, false
+	}
+}
+
 func runSkills(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "install" {
-		fmt.Fprintln(stderr, "usage: agora skills install --client NAME [--dir DIR] [--force]")
-		return exitUsage
+	if code, ok := groupUsage(args, "install", skillsUsage, stdout, stderr); !ok {
+		return code
 	}
 	fs := flag.NewFlagSet("skills install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -553,7 +606,7 @@ belongs to, with its role in each namespace.
 `)
 		fs.PrintDefaults()
 	}
-	resolveClient := config.ClientFlags(fs)
+	resolveClient := config.ClientFlags(fs, config.WithToken)
 	if err := fs.Parse(args); err != nil {
 		return flagError(stderr, err)
 	}
