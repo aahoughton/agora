@@ -28,7 +28,11 @@ func TestMarkdownIsSafe(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(renderMarkdown(tt.in))
+			h, err := renderMarkdown(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := string(h)
 			for _, w := range tt.want {
 				if !strings.Contains(got, w) {
 					t.Errorf("missing %q in %s", w, got)

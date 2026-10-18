@@ -63,7 +63,9 @@ Page templates receive a `Page`:
 `message.html` receives one Message, and `participants.html` and
 `about.html` one Conversation, both on the page and in live updates. The
 Message also carries `.People`, the conversation's participants and
-observers, for `markdown` to mark mentions with; `.Prev`, the message just
+observers, for `markdown` to mark mentions with; `.Refs`, for
+`markdown` to link references to earlier messages with (set only on a
+conclusion); `.Prev`, the message just
 before it (nil for the first message on a page, so that one names its
 author, and for a live message when the one before is unknown); and `.Continues`, true when it and
 `.Prev` have the same author and kind and are not system lines, so a theme can show a
@@ -100,7 +102,7 @@ Functions available in templates:
 
 | Function | Result |
 |---|---|
-| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed; given `.People` as a second argument, each `@name` of one of them becomes `<strong class="mention tone-N">` (`mention observer` for an observer) |
+| `markdown` | a message body as safe HTML: raw HTML dropped, links only for http, https and mailto, images shown as links, bidirectional controls removed; given `.People` as a second argument, each `@name` of one of them becomes `<strong class="mention tone-N">` (`mention observer` for an observer); given `.Refs` too, each `#N` naming an earlier message becomes `<a class="ref">` linking to it |
 | `ts` | a time as RFC 3339 UTC, for `datetime` attributes |
 | `clock` | a time as `15:04` in the server's time zone |
 | `ago` | a past time relative to now, such as `5m ago` |

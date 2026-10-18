@@ -25,18 +25,18 @@ type SearchHit struct {
 	Link string
 }
 
-// hitContext is how many messages after a hit its conversation link shows
-// at most, so the hit sits near the end of a page of earlier messages.
-const hitContext = 20
+// linkContext is how many messages after a linked message its link shows
+// at most, so the message sits near the end of a page of earlier ones.
+const linkContext = 20
 
-// hitLink opens the conversation at the hit's message, with up to
-// hitContext messages after it but never more than half of the shown
-// messages, so the hit stays on the page. A ?before= past the last message
-// shows the live page.
-func hitLink(ns string, h core.SearchHit, shown int) string {
-	after := int64(min(hitContext, shown/2))
-	return "/n/" + ns + "/c/" + h.Conversation + "?before=" + strconv.FormatInt(h.Seq+after+1, 10) +
-		"#m" + strconv.FormatInt(h.Seq, 10)
+// messageLink opens conversation conv at message seq, with up to
+// linkContext messages after it but never more than half of the shown
+// messages, so the message stays on the page. A ?before= past the last
+// message shows the live page.
+func messageLink(ns, conv string, seq int64, shown int) string {
+	after := int64(min(linkContext, shown/2))
+	return "/n/" + ns + "/c/" + conv + "?before=" + strconv.FormatInt(seq+after+1, 10) +
+		"#m" + strconv.FormatInt(seq, 10)
 }
 
 func (v *viewer) search(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +71,7 @@ func (v *viewer) search(w http.ResponseWriter, r *http.Request) {
 		for j := range h.Snippet {
 			h.Snippet[j].Text = markdown.StripBidi(h.Snippet[j].Text)
 		}
-		data.Search.Hits[i] = SearchHit{SearchHit: h, Link: hitLink(ns, h, v.opts.ShownMessages)}
+		data.Search.Hits[i] = SearchHit{SearchHit: h, Link: messageLink(ns, h.Conversation, h.Seq, v.opts.ShownMessages)}
 	}
 	v.render(w, http.StatusOK, "search", data)
 }

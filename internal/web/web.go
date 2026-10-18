@@ -516,10 +516,10 @@ func (v *viewer) conversationPage(r *http.Request, p core.Principal, account str
 		}
 		// The first message shown has no Prev, so it names its author
 		// even when it continues a run from the page before.
-		people := peopleOf(c)
+		people, link := peopleOf(c), v.linker(ns, name)
 		var prev *core.Message
 		for _, m := range res.Messages {
-			data.Messages = append(data.Messages, Message{Message: m, People: people, Prev: prev})
+			data.Messages = append(data.Messages, newMessage(m, people, prev, link))
 			prev = &m
 		}
 		if _, err := v.markUnseen(r.Context(), p, ns, name, nil, data.Messages); err != nil {
@@ -677,10 +677,10 @@ func (v *viewer) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		people := peopleOf(c)
+		people, link := peopleOf(c), v.linker(ns, name)
 		msgs := make([]Message, len(batch.Messages))
 		for i, m := range batch.Messages {
-			msgs[i] = Message{Message: m, People: people, Prev: prev}
+			msgs[i] = newMessage(m, people, prev, link)
 			prev = &batch.Messages[i]
 		}
 		if known, err = v.markUnseen(r.Context(), p, ns, name, known, msgs); err != nil {
@@ -724,6 +724,11 @@ func (v *viewer) snapshot(w http.ResponseWriter, c core.Conversation) error {
 		return err
 	}
 	return v.event(w, "about", "", c)
+}
+
+// linker returns the address of a message in conversation name.
+func (v *viewer) linker(ns, name string) func(seq int64) string {
+	return func(seq int64) string { return messageLink(ns, name, seq, v.opts.ShownMessages) }
 }
 
 // displayable drops bidirectional controls from the free text of a
