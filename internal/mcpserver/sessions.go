@@ -88,15 +88,14 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ref := &serverRef{}
-	// The session is recorded as soon as the SDK names it, before the
-	// response reaches the client, which may send its next request on the
-	// session at once.
-	cw := &captureSession{ResponseWriter: w, named: func(sid string) { g.record(sid, p, ref.srv) }}
+	// The start is recorded when the response begins, before it reaches the
+	// client, which may send its next request at once: on the new session,
+	// or, after a request that made none (the SDK client's server/discover
+	// probe), another start.
+	cw := &captureSession{ResponseWriter: w, started: func(sid string) { g.record(sid, p, ref.srv) }}
 	ctx := context.WithValue(context.WithValue(r.Context(), principalKey{}, p), serverRefKey{}, ref)
 	g.next.ServeHTTP(cw, r.WithContext(ctx))
-	if cw.sid == "" {
-		g.record("", p, nil) // no session: give back the place admit held
-	}
+	cw.capture() // a handler that wrote nothing still ends its start
 }
 
 // admit refuses a new session past the per-account or total cap, after
@@ -238,20 +237,19 @@ func (g *guard) forget(sid string) {
 	delete(g.owners, sid)
 }
 
-// captureSession notes the session id the SDK assigns on initialize and
-// passes it to named before any of the response is sent.
+// captureSession passes started the session id the SDK assigns on
+// initialize, or "" when it assigns none, once and before any of the
+// response is sent.
 type captureSession struct {
 	http.ResponseWriter
-	sid   string
-	named func(sid string)
+	done    bool
+	started func(sid string)
 }
 
 func (c *captureSession) capture() {
-	if c.sid == "" {
-		if sid := c.Header().Get(sessionHeader); sid != "" {
-			c.sid = sid
-			c.named(sid)
-		}
+	if !c.done {
+		c.done = true
+		c.started(c.Header().Get(sessionHeader))
 	}
 }
 
@@ -267,6 +265,7 @@ func (c *captureSession) Write(b []byte) (int, error) {
 
 // Flush keeps streaming (SSE) responses working through the wrapper.
 func (c *captureSession) Flush() {
+	c.capture()
 	if f, ok := c.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
