@@ -71,6 +71,7 @@ const (
 	screenNamespaces screen = iota
 	screenConversations
 	screenConversation
+	screenSearch
 )
 
 // Model is the Bubble Tea model for the whole TUI.
@@ -105,6 +106,9 @@ type Model struct {
 	filtering   bool
 
 	t *thread
+	// search is the search screen, kept while a conversation opened from
+	// it is shown.
+	search *search
 }
 
 // thread is the state of the conversation screen.
@@ -134,6 +138,13 @@ type thread struct {
 	askingName bool
 	mention    *mentionCycle
 	sending    bool
+
+	// focus is the seq to scroll to once it loads (from a search hit), 0
+	// for none.
+	focus int64
+	// caughtUp is set once the first load has reached the end of the
+	// conversation; messages after it count as new.
+	caughtUp bool
 }
 
 // Messages from commands.
@@ -262,7 +273,7 @@ func (m *Model) leave() {
 
 func (m *Model) openNamespaces() tea.Cmd {
 	m.leave()
-	m.screen = screenNamespaces
+	m.screen, m.search = screenNamespaces, nil
 	return m.loadNamespaces()
 }
 
@@ -279,6 +290,7 @@ func (m *Model) loadNamespaces() tea.Cmd {
 func (m *Model) openConversations(ns string) tea.Cmd {
 	m.leave()
 	m.screen, m.ns, m.conversations, m.next, m.loadingMore = screenConversations, ns, nil, "", false
+	m.search = nil
 	return m.loadConversations()
 }
 
@@ -425,6 +437,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t := m.t
 		t.conv = msg.conv
 		t.after = max(0, msg.conv.LastSeq-int64(m.opts.ShownMessages))
+		// A search hit older than that loads from just before it.
+		if t.focus > 0 && t.focus <= t.after {
+			t.after = max(0, t.focus-1-focusContext)
+		}
 		t.start, t.truncated = t.after, t.after > 0
 		return m, m.follow(0)
 	case earlierMsg:
@@ -448,6 +464,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.follow(0)
+	case searchMsg:
+		if msg.gen != m.gen || m.search == nil {
+			return m, nil
+		}
+		m.searched(msg)
+		return m, nil
 	case observedMsg:
 		if msg.gen != m.gen {
 			return m, nil
@@ -462,6 +484,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.screen == screenSearch && m.search.editing {
+		var cmd tea.Cmd
+		m.search.input, cmd = m.search.input.Update(msg)
+		return m, cmd
+	}
 	if m.t != nil {
 		var cmd tea.Cmd
 		switch {
@@ -496,7 +523,8 @@ func (m *Model) followed(msg followMsg) tea.Cmd {
 	// messages already shown too.
 	recolor := !maps.Equal(peopleOf(t.conv), peopleOf(msg.res.Conversation))
 	t.conv = msg.res.Conversation
-	wasBottom := !t.loaded || t.vp.AtBottom()
+	wasBottom := !t.loaded && t.focus == 0 || t.loaded && t.vp.AtBottom()
+	counting := t.caughtUp
 	added := 0
 	for _, mm := range msg.res.Messages {
 		if mm.Seq <= t.after {
@@ -512,11 +540,16 @@ func (m *Model) followed(msg followMsg) tea.Cmd {
 	} else {
 		m.renderNew(added)
 	}
-	if wasBottom {
+	switch {
+	case m.placeFocus():
+	case wasBottom:
 		t.vp.GotoBottom()
 		t.newBelow = 0
-	} else {
+	case counting:
 		t.newBelow += added
+	}
+	if !msg.res.More {
+		t.caughtUp = true
 	}
 	if t.conv.Status == core.StatusConcluded && (t.composing || t.askingName) {
 		t.composing, t.askingName = false, false
@@ -669,6 +702,9 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 	if s == "ctrl+c" {
 		return tea.Quit
 	}
+	if m.screen == screenSearch && m.search.editing {
+		return m.searchKey(k)
+	}
 	if m.t != nil && m.t.askingName {
 		return m.nameKey(k)
 	}
@@ -692,8 +728,11 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 	case "q":
 		return tea.Quit
 	}
-	if m.screen == screenConversation {
+	switch m.screen {
+	case screenConversation:
 		return m.threadKey(k)
+	case screenSearch:
+		return m.searchKey(k)
 	}
 	return m.listKey(k)
 }
@@ -756,6 +795,10 @@ func (m *Model) moveInList(k tea.KeyPressMsg) tea.Cmd {
 		m.cursor = max(len(names)-1, 0)
 	case "/":
 		m.filtering = true
+	case "s":
+		if m.screen == screenConversations {
+			return m.openSearch()
+		}
 	case "r":
 		if m.screen == screenNamespaces {
 			return m.loadNamespaces()
@@ -809,6 +852,9 @@ func (m *Model) threadKey(k tea.KeyPressMsg) tea.Cmd {
 	t := m.t
 	switch k.String() {
 	case "esc":
+		if m.search != nil {
+			return m.returnToSearch()
+		}
 		ns := m.ns
 		return m.openConversations(ns)
 	case "p":
@@ -959,6 +1005,8 @@ func (m *Model) View() tea.View {
 	switch m.screen {
 	case screenConversation:
 		lines = m.threadView()
+	case screenSearch:
+		lines = m.searchView()
 	default:
 		lines = m.listView()
 	}

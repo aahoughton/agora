@@ -367,8 +367,9 @@ func TestLoadFullDumpFromBeforeFeedback(t *testing.T) {
 		case rec["end"] == true:
 			continue
 		case rec["table"] == "messages":
-			// Schema 5 predates seen_seq too.
+			// Schema 5 predates seen_seq and messages.id too.
 			delete(rec["row"].(map[string]any), "seen_seq")
+			delete(rec["row"].(map[string]any), "id")
 		}
 		b, _ := json.Marshal(rec)
 		withFeedback.Write(append(b, '\n'))

@@ -588,6 +588,59 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Standing" }
 
+  /v1/namespaces/{ns}/search:
+    parameters:
+      - $ref: "#/components/parameters/ns"
+    get:
+      operationId: search
+      description: |
+        Messages in the namespace that contain every word and "quoted phrase"
+        of `q`; a word ending in `*` matches as a prefix. Matching is by
+        whole words, case and diacritics folded, with no stemming. System
+        lines are not searched. Pass `next` from a response as `cursor`, with
+        the same order, for the following page.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, maxLength: 500 }
+        - name: conversation
+          in: query
+          schema: { $ref: "#/components/schemas/Name" }
+        - name: author
+          in: query
+          schema: { type: string }
+        - name: since
+          in: query
+          description: Only messages posted at or after this time.
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: Only messages posted at or before this time.
+          schema: { type: string, format: date-time }
+        - name: order
+          in: query
+          description: >-
+            relevance ranks by BM25, newer first among equals; newest and
+            oldest go by posting time, and their pages stay put while
+            messages arrive.
+          schema: { type: string, enum: [relevance, newest, oldest], default: relevance }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          description: The `next` of an earlier page in the same order.
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of matching messages.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /v1/namespaces/{ns}/conversations/{conv}:
     parameters:
       - $ref: "#/components/parameters/ns"
@@ -1087,6 +1140,36 @@ components:
         seen_seq: { type: integer, description: "The author's read position when posting a say or conclude message. Messages from others after it and before this one were posted without the author having read them. A read with tail or after moves the read position past messages it skips, which then count as read. Absent on other kinds and on messages from before servers recorded it." }
         created_at: { type: string, format: date-time }
         your_account: { type: boolean, description: "True when the caller's account posted it; false for anonymous callers, messages without an account, and system messages." }
+
+    SearchPage:
+      type: object
+      required: [total, hits]
+      properties:
+        total: { type: integer, description: Every matching message, on all pages. }
+        hits:
+          type: array
+          items:
+            type: object
+            required: [conversation, seq, kind, author, created_at, your_account, snippet]
+            properties:
+              conversation: { type: string }
+              seq: { type: integer }
+              kind: { type: string, enum: [say, conclude, observer] }
+              author: { type: string }
+              created_at: { type: string, format: date-time }
+              your_account: { type: boolean, description: "True when the caller's account posted it." }
+              snippet:
+                description: The body around the match on one line, in parts; match marks the words the query matched.
+                type: array
+                items:
+                  type: object
+                  required: [text]
+                  properties:
+                    text: { type: string }
+                    match: { type: boolean }
+        next:
+          type: string
+          description: Present when there are more matches.
 
     Feedback:
       type: object

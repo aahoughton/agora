@@ -1,6 +1,9 @@
 {{define "content" -}}
 <div class="page-head">
   <h1>Conversations</h1>
+  <form class="search inline" method="get" action="/n/{{.Namespace}}/search" role="search">
+    <input type="search" name="q" placeholder="Search messages" aria-label="Search messages">
+  </form>
   <a class="toggle" href="?{{if not .OpenOnly}}open=1&{{end}}{{if .IncludeArchived}}archived=1{{end}}">{{if .OpenOnly}}Show concluded{{else}}Open only{{end}}</a>
   <a class="toggle" href="?{{if not .IncludeArchived}}archived=1&{{end}}{{if .OpenOnly}}open=1{{end}}">{{if .IncludeArchived}}Hide archived{{else}}Show archived{{end}}</a>
 </div>

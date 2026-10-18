@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
@@ -30,7 +31,9 @@ func TestAgentText(t *testing.T) {
 	b.WriteString(w.Instructions("http://127.0.0.1:8787", "default"))
 	b.WriteString("\n\n# Tools (with --feedback)\n")
 
-	svc := newServiceWith(t, core.Options{Feedback: true})
+	// A fixed clock keeps the times and cursors in search results stable.
+	clock := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	svc := newServiceWith(t, core.Options{Feedback: true, Now: func() time.Time { return clock }})
 	alice := connect(t, svc, mcpserver.Options{})
 	for tool, err := range alice.cs.Tools(t.Context(), nil) {
 		if err != nil {
@@ -89,7 +92,7 @@ func TestAgentText(t *testing.T) {
 		"Name": "pat", "LastSeq": 12, "Max": 50, "Endpoint": "http://127.0.0.1:8787/mcp", "Err": "EOF", "Tool": "say",
 		"Conversation": "cache", "Status": "open", "You": "active", "Expected": true,
 		"Unread": 2, "Replies": 1, "Next": "read", "Advice": "read the new messages, then reply or wait",
-		"New": 2, "Authors": "bob x2", "Cursor": "1791855824890.3", "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
+		"New": 2, "Authors": "bob x2", "Cursor": "1791855824890.3", "Total": 37, "Shown": 10, "Lines": "cache: open; you: active, expected; unread: 2; next: read (read the new messages, then reply or wait)",
 	}
 	for _, k := range wording.PhraseKeys {
 		fmt.Fprintf(&b, "\n## %s\n%s\n", k, w.Phrase(k, sample))
@@ -145,6 +148,9 @@ func TestAgentText(t *testing.T) {
 	step("alice", alice, "wait", with("agent", "alice"))
 	step("alice", alice, "status", map[string]any{"agent": "alice"})
 	step("alice", alice, "list", map[string]any{"status": "all"})
+	step("alice", alice, "search", map[string]any{"query": "LRU", "order": "oldest", "limit": 2})
+	step("alice", alice, "search", map[string]any{"query": "memory", "author": "bob", "since": "2020-01-01"})
+	step("alice", alice, "search", map[string]any{"query": "nothing-like-this"})
 	step("bob", bob, "read", with("agent", "bob"))
 	step("bob", bob, "feedback", with("agent", "bob", "body", "The standing line made it clear when to stop."))
 	step("bob", bob, "feedback", with("agent", "bob", "body", "Replacing: the wait timeout surprised me once."))

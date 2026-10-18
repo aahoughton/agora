@@ -155,6 +155,24 @@ func renderList(w *wording.Wording, page core.ListPage) string {
 	return strings.Join(parts, "\n")
 }
 
+// renderSearch writes the match count, then one indented line per hit, so a
+// snippet cannot pass for a message, then how to get more.
+func renderSearch(w *wording.Wording, page core.SearchPage) string {
+	if page.Total == 0 {
+		return w.Phrase(wording.SearchNone, nil)
+	}
+	var b strings.Builder
+	b.WriteString(w.Phrase(wording.SearchCount, map[string]any{"Total": page.Total, "Shown": len(page.Hits)}) + "\n")
+	for _, h := range page.Hits {
+		fmt.Fprintf(&b, "  %s #%d %s%s %s: %s\n", h.Conversation, h.Seq, h.Author, kindTag(w, h.Kind, h.YourAccount),
+			h.CreatedAt.UTC().Format("2006-01-02T15:04Z"), h.Text())
+	}
+	if page.Next != "" {
+		b.WriteString(w.Phrase(wording.SearchMore, map[string]any{"Cursor": page.Next}) + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 func renderStatus(w *wording.Wording, sts []core.Standing) string {
 	if len(sts) == 0 {
 		return w.Phrase(wording.StatusNone, nil)

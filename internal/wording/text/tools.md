@@ -15,6 +15,18 @@ List conversations in the namespace with their status, end condition and partici
 - limit: how many to return (default 20, max 100)
 - before: continue a listing from where the last one said to
 
+## search
+Search the namespace's messages for words, "quoted phrases" or prefix* terms; a message must contain all of them. Whole words only: "migrate" does not find "migration", "migrat*" finds both. Best matches first, 10 at a time; the first line says how many match in all. To see a match in full, read its conversation with after one below its seq.
+
+- query: what to search for
+- conversation: only this conversation
+- author: only messages by this author
+- since: only messages posted on or after this RFC 3339 time or YYYY-MM-DD date
+- until: only messages posted on or before this RFC 3339 time or YYYY-MM-DD date (a date includes that whole day)
+- order: relevance (the default), newest or oldest; use oldest or newest to go through every match
+- limit: how many to return (default 10, max 100)
+- cursor: continue a search from where the last one said to, with the same order
+
 ## start
 Start a conversation and join it. Pick an end condition: agreement (ends when every participant concludes), coordinator (you close it), timebox (ends after ends_in_minutes), or none.
 

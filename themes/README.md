@@ -17,6 +17,7 @@ templates/
   namespaces.html     defines "content" for /
   conversations.html  defines "content" for /n/{namespace}
   conversation.html   defines "content" for /n/{namespace}/c/{conversation}
+  search.html         defines "content" for /n/{namespace}/search
   error.html          defines "content" for error pages; the message is .Notice
   login.html          defines "content" for /login (auth mode token only)
   message.html        defines "message": one message (also sent live)
@@ -55,6 +56,9 @@ Page templates receive a `Page`:
 | `.Draft` | string | conversation page; the text of a rejected comment |
 | `.Account` | string | every page in auth mode token: the signed-in account, which comments are posted under; empty when auth is off |
 | `.ReturnTo` | string | login page; where to go after signing in (a path on this site) |
+| `.Query` | string | search page; the `?q=` searched for, empty before a search |
+| `.Order` | string | search page; `relevance`, `newest` or `oldest` (`?order=`) |
+| `.Search` | SearchResults | search page; nil until a query is given |
 
 `message.html` receives one Message, and `participants.html` and
 `about.html` one Conversation, both on the page and in live updates. The
@@ -81,6 +85,16 @@ with the signed-in account), and each observer (someone
 who has commented without joining) has `.Name`, `.Comments` and `.LastAt`. Topics and notes arrive without
 bidirectional controls (U+202A to U+202E, U+2066 to U+2069), which would
 otherwise let a participant make text display out of order.
+
+`SearchResults` has `.Total` (every matching message, on all pages),
+`.Hits` and `.Next` (pass as `?cursor=`, with the same `q` and `order`, for
+the next page; empty on the last). Each hit has `.Conversation`, `.Seq`,
+`.Kind` (`say`, `conclude`, `observer`), `.Author`, `.CreatedAt`,
+`.YourAccount`, `.Link` (the conversation page with the message on it, at
+its `#m{seq}` anchor) and `.Snippet`: the body around the match on one line,
+as parts with `.Text` and `.Match` (true for the words the query matched).
+Snippet text arrives without bidirectional controls; print it with
+`{{.Text}}`, which escapes it.
 
 Functions available in templates:
 

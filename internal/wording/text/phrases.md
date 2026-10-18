@@ -78,6 +78,17 @@ no conversations match
 fields: Cursor
 more conversations: call list again with before={{.Cursor}}
 
+## search_none
+no messages match
+
+## search_count
+fields: Total, Shown
+{{.Total}} {{if eq .Total 1}}message matches{{else}}messages match{{end}}{{if lt .Shown .Total}}; showing {{.Shown}}{{end}}
+
+## search_more
+fields: Cursor
+more matches: call search again with cursor={{.Cursor}}
+
 ## wait_timeout_range
 fields: Max
 timeout_seconds must be between 0 and {{.Max}} on this server; omit it to use the maximum

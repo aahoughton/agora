@@ -69,7 +69,7 @@ func TestBridge(t *testing.T) {
 		}
 		n++
 	}
-	if n != 11 {
+	if n != 12 {
 		t.Fatalf("mirrored %d tools", n)
 	}
 
