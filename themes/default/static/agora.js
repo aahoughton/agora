@@ -19,6 +19,19 @@
     toggle.addEventListener("click", function () { setCollapsed(!aside.classList.contains("collapsed")); });
   }
 
+  // A reference to a message (a.ref) links to the page that holds it; when
+  // the message is already on this page, go to it here instead.
+  document.addEventListener("click", function (ev) {
+    var a = ev.target.closest && ev.target.closest("a.ref");
+    if (!a || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    var id = a.hash.slice(1);
+    var target = id && document.getElementById(id);
+    if (!target) return;
+    ev.preventDefault();
+    if (location.hash === a.hash) target.scrollIntoView();
+    else location.hash = a.hash;
+  });
+
   var list = document.getElementById("messages");
   // A page of earlier messages has no data-events: it does not update.
   if (!list || !list.getAttribute("data-events") || !window.EventSource) return;
