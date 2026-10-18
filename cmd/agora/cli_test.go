@@ -599,7 +599,7 @@ func TestWhoamiWithAuthOff(t *testing.T) {
 func TestAdminBootstrapAndRecover(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.db")
-	if r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", missing, "--name", "root"); r.code != exitError {
+	if r := runCLI(t.Context(), "", "db", "bootstrap", "--db", missing, "--name", "root"); r.code != exitError {
 		t.Fatalf("bootstrap on a missing file = %+v", r)
 	}
 	path := filepath.Join(dir, "agora.db")
@@ -608,17 +608,17 @@ func TestAdminBootstrapAndRecover(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = db.Close()
-	r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "root")
+	r := runCLI(t.Context(), "", "db", "bootstrap", "--db", path, "--name", "root")
 	if r.code != exitOK || !strings.Contains(r.stdout, "root is a server admin") || !strings.Contains(r.stdout, core.TokenPrefix) {
 		t.Fatalf("bootstrap = %+v", r)
 	}
-	if r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "again"); r.code != exitError || !strings.Contains(r.stderr, "accounts already exist") {
+	if r := runCLI(t.Context(), "", "db", "bootstrap", "--db", path, "--name", "again"); r.code != exitError || !strings.Contains(r.stderr, "accounts already exist") {
 		t.Fatalf("second bootstrap = %+v", r)
 	}
-	if r := runCLI(t.Context(), "", "admin", "recover", "--db", path, "--name", "root"); r.code != exitOK || !strings.Contains(r.stdout, core.TokenPrefix) {
+	if r := runCLI(t.Context(), "", "db", "recover", "--db", path, "--name", "root"); r.code != exitOK || !strings.Contains(r.stdout, core.TokenPrefix) {
 		t.Fatalf("recover = %+v", r)
 	}
-	if r := runCLI(t.Context(), "", "admin", "recover", "--db", path); r.code != exitUsage {
+	if r := runCLI(t.Context(), "", "db", "recover", "--db", path); r.code != exitUsage {
 		t.Fatalf("recover without --name = %+v", r)
 	}
 }
@@ -775,33 +775,41 @@ func TestBackupDumpAndLoad(t *testing.T) {
 		t.Fatalf("dump -o - = %+v", r)
 	}
 	piped := filepath.Join(dir, "piped.db")
-	if r := runCLIInput(t.Context(), url, r.stdout, nil, "load", "--db", piped); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
+	if r := runCLIInput(t.Context(), url, r.stdout, nil, "db", "load", "--db", piped); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
 		t.Fatalf("load of a piped dump = %+v", r)
 	}
 
 	loaded := filepath.Join(dir, "loaded.db")
-	if r := cli(nil, "load", "--db", loaded, "-i", full); r.code != exitOK || !strings.Contains(r.stdout, "loaded") {
+	if r := cli(nil, "db", "load", "--db", loaded, "-i", full); r.code != exitOK || !strings.Contains(r.stdout, "loaded") {
 		t.Fatalf("load = %+v", r)
 	}
-	if r := cli(nil, "load", "--db", loaded, "-i", part); r.code != exitError || !strings.Contains(r.stderr, "exists") {
+	if r := cli(nil, "db", "load", "--db", loaded, "-i", part); r.code != exitError || !strings.Contains(r.stderr, "exists") {
 		t.Fatalf("load over an existing database = %+v", r)
 	}
-	if r := cli(nil, "load", "--db", filepath.Join(dir, "ns.db"), "-i", part); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
+	if r := cli(nil, "db", "load", "--db", filepath.Join(dir, "ns.db"), "-i", part); r.code != exitOK || !strings.Contains(r.stdout, "namespace default") {
 		t.Fatalf("load namespace dump = %+v", r)
 	}
 
 	// Without --db, a namespace dump goes into the running server.
-	if r := cli(with, "load", "-i", part, "--as", "copy"); r.code != exitOK || !strings.Contains(r.stdout, "loaded namespace copy into") {
+	if r := cli(with, "load", "-i", part, "--name", "copy"); r.code != exitOK || !strings.Contains(r.stdout, "loaded namespace copy into") {
 		t.Fatalf("load into the server = %+v", r)
 	}
-	if r := cli(with, "load", "-i", part, "--as", "copy"); r.code != exitError || !strings.Contains(r.stderr, "already exists") {
+	if r := cli(with, "load", "-i", part, "--name", "copy"); r.code != exitError || !strings.Contains(r.stderr, "already exists") {
 		t.Fatalf("load into an existing namespace = %+v", r)
 	}
 	if r := cli(with, "load", "-i", full); r.code != exitError || !strings.Contains(r.stderr, "full dump") {
 		t.Fatalf("load a full dump into the server = %+v", r)
 	}
-	if r := cli(nil, "load", "--db", filepath.Join(dir, "as.db"), "--as", "x", "-i", part); r.code != exitUsage {
-		t.Fatalf("--as with --db = %+v", r)
+	// db load takes no server flags, and load no database file.
+	for _, args := range [][]string{
+		{"db", "load", "--db", filepath.Join(dir, "x.db"), "--name", "x", "-i", part},
+		{"db", "load", "--db", filepath.Join(dir, "x.db"), "--url", url, "-i", part},
+		{"load", "--db", filepath.Join(dir, "x.db"), "-i", part},
+		{"load", "--as", "x", "-i", part},
+	} {
+		if r := cli(with, args...); r.code != exitUsage {
+			t.Fatalf("%v = %+v", args, r)
+		}
 	}
 
 	// A cut-off dump is refused, and no database is left behind.
@@ -815,7 +823,7 @@ func TestBackupDumpAndLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(dir, "cut.db")
-	if r := cli(nil, "load", "--db", target, "-i", cut); r.code != exitError || !strings.Contains(r.stderr, "cut off") {
+	if r := cli(nil, "db", "load", "--db", target, "-i", cut); r.code != exitError || !strings.Contains(r.stderr, "cut off") {
 		t.Fatalf("load of a cut-off dump = %+v", r)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -838,7 +846,7 @@ func dumpBody(t *testing.T, path string) string {
 func TestMigrate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agora.db")
-	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitError {
+	if r := runCLI(t.Context(), "", "db", "migrate", "--db", path, "--check"); r.code != exitError {
 		t.Fatalf("migrate on a missing file = %+v", r)
 	}
 	// An old database: schema 1.
@@ -847,16 +855,16 @@ func TestMigrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = db.Close()
-	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitPending || !strings.Contains(r.stdout, "pending") {
+	if r := runCLI(t.Context(), "", "db", "migrate", "--db", path, "--check"); r.code != exitPending || !strings.Contains(r.stdout, "pending") {
 		t.Fatalf("check = %+v", r)
 	}
-	if r := runCLI(t.Context(), "", "migrate", "--db", path); r.code != exitOK || !strings.Contains(r.stdout, "migrated from schema 1") {
+	if r := runCLI(t.Context(), "", "db", "migrate", "--db", path); r.code != exitOK || !strings.Contains(r.stdout, "migrated from schema 1") {
 		t.Fatalf("migrate = %+v", r)
 	}
 	if _, err := os.Stat(path + ".pre-v1"); err != nil {
 		t.Fatalf("no snapshot: %v", err)
 	}
-	if r := runCLI(t.Context(), "", "migrate", "--db", path, "--check"); r.code != exitOK || !strings.Contains(r.stdout, "current") {
+	if r := runCLI(t.Context(), "", "db", "migrate", "--db", path, "--check"); r.code != exitOK || !strings.Contains(r.stdout, "current") {
 		t.Fatalf("check after = %+v", r)
 	}
 }
@@ -910,15 +918,15 @@ func TestAge(t *testing.T) {
 	}
 }
 
-func TestAdminRefusesAnOldDatabase(t *testing.T) {
+func TestBootstrapRefusesAnOldDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agora.db")
 	db, err := store.OpenAt(t.Context(), path, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = db.Close()
-	r := runCLI(t.Context(), "", "admin", "bootstrap", "--db", path, "--name", "root")
-	if r.code != exitError || !strings.Contains(r.stderr, "agora migrate") {
+	r := runCLI(t.Context(), "", "db", "bootstrap", "--db", path, "--name", "root")
+	if r.code != exitError || !strings.Contains(r.stderr, "agora db migrate") {
 		t.Fatalf("bootstrap on an old database = %+v", r)
 	}
 	if v, err := store.Inspect(t.Context(), path); err != nil || v != 1 {

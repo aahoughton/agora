@@ -44,7 +44,7 @@ type Options struct {
 	Snapshot bool
 }
 
-// OpenWith is Open with options; agora serve and agora migrate use it.
+// OpenWith is Open with options; agora serve and agora db migrate use it.
 func OpenWith(ctx context.Context, path string, opts Options) (*sql.DB, error) {
 	return openAt(ctx, path, 0, opts)
 }
@@ -179,7 +179,7 @@ func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, err
 	}
 	if latest := LatestVersion(); v != latest {
-		return nil, fmt.Errorf("store: %s is at schema %d and this build needs %d; run agora migrate --db %s (or use the matching build)", path, v, latest, path)
+		return nil, fmt.Errorf("store: %s is at schema %d and this build needs %d; run agora db migrate --db %s (or use the matching build)", path, v, latest, path)
 	}
 	return Open(ctx, path)
 }

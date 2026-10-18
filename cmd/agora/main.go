@@ -62,8 +62,8 @@ commands:
   admin       manage accounts, tokens and members (agora admin help)
   backup      download a copy of the server's database
   dump        download a dump of a namespace or of everything
-  load        create a database from a dump, or add a namespace to a server
-  migrate     upgrade a database to this build's schema
+  load        add a namespace dump to a running server
+  db          work on a database file directly (agora db help)
   health      check that the server is up
   version     print the version
 
@@ -122,8 +122,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runDump(ctx, args[1:], stdout, stderr, getenv)
 	case "load":
 		return runLoad(ctx, args[1:], stdin, stdout, stderr, getenv)
-	case "migrate":
-		return runMigrate(ctx, args[1:], stdout, stderr)
+	case "db":
+		return runDB(ctx, args[1:], stdin, stdout, stderr)
 	case "health":
 		return runHealth(ctx, args[1:], stdout, stderr, getenv)
 	case "version", "--version":

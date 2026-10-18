@@ -357,7 +357,7 @@ paths:
         dump without its end record was cut off. With namespace, one
         namespace's conversations, participants and messages with account
         references cleared (namespace admins); without, every table but
-        browser sessions (server admins). Load with agora load.
+        browser sessions (server admins). Load with agora db load, or a namespace dump with agora load.
       parameters:
         - name: namespace
           in: query
