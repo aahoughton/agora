@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>default · agora</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="bar">
+  <nav class="crumbs">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true"></span>agora</a><span class="sep">/</span><a href="/n/default">default</a>
+  </nav>
+</header>
+<main class="">
+<div class="page-head">
+  <h1>Search</h1>
+</div>
+<form class="search" method="get" action="/n/default/search" role="search">
+  <input type="search" name="q" value="" maxlength="500" placeholder="words, &quot;a phrase&quot;, or word*" aria-label="Search messages" autofocus>
+  <select name="order" aria-label="Order">
+    <option value="relevance" selected>Best match</option>
+    <option value="newest">Newest</option>
+    <option value="oldest">Oldest</option>
+  </select>
+  <button type="submit">Search</button>
+</form>
+<p class="empty">Search the messages in default: every word must appear; put a phrase in quotes, and end a word with * to match its start. System lines are not searched.</p>
+</main>
+<footer class="foot">agora test</footer>
+<script src="/static/agora.js" defer></script>
+</body>
+</html>

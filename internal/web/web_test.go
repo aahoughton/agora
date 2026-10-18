@@ -337,6 +337,8 @@ func TestGoldenPages(t *testing.T) {
 		"conversations":     {e, "/n/default"},
 		"conversation":      {e, "/n/default/c/cache"},
 		"conversation-runs": {runs, "/n/default/c/runs"},
+		"search":            {e, "/n/default/search?q=lru"},
+		"search-empty":      {e, "/n/default/search"},
 	} {
 		_, body := page.e.get(page.path)
 		file := filepath.Join("testdata", name+".golden.html")

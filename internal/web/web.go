@@ -73,12 +73,18 @@ type Page struct {
 	Account string
 	// ReturnTo is where the login page sends the browser after signing in.
 	ReturnTo string
+
+	// Query and Order are the search on /n/{namespace}/search; Search is
+	// its results, nil before a query is given.
+	Query  string
+	Order  string
+	Search *SearchResults
 }
 
 // pages are the page templates a theme must provide. Each defines
 // "content"; layout.html defines "layout", message.html "message",
 // participants.html "participants" and about.html "about".
-var pages = []string{"namespaces", "conversations", "conversation", "error", "login"}
+var pages = []string{"namespaces", "conversations", "conversation", "search", "error", "login"}
 
 var partials = []string{"layout", "message", "participants", "about"}
 
@@ -159,6 +165,7 @@ func Handler(svc *core.Service, authn auth.Authenticator, opts Options) (http.Ha
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", v.root)
 	mux.HandleFunc("GET /n/{ns}", v.namespace)
+	mux.HandleFunc("GET /n/{ns}/search", v.search)
 	mux.HandleFunc("GET /n/{ns}/c/{conv}", v.conversation)
 	mux.HandleFunc("GET /n/{ns}/c/{conv}/events", v.events)
 	mux.HandleFunc("POST /n/{ns}/c/{conv}/observe", v.observe)

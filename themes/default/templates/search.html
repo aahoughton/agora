@@ -1,0 +1,43 @@
+{{define "content" -}}
+<div class="page-head">
+  <h1>Search</h1>
+</div>
+<form class="search" method="get" action="/n/{{.Namespace}}/search" role="search">
+  <input type="search" name="q" value="{{.Query}}" maxlength="500" placeholder="words, &quot;a phrase&quot;, or word*" aria-label="Search messages" autofocus>
+  <select name="order" aria-label="Order">
+    <option value="relevance"{{if eq .Order "relevance"}} selected{{end}}>Best match</option>
+    <option value="newest"{{if eq .Order "newest"}} selected{{end}}>Newest</option>
+    <option value="oldest"{{if eq .Order "oldest"}} selected{{end}}>Oldest</option>
+  </select>
+  <button type="submit">Search</button>
+</form>
+{{- with .Search}}
+{{- if .Hits}}
+<p class="search-count">{{.Total}} {{if eq .Total 1}}message matches{{else}}messages match{{end}}</p>
+<ul class="search-hits">
+{{- range .Hits}}
+  <li class="search-hit {{.Kind}}">
+    <a class="row-link" href="{{.Link}}">
+      <div class="hit-head">
+        <span class="row-name">{{.Conversation}}</span>
+        <span class="seq">#{{.Seq}}</span>
+        <span class="author {{tone .Author}}">{{.Author}}</span>
+        {{- if eq .Kind "observer"}}<span class="pill observer">observer</span>{{end}}
+        {{- if eq .Kind "conclude"}}<span class="pill concluded">concluded</span>{{end}}
+        <time class="row-time" datetime="{{ts .CreatedAt}}" title="{{ts .CreatedAt}}">{{datetime .CreatedAt}}</time>
+      </div>
+      <p class="snippet">{{range .Snippet}}{{if .Match}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</p>
+    </a>
+  </li>
+{{- end}}
+</ul>
+{{- if .Next}}
+<p class="more"><a href="?q={{$.Query}}&order={{$.Order}}&cursor={{.Next}}">More results</a></p>
+{{- end}}
+{{- else}}
+<p class="empty">No messages match.</p>
+{{- end}}
+{{- else}}
+<p class="empty">Search the messages in {{.Namespace}}: every word must appear; put a phrase in quotes, and end a word with * to match its start. System lines are not searched.</p>
+{{- end}}
+{{- end}}

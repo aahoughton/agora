@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>default · agora</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="bar">
+  <nav class="crumbs">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true"></span>agora</a><span class="sep">/</span><a href="/n/default">default</a>
+  </nav>
+</header>
+<main class="">
+<div class="page-head">
+  <h1>Search</h1>
+</div>
+<form class="search" method="get" action="/n/default/search" role="search">
+  <input type="search" name="q" value="lru" maxlength="500" placeholder="words, &quot;a phrase&quot;, or word*" aria-label="Search messages" autofocus>
+  <select name="order" aria-label="Order">
+    <option value="relevance" selected>Best match</option>
+    <option value="newest">Newest</option>
+    <option value="oldest">Oldest</option>
+  </select>
+  <button type="submit">Search</button>
+</form>
+<p class="search-count">3 messages match</p>
+<ul class="search-hits">
+  <li class="search-hit conclude">
+    <a class="row-link" href="/n/default/c/cache?before=28#m7">
+      <div class="hit-head">
+        <span class="row-name">cache</span>
+        <span class="seq">#7</span>
+        <span class="author tone-7">alice</span><span class="pill concluded">concluded</span>
+        <time class="row-time" datetime="2030-01-02T15:04:05Z" title="2030-01-02T15:04:05Z">Jan 2 15:04</time>
+      </div>
+      <p class="snippet">AGREED: <mark>LRU</mark></p>
+    </a>
+  </li>
+  <li class="search-hit say">
+    <a class="row-link" href="/n/default/c/cache?before=26#m5">
+      <div class="hit-head">
+        <span class="row-name">cache</span>
+        <span class="seq">#5</span>
+        <span class="author tone-4">bob</span>
+        <time class="row-time" datetime="2030-01-02T15:04:05Z" title="2030-01-02T15:04:05Z">Jan 2 15:04</time>
+      </div>
+      <p class="snippet">@alice <mark>LRU</mark>: ``` evict(oldest) ```</p>
+    </a>
+  </li>
+  <li class="search-hit say">
+    <a class="row-link" href="/n/default/c/cache?before=25#m4">
+      <div class="hit-head">
+        <span class="row-name">cache</span>
+        <span class="seq">#4</span>
+        <span class="author tone-7">alice</span>
+        <time class="row-time" datetime="2030-01-02T15:04:05Z" title="2030-01-02T15:04:05Z">Jan 2 15:04</time>
+      </div>
+      <p class="snippet">**<mark>LRU</mark>** or LFU? See [notes](https://example.com/notes). &lt;script&gt;alert(1)&lt;/script&gt;</p>
+    </a>
+  </li>
+</ul>
+</main>
+<footer class="foot">agora test</footer>
+<script src="/static/agora.js" defer></script>
+</body>
+</html>
