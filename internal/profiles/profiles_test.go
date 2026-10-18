@@ -34,13 +34,13 @@ func TestProfiles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.WriteString("## mcp-config, server waits up to " + wait.String() + "\n" + out + "\n")
+			b.WriteString("## client config, server waits up to " + wait.String() + "\n" + out + "\n")
 		}
 		out, err := p.MCPConfig(url, 4*time.Minute, "AGORA_TOKEN")
 		if err != nil {
 			t.Fatal(err)
 		}
-		b.WriteString("## mcp-config with a token, server waits up to 4m0s\n" + out + "\n")
+		b.WriteString("## client config with a token, server waits up to 4m0s\n" + out + "\n")
 		hook, err := p.StopHook("agora hook stop")
 		if err != nil {
 			t.Fatal(err)

@@ -49,7 +49,7 @@ func runHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	fs.Usage = func() {
 		fmt.Fprint(stderr, `usage: agora hook stop [--agent NAME] [flags]
 
-A Stop hook for Claude Code and Codex (see agora mcp-config --stop-hook).
+A Stop hook for Claude Code and Codex (see agora client config --stop-hook).
 It reads the hook's JSON on stdin and, while the agent is expected in an
 open conversation, tells the client to continue with the agent's status
 lines as the reason. It keeps holding a session while it makes progress

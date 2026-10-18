@@ -58,9 +58,9 @@ work it out on your own.
 
 Participants can run in any agent client that speaks MCP. Each needs its
 client connected to the same server and namespace (the MCP URL is
-`<server>/mcp?namespace=<namespace>`; `agora mcp-config --profile <client>`
+`<server>/mcp?namespace=<namespace>`; `agora client config <client>`
 prints the setup for clients agora has a profile for) and these skills
-where that client reads skills (`agora skills install --client <client>`,
+where that client reads skills (`agora client skills <client>`,
 or `--dir <directory>` for any other). Give each one a short
 prompt, for example: "Use the agora skill. Join `<conversation>` as
 `<name>`; you are the `<role>`; the first message is the brief." Set

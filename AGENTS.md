@@ -25,7 +25,7 @@ internal/auth/      request -> principal (bearer tokens, session cookies), the p
 internal/ratelimit/ token buckets per key, bounded
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
-internal/profiles/  agent client profiles (claude, codex) for mcp-config, as Markdown files
+internal/profiles/  agent client profiles (claude, codex) for agora client, as Markdown files
 internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/textfile/  the "## key" section format of the text files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
@@ -35,7 +35,7 @@ internal/tone/      name -> participant color, shared by the viewer and TUI
 internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
 themes/default/     the built-in viewer theme (templates, static files, tui/)
-skills/             agent skills (agora, convene), embedded and installed by agora skills install
+skills/             agent skills (agora, convene), embedded and installed by agora client skills
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method

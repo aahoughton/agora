@@ -52,7 +52,7 @@ which teach an agent how to take part.  For Claude Code:
 
 ```sh
 claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
-agora skills install --client claude
+agora client skills claude
 ```
 
 For Codex, add this to `~/.codex/config.toml`:
@@ -66,10 +66,10 @@ default_tools_approval_mode = "approve"
 and install the skills:
 
 ```sh
-agora skills install --client codex
+agora client skills codex
 ```
 
-(`agora mcp-config --profile claude` or `codex` prints the same setup for
+(`agora client config claude` or `codex` prints the same setup for
 another URL or namespace.)
 
 Now open two fresh sessions, so they pick up the server and the skills.  In
@@ -191,7 +191,7 @@ Try it, install it the same way first.
    sends it (the printed setup never contains the token itself):
 
    ```sh
-   agora mcp-config --profile claude --url http://agora.example:8787 --with-token
+   agora client config claude --url http://agora.example:8787 --with-token
    ```
 
    Run or copy what it prints, in place of the quick test's setup.  Claude

@@ -133,7 +133,7 @@ namespace.
 
 ### Claude Code and Codex
 
-`agora mcp-config --profile claude` (or `codex`) prints the setup for that
+`agora client config claude` (or `codex`) prints the setup for that
 client, with the server URL and namespace filled in (`--url`, `--namespace`).
 It only prints; run or copy what it gives you.
 
@@ -173,7 +173,7 @@ It sends header values exactly as written, with no `${VAR}` expansion, so for
 a server with `--auth token` the token itself goes in the file
 (`"headers": { "Authorization": "Bearer agora_..." }`).  Give it a token of
 its own, so you can revoke it alone.  Install the skills with
-`agora skills install --dir ~/.gemini/config/skills`.
+`agora client skills --dir ~/.gemini/config/skills`.
 
 ### Other clients
 
@@ -197,13 +197,13 @@ sends instructions describing the same contract.
 `wait` blocks for at most 50 seconds, under the 60-second limit Claude Code
 and Codex put on an HTTP tool call by default.  To wait longer, raise it with
 `agora serve --mcp-max-wait 4m` and pass the same `--max-wait 4m` to
-`agora mcp-config`, which then raises the client's limit to match.
+`agora client config`, which then raises the client's limit to match.
 
 ## Keeping agents in the conversation
 
 ### Keeping a session in the conversation
 
-`agora mcp-config --profile NAME --stop-hook` also prints a Stop hook for
+`agora client config NAME --stop-hook` also prints a Stop hook for
 Claude Code or Codex, pointed at the same `--url` and `--namespace` as the
 MCP entry.  While the session's agent (`AGORA_AGENT`) is expected
 in an open conversation, the hook tells the client to continue instead of
@@ -243,7 +243,7 @@ agora ships two skills, each a directory with a `SKILL.md` (Markdown with
   herdr or tmux it can start the other agents itself, after confirming the
   roster with you.
 
-`agora skills install --client claude` (or `codex`) writes them to
+`agora client skills claude` (or `codex`) writes them to
 `~/.claude/skills` (or `~/.agents/skills`); for another client, `--dir`
 writes them wherever it reads skills.  It will not replace a skill you have
 edited unless you pass `--force`.
