@@ -210,8 +210,8 @@ func TestYourAccount(t *testing.T) {
 
 	// Concluding records a system message for the request's account; it
 	// is still the server's, not the caller's.
-	must[core.Standing](t)(f.svc.Conclude(ctx, pat, "default", "c", core.ConcludeParams{Agent: "pat-agent", Body: "done"}))
-	must[core.Standing](t)(f.svc.Conclude(ctx, sam, "default", "c", core.ConcludeParams{Agent: "sam-agent", Body: "done"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, pat, "default", "c", core.ConcludeParams{Agent: "pat-agent", Body: "AGREED: abc1234"}))
+	must[core.Standing](t)(f.svc.Conclude(ctx, sam, "default", "c", core.ConcludeParams{Agent: "sam-agent", Body: "AGREED: abc1234"}))
 	all := must[core.ReadResult](t)(f.svc.Read(ctx, sam, "default", "c", core.ReadParams{}))
 	for _, m := range all.Messages {
 		if m.Kind == core.KindSystem && m.YourAccount {

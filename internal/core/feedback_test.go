@@ -13,7 +13,7 @@ const feedbackHint = "tell its operators with the feedback tool"
 func TestFeedbackOff(t *testing.T) {
 	f := newFixture(t, core.Options{})
 	f.start(t, "c", core.EndAgreement, "a")
-	st := must[core.Standing](t)(f.svc.Conclude(t.Context(), f.p, "default", "c", core.ConcludeParams{Agent: "a", Body: "done"}))
+	st := must[core.Standing](t)(f.svc.Conclude(t.Context(), f.p, "default", "c", core.ConcludeParams{Agent: "a", Body: "AGREED: abc1234"}))
 	if strings.Contains(st.Line, feedbackHint) {
 		t.Fatalf("standing = %+v", st)
 	}
@@ -68,7 +68,7 @@ func TestFeedbackHint(t *testing.T) {
 	ctx := t.Context()
 	f.start(t, "c", core.EndAgreement, "a", "b", "c")
 
-	st := must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "a", Body: "ok"}))
+	st := must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "a", Body: "AGREED: abc1234"}))
 	if strings.Contains(st.Line, feedbackHint) {
 		t.Fatalf("hint while still waiting: %s", st.Line)
 	}
@@ -79,7 +79,7 @@ func TestFeedbackHint(t *testing.T) {
 	}
 	// The last to conclude reads the conclusion first: the hint comes with
 	// done.
-	st = must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "b", Body: "ok"}))
+	st = must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "b", Body: "AGREED: abc1234"}))
 	if st.Next != core.NextRead || strings.Contains(st.Line, feedbackHint) {
 		t.Fatalf("after conclusion: %s", st.Line)
 	}

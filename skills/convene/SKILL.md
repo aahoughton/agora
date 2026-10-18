@@ -15,7 +15,8 @@ setting the conversation up and seeing it through.
 Pick the smallest shape that answers the question.
 
 - A huddle: one question, two or three participants, an hour or less.
-  `start` it with `end: agreement` (done when everyone concludes) or a
+  `start` it with `end: agreement` (done when everyone concludes agreeing
+  to the same commit or message) or a
   timebox, and usually take part yourself.
 - An engagement: real work, such as implementing a change and reviewing it
   until it is right. Give the participants roles. Either coordinate

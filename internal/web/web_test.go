@@ -209,7 +209,7 @@ func TestObserveForm(t *testing.T) {
 func TestConcludedConversationSaysCommentsAreClosed(t *testing.T) {
 	e := newEnv(t, web.Options{})
 	e.seed()
-	if _, err := e.svc.Conclude(t.Context(), core.Anonymous(), "default", "cache", core.ConcludeParams{Agent: "bob", Body: "AGREED"}); err != nil {
+	if _, err := e.svc.Conclude(t.Context(), core.Anonymous(), "default", "cache", core.ConcludeParams{Agent: "bob", Body: "AGREED: #5"}); err != nil {
 		t.Fatal(err)
 	}
 	_, body := e.get("/n/default/c/cache")
@@ -489,7 +489,7 @@ func TestStreamStartsWithStatusAndParticipants(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		_, _ = e.svc.Conclude(context.Background(), core.Anonymous(), "default", "cache", core.ConcludeParams{Agent: "bob", Body: "AGREED"})
+		_, _ = e.svc.Conclude(context.Background(), core.Anonymous(), "default", "cache", core.ConcludeParams{Agent: "bob", Body: "AGREED: #5"})
 	}()
 	evs = readEvents(t, resp.Body, func(evs []sse) bool {
 		for _, e := range evs {
@@ -654,7 +654,7 @@ func TestConversationListPagesAndFilters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := e.svc.Conclude(ctx, p, "default", "c100", core.ConcludeParams{Agent: "alice", Body: "done"}); err != nil {
+	if _, err := e.svc.Conclude(ctx, p, "default", "c100", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}); err != nil {
 		t.Fatal(err)
 	}
 

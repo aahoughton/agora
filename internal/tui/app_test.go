@@ -183,7 +183,7 @@ func TestFollowAndComment(t *testing.T) {
 	}
 
 	// Concluding closes the composer.
-	if _, err := h.svc.Conclude(ctx, p, "default", "design", core.ConcludeParams{Agent: "alice", Body: "done"}); err != nil {
+	if _, err := h.svc.Conclude(ctx, p, "default", "design", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.svc.Leave(ctx, p, "default", "design", core.LeaveParams{Agent: "alice"}); err != nil {

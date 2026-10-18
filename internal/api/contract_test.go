@@ -132,10 +132,10 @@ func TestResponsesMatchTheContract(t *testing.T) {
 	call("GET", "/v1/namespaces/default/search?q=lru&order=oldest&limit=1", nil)
 	call("GET", "/v1/namespaces/default/search?q=budget&author=root", nil)
 	call("GET", "/v1/namespaces/default/search?q=%22%22", nil)
-	call("POST", c+"/conclude", map[string]any{"agent": "bob", "body": "AGREED: LRU"})
+	call("POST", c+"/conclude", map[string]any{"agent": "bob", "body": "AGREED: abc1234"})
 	call("POST", c+"/leave", map[string]any{"agent": "bob"})
 	token = root.Secret
-	call("POST", c+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: LRU"})
+	call("POST", c+"/conclude", map[string]any{"agent": "alice", "body": "AGREED: abc1234"})
 	call("POST", "/v1/namespaces/default/conversations", map[string]any{"name": "led", "agent": "lead", "end": "coordinator"})
 	call("POST", "/v1/namespaces/default/conversations/led/close", map[string]any{"agent": "lead", "body": "done"})
 	var dump bytes.Buffer

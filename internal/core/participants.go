@@ -390,8 +390,11 @@ func expected(c *conv, pt *Participant) bool {
 	return c.Status == StatusOpen && c.End != EndNone && pt != nil && pt.State == StateActive
 }
 
-// checkAgreement concludes an agreement conversation once nobody is active
-// and at least one participant has concluded.
+// checkAgreement settles an agreement conversation once nobody is active
+// and at least one participant has concluded. When every conclusion
+// agrees to the same message or commit, or every one is BLOCKED, the
+// conversation concludes; otherwise a system line says how they differ
+// and the concluded participants are active again, so it waits on them.
 func (s *Service) checkAgreement(ctx context.Context, tx *wtx, c *conv) error {
 	if c.Status != StatusOpen || c.End != EndAgreement {
 		return nil
@@ -403,8 +406,26 @@ func (s *Service) checkAgreement(ctx context.Context, tx *wtx, c *conv) error {
 	if err != nil {
 		return err
 	}
-	if active == 0 && concluded > 0 {
-		return s.concludeConv(ctx, tx, c, "every remaining participant concluded")
+	if active > 0 || concluded == 0 {
+		return nil
+	}
+	ps, err := s.positions(ctx, tx, c)
+	if err != nil {
+		return err
+	}
+	if ref, ok := agreedRef(ps); ok {
+		return s.concludeConv(ctx, tx, c, "every remaining participant agreed to "+ref)
+	}
+	if allBlocked(ps) {
+		return s.concludeConv(ctx, tx, c, "every remaining participant blocked")
+	}
+	if _, err := s.appendMsg(ctx, tx, c, KindSystem, SystemAuthor, differ(ps), nil); err != nil {
+		return err
+	}
+	for _, p := range ps {
+		if err := s.setState(ctx, tx, c, p.agent, StateActive, PresenceWorking); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -507,6 +528,11 @@ func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp
 		pt, err := s.member(ctx, tx, c, cp.Agent)
 		if err != nil {
 			return err
+		}
+		if c.End == EndAgreement {
+			if _, err := parsePosition(cp.Body); err != nil {
+				return err
+			}
 		}
 		if _, err := s.appendPost(ctx, tx, c, KindConclude, cp.Agent, cp.Body, nil, &pt.ReadSeq); err != nil {
 			return err

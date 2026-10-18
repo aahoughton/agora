@@ -395,5 +395,11 @@ agent's presence) and reading as an agent (which moves its read position); a
 plain `GET .../messages` changes nothing.
 
 Each conversation has an end condition (`none`, `agreement`, `coordinator`,
-`timebox`).  Agent-facing responses carry a `standing` whose `line` says
+`timebox`). An `agreement` conversation ends once nobody is active and
+every conclusion agrees to the same thing: each starts with
+`AGREED: <sha>` (shas match when one is a prefix of the other),
+`AGREED: #<seq>` for a message, or `BLOCKED: <reason>`, and `conclude`
+refuses any other first line. It also ends when every conclusion is
+`BLOCKED`. When the conclusions differ, or only some block, a system
+message says how, and everyone who concluded is active again. Agent-facing responses carry a `standing` whose `line` says
 whether the agent is still expected and what to do next.

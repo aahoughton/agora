@@ -5,9 +5,12 @@
 # Usage: scripts/live-pair.sh codex|claude [output-dir]
 #
 # The host starts an `agreement` conversation, asks QUESTION, pushes back once
-# on the agent's first answer, and concludes after the agent concludes. The
-# script reports each step the agent did or did not take, its token use when
-# the CLI reports it, and keeps the transcript in the output directory.
+# on the agent's first answer, and concludes after the agent concludes,
+# agreeing to what the agent agreed to. With MISMATCH=1 the host first
+# agrees to something else, so the conclusions differ and the agent must
+# conclude again. The script reports each step the agent did or did not
+# take, its token use when the CLI reports it, and keeps the transcript in
+# the output directory.
 #
 # This calls a paid model and is not deterministic; it is a development aid,
 # not a test. Override PROMPT or QUESTION to try wording changes, and MODEL
@@ -84,7 +87,9 @@ AGENT_PID=$!
 
 seen=0
 pushed=no
+mismatched=no
 agent_concluded=no
+agent_position=
 replied_after_pushback=no
 outcome=ok
 while :; do
@@ -99,7 +104,18 @@ while :; do
 	fi
 	if jq -e 'any(.kind == "conclude")' <<<"$from_agent" >/dev/null; then
 		agent_concluded=yes
-		post "$CONV/conclude" "$(jq -n --arg a "$HOST" '{agent:$a, body:"AGREED"}')"
+		agent_position=$(jq -r '[.[] | select(.kind == "conclude")] | last | .body | sub("^\\s+"; "") | split("\n")[0]' <<<"$from_agent")
+		if [ "${MISMATCH:-}" = 1 ] && [ "$mismatched" = no ]; then
+			# #1 is the start line, which nobody means to agree to.
+			post "$CONV/conclude" "$(jq -n --arg a "$HOST" '{agent:$a, body:"AGREED: #1"}')"
+			mismatched=yes
+			agent_concluded=no
+			continue
+		fi
+		case "$agent_position" in
+		AGREED:*) post "$CONV/conclude" "$(jq -n --arg a "$HOST" --arg b "$agent_position" '{agent:$a, body:$b}')" ;;
+		*) outcome="agent did not agree: $agent_position" ;;
+		esac
 		break
 	fi
 	if [ "$pushed" = no ] && jq -e 'any(.kind == "say")' <<<"$from_agent" >/dev/null; then
@@ -146,7 +162,7 @@ grep -q "^#[0-9]* $AGENT_NAME \[say\]" "$OUT/transcript.txt" && answered=yes
 	echo "joined:                  $joined"
 	echo "answered:                $answered"
 	echo "replied after pushback:  $replied_after_pushback"
-	echo "concluded:               $agent_concluded"
+	echo "concluded:               $agent_concluded${agent_position:+ ($agent_position)}"
 	echo "final state:             ${agent_state:-none} (last_seq $last_seq)"
 	echo "stopped on its own:      $stopped${AGENT_PID_LEFT:+ (pid $AGENT_PID_LEFT)}"
 	echo "tokens:                  ${tokens:-unknown}"

@@ -896,7 +896,14 @@ paths:
       - $ref: "#/components/parameters/conv"
     post:
       operationId: conclude
-      description: Record a final position. Posting again later withdraws it.
+      description: >-
+        Record a final position. Posting again later withdraws it. In an
+        agreement conversation the body's first line is `AGREED: <sha>`,
+        `AGREED: #<seq>` or `BLOCKED: <reason>` (400 otherwise), and the
+        conversation concludes when every conclusion agrees to the same
+        commit or message, or every one is BLOCKED; otherwise a system
+        message says how they differ and every participant who concluded is
+        active again.
       requestBody:
         required: true
         content:

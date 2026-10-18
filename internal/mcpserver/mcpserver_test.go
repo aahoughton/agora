@@ -152,14 +152,14 @@ func TestTwoAgentFlow(t *testing.T) {
 		t.Fatalf("reply digest = %q", out)
 	}
 
-	alice.ok("conclude", map[string]any{"conversation": "cache", "agent": "alice", "body": "AGREED: LRU"})
-	out = bob.ok("conclude", map[string]any{"conversation": "cache", "agent": "bob", "body": "AGREED: LRU"})
+	alice.ok("conclude", map[string]any{"conversation": "cache", "agent": "alice", "body": "AGREED: abc1234"})
+	out = bob.ok("conclude", map[string]any{"conversation": "cache", "agent": "bob", "body": "AGREED: abc1234"})
 	if !strings.Contains(out, "cache: concluded") {
 		t.Fatalf("conclude = %q", out)
 	}
 	// The closing messages arrive inline, so the agent is done without a read.
 	out = alice.ok("wait", map[string]any{"conversation": "cache", "agent": "alice"})
-	if !strings.Contains(out, "bob [conclude]: AGREED: LRU") || !strings.Contains(lastLine(out), "next: done") {
+	if !strings.Contains(out, "bob [conclude]: AGREED: abc1234") || !strings.Contains(lastLine(out), "next: done") {
 		t.Fatalf("final wait = %q", out)
 	}
 
@@ -458,7 +458,7 @@ func TestListShowsLiveConversationsInPages(t *testing.T) {
 	for _, n := range []string{"c1", "c2", "c3"} {
 		alice.ok("start", map[string]any{"conversation": n, "agent": "alice", "end": "agreement"})
 	}
-	alice.ok("conclude", map[string]any{"conversation": "c1", "agent": "alice", "body": "done"})
+	alice.ok("conclude", map[string]any{"conversation": "c1", "agent": "alice", "body": "AGREED: abc1234"})
 
 	// By default: open ones only, and here all fit.
 	out := alice.ok("list", map[string]any{})
