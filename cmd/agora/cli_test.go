@@ -399,8 +399,15 @@ func TestHookStopPatience(t *testing.T) {
 		if !stop(`{"session_id":"s3"}`, "--patience", "1") || stop(`{"session_id":"s3"}`, "--patience", "1") {
 			t.Fatal("--patience 1 did not block exactly once")
 		}
-		if r := runCLIInput(t.Context(), url, `{}`, env, "hook", "stop", "--patience", "0"); r.code != exitUsage {
-			t.Fatalf("--patience 0 = %+v", r)
+	})
+	// Exit 2 from a Stop hook keeps the session going, so a mistake in the
+	// hook's command line must not exit 2.
+	t.Run("usage errors exit 1", func(t *testing.T) {
+		env["AGORA_AGENT"] = "alice"
+		for _, args := range [][]string{{"hook"}, {"hook", "start"}, {"hook", "stop", "--patience", "0"}, {"hook", "stop", "--bogus"}, {"hook", "stop", "extra"}, {"hook", "stop", "--namespace", "../x"}, {"hook", "stop", "--url", "ftp://x"}} {
+			if r := runCLIInput(t.Context(), url, `{"session_id":"s4"}`, env, args...); r.code != exitError || r.stderr == "" {
+				t.Errorf("%v = %+v, want exit 1 with the error", args, r)
+			}
 		}
 	})
 }

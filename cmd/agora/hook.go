@@ -38,8 +38,11 @@ type hookState struct {
 }
 
 func runHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv config.Getenv) int {
+	// A client reads exit 2 from a Stop hook as "do not stop", so a
+	// mistake in the hook's command line exits 1 instead: the session may
+	// stop and the client shows the error.
 	if code, ok := groupUsage(args, "stop", "usage: agora hook stop [--agent NAME] [flags]\n", stdout, stderr); !ok {
-		return code
+		return min(code, exitError)
 	}
 	fs := flag.NewFlagSet("hook stop", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -64,13 +67,13 @@ never traps a session.
 	agentFlag := fs.String("agent", "", "your agent name (env "+config.EnvAgent+"; without one the hook does nothing)")
 	patience := fs.Int("patience", defaultPatience, "blocks in a row with no progress before the session may stop (1-20)")
 	if err := fs.Parse(args[1:]); err != nil {
-		return flagError(stderr, err)
+		return min(flagError(stderr, err), exitError)
 	}
 	if fs.NArg() > 0 {
-		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
+		return min(flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0))), exitError)
 	}
 	if *patience < 1 || *patience > 20 {
-		return flagError(stderr, errors.New("--patience must be between 1 and 20"))
+		return min(flagError(stderr, errors.New("--patience must be between 1 and 20")), exitError)
 	}
 	var in struct {
 		SessionID      string `json:"session_id"`
@@ -104,12 +107,12 @@ never traps a session.
 	cc, err := resolveClient(getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "agora hook stop:", err)
-		return exitOK
+		return exitError
 	}
 	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
 		fmt.Fprintln(stderr, "agora hook stop:", err)
-		return exitOK
+		return exitError
 	}
 	ctx, cancel := context.WithTimeout(ctx, hookTimeout)
 	defer cancel()

@@ -213,7 +213,9 @@ conversation, such as `wait`, or a message arrives), and lets it stop after
 three blocks in a row with no progress (`agora hook stop --patience N`
 changes the count).  It keeps that count per client session under
 `$XDG_CACHE_HOME/agora/stop-hook` (default `~/.cache`).  It does nothing
-without `AGORA_AGENT` and never blocks when the server cannot be reached.
+without `AGORA_AGENT` and never blocks when the server cannot be reached or
+its own flags or settings are wrong (it exits 1 and the client shows the
+error).
 Codex runs a hook only after you trust it with `/hooks`.
 
 ### Waiting without spending tokens
