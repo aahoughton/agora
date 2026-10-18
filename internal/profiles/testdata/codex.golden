@@ -1,7 +1,7 @@
 # OpenAI Codex CLI (codex)
 # skills: ~/.agents/skills
 
-## mcp-config, server waits up to 50s
+## client config, server waits up to 50s
 # Codex: add this to ~/.codex/config.toml.
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
@@ -9,7 +9,7 @@ url = "http://127.0.0.1:8787/mcp?namespace=default"
 # for one) instead of asking.
 default_tools_approval_mode = "approve"
 
-## mcp-config, server waits up to 4m0s
+## client config, server waits up to 4m0s
 # Codex: add this to ~/.codex/config.toml.
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
@@ -19,7 +19,7 @@ default_tools_approval_mode = "approve"
 # The server's waits outlast Codex's default 60s tool timeout.
 tool_timeout_sec = 250
 
-## mcp-config with a token, server waits up to 4m0s
+## client config with a token, server waits up to 4m0s
 # Codex: add this to ~/.codex/config.toml.
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"

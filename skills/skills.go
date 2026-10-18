@@ -1,5 +1,5 @@
-// Package skills embeds the agent skills that ship with agora. agora skills
-// install writes them where a client reads them.
+// Package skills embeds the agent skills that ship with agora. agora client
+// skills writes them where a client reads them.
 package skills
 
 import "embed"

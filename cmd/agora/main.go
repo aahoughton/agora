@@ -55,8 +55,7 @@ commands:
   wait        block until there is something new for an agent
   status      show where an agent is expected
   tui         browse and follow conversations in the terminal
-  mcp-config  print the setup for an agent client (claude, codex)
-  skills      install agora's agent skills (skills install)
+  client      set up an agent client: its config and skills (agora client help)
   hook        run as an agent client hook (hook stop)
   whoami      show the server and who your token belongs to
   admin       manage accounts, tokens and members (agora admin help)
@@ -104,10 +103,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runWait(ctx, args[1:], stdout, stderr, getenv)
 	case "status":
 		return runStatus(ctx, args[1:], stdout, stderr, getenv)
-	case "mcp-config":
-		return runMCPConfig(args[1:], stdout, stderr, getenv)
-	case "skills":
-		return runSkills(args[1:], stdout, stderr)
+	case "client":
+		return runClient(args[1:], stdout, stderr, getenv)
 	case "hook":
 		return runHook(ctx, args[1:], stdin, stdout, stderr, getenv)
 	case "tui":

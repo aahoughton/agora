@@ -1,17 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,9 +17,7 @@ import (
 	"github.com/aahoughton/agora/internal/config"
 	"github.com/aahoughton/agora/internal/core"
 	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/profiles"
 	"github.com/aahoughton/agora/internal/tui"
-	"github.com/aahoughton/agora/skills"
 	"github.com/aahoughton/agora/themes"
 )
 
@@ -44,23 +38,29 @@ const requestMargin = 2 * time.Second
 
 // splitConversation lets the conversation name come before or after flags.
 func splitConversation(fs *flag.FlagSet, args []string) (string, error) {
-	var conv string
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		conv, args = args[0], args[1:]
+	conv, err := splitName(fs, args)
+	if err == nil && conv == "" {
+		err = errors.New("a conversation name is required")
 	}
-	if err := fs.Parse(args); err != nil {
-		return "", err
+	return conv, err
+}
+
+// splitName parses fs from args, allowing one positional name anywhere
+// among the flags. It returns "" when there is none.
+func splitName(fs *flag.FlagSet, args []string) (string, error) {
+	var name string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return "", err
+		}
+		if fs.NArg() == 0 {
+			return name, nil
+		}
+		if name != "" {
+			return "", fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		}
+		name, args = fs.Arg(0), fs.Args()[1:]
 	}
-	switch {
-	case conv == "" && fs.NArg() == 1:
-		conv = fs.Arg(0)
-	case fs.NArg() > 0:
-		return "", fmt.Errorf("unexpected argument %q", fs.Arg(0))
-	}
-	if conv == "" {
-		return "", errors.New("a conversation name is required")
-	}
-	return conv, nil
 }
 
 func flagError(stderr io.Writer, err error) int {
@@ -381,81 +381,6 @@ argument it opens the conversations of --namespace.
 	return exitOK
 }
 
-func runMCPConfig(args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
-	fs := flag.NewFlagSet("mcp-config", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprintf(stderr, `usage: agora mcp-config --profile NAME [flags]
-
-Prints how to connect an agent client to this server's MCP endpoint, for
-profile %s. --max-wait must match the server's --mcp-max-wait so the
-client allows waits that long. With --stop-hook it also prints a Stop hook
-that keeps a session from ending while it is expected in a conversation.
-
-`, strings.Join(profiles.Names(), " or "))
-		fs.PrintDefaults()
-	}
-	resolveClient := config.ClientFlags(fs, config.WithNamespace)
-	profile := fs.String("profile", "", "client profile: "+strings.Join(profiles.Names(), ", "))
-	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
-	stopHook := fs.Bool("stop-hook", false, "also print a Stop hook")
-	withToken := fs.Bool("with-token", false, "set the client up to send the token in "+config.EnvToken+", for a server with --auth token (the token itself is never printed)")
-	if err := fs.Parse(args); err != nil {
-		return flagError(stderr, err)
-	}
-	if fs.NArg() > 0 {
-		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
-	}
-	if *profile == "" {
-		return flagError(stderr, errors.New("--profile is required: "+strings.Join(profiles.Names(), ", ")))
-	}
-	p, err := profiles.Get(*profile)
-	if err != nil {
-		return flagError(stderr, err)
-	}
-	cc, err := resolveClient(getenv)
-	if err != nil {
-		return flagError(stderr, err)
-	}
-	if _, err := client.New(cc.URL, cc.Token); err != nil {
-		return flagError(stderr, err)
-	}
-	base := strings.TrimRight(cc.URL, "/")
-	mcpURL := base + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
-	tokenEnv := ""
-	if *withToken {
-		tokenEnv = config.EnvToken
-	}
-	out, err := p.MCPConfig(mcpURL, *maxWait, tokenEnv)
-	if err != nil {
-		fmt.Fprintln(stderr, "agora mcp-config:", err)
-		return exitError
-	}
-	fmt.Fprint(stdout, out)
-	if *stopHook {
-		// The hook reaches the same server and namespace as the MCP entry;
-		// the agent name and token still come from the environment.
-		hook, err := p.StopHook("agora hook stop --url " + shellWord(base) + " --namespace " + cc.Namespace)
-		if err != nil {
-			fmt.Fprintln(stderr, "agora mcp-config:", err)
-			return exitError
-		}
-		fmt.Fprint(stdout, "\n"+hook)
-	}
-	return exitOK
-}
-
-// shellWord quotes s for a POSIX shell unless it is made only of
-// characters no shell treats specially.
-func shellWord(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-const skillsUsage = "usage: agora skills install --client NAME [--dir DIR] [--force]\n"
-
 // groupUsage handles a command group's first argument. It reports ok when
 // args start with the group's one subcommand; otherwise it prints usage, to
 // stdout with exit 0 when asked for help and to stderr with exit 2 when not.
@@ -473,125 +398,6 @@ func groupUsage(args []string, sub, usage string, stdout, stderr io.Writer) (int
 		fmt.Fprint(stderr, usage)
 		return exitUsage, false
 	}
-}
-
-func runSkills(args []string, stdout, stderr io.Writer) int {
-	if code, ok := groupUsage(args, "install", skillsUsage, stdout, stderr); !ok {
-		return code
-	}
-	fs := flag.NewFlagSet("skills install", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprintf(stderr, `usage: agora skills install --client NAME [--dir DIR] [--force]
-
-Writes agora's skills (%s) where client %s reads them, and lists each
-file it writes. It refuses to replace a file that differs from the one it
-would write unless --force is given, and then writes nothing.
-
-`, strings.Join(skillNames(), ", "), strings.Join(profiles.Names(), " or "))
-		fs.PrintDefaults()
-	}
-	clientName := fs.String("client", "", "client profile: "+strings.Join(profiles.Names(), ", "))
-	dir := fs.String("dir", "", "install into this directory instead of the client's skills directory")
-	force := fs.Bool("force", false, "replace files that differ")
-	if err := fs.Parse(args[1:]); err != nil {
-		return flagError(stderr, err)
-	}
-	if fs.NArg() > 0 {
-		return flagError(stderr, fmt.Errorf("unexpected argument %q", fs.Arg(0)))
-	}
-	target := *dir
-	if target == "" {
-		if *clientName == "" {
-			return flagError(stderr, errors.New("--client or --dir is required"))
-		}
-		p, err := profiles.Get(*clientName)
-		if err != nil {
-			return flagError(stderr, err)
-		}
-		if target, err = expandHome(p.SkillsDir); err != nil {
-			fmt.Fprintln(stderr, "agora skills install:", err)
-			return exitError
-		}
-	}
-	if err := installSkills(skills.FS, target, *force, stdout); err != nil {
-		fmt.Fprintln(stderr, "agora skills install:", err)
-		return exitError
-	}
-	return exitOK
-}
-
-func skillNames() []string {
-	entries, _ := fs.ReadDir(skills.FS, ".")
-	var names []string
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	return names
-}
-
-// expandHome replaces a leading ~ with the user's home directory.
-func expandHome(path string) (string, error) {
-	rest, ok := strings.CutPrefix(path, "~")
-	if !ok {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, rest), nil
-}
-
-// installSkills copies every file in src under dir. It checks all files
-// before writing any, so a refusal leaves dir as it was.
-func installSkills(src fs.FS, dir string, force bool, out io.Writer) error {
-	type file struct {
-		path string
-		data []byte
-	}
-	var files []file
-	var conflicts []string
-	err := fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		data, err := fs.ReadFile(src, path)
-		if err != nil {
-			return err
-		}
-		dst := filepath.Join(dir, filepath.FromSlash(path))
-		old, err := os.ReadFile(dst)
-		switch {
-		case err == nil && bytes.Equal(old, data):
-			return nil
-		case err == nil && !force:
-			conflicts = append(conflicts, dst)
-		case err != nil && !errors.Is(err, fs.ErrNotExist):
-			return err
-		}
-		files = append(files, file{dst, data})
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if len(conflicts) > 0 {
-		return fmt.Errorf("these files differ from agora's; pass --force to replace them:\n  %s", strings.Join(conflicts, "\n  "))
-	}
-	for _, f := range files {
-		if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(f.path, f.data, 0o644); err != nil {
-			return err
-		}
-		fmt.Fprintln(out, "wrote", f.path)
-	}
-	if len(files) == 0 {
-		fmt.Fprintln(out, "skills in", dir, "are up to date")
-	}
-	return nil
 }
 
 func runWhoami(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv) int {

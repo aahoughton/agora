@@ -412,8 +412,8 @@ func TestHookStopPatience(t *testing.T) {
 	})
 }
 
-func TestMCPConfig(t *testing.T) {
-	r := runCLI(t.Context(), "http://127.0.0.1:9000/", "mcp-config", "--profile", "codex", "--namespace", "team-a", "--stop-hook")
+func TestClientConfig(t *testing.T) {
+	r := runCLI(t.Context(), "http://127.0.0.1:9000/", "client", "config", "codex", "--namespace", "team-a", "--stop-hook")
 	if r.code != exitOK {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
@@ -426,7 +426,11 @@ func TestMCPConfig(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, r.stdout)
 		}
 	}
-	for _, args := range [][]string{{"mcp-config"}, {"mcp-config", "--profile", "gemini"}} {
+	// The client name may also sit between flags.
+	if r := runCLI(t.Context(), "http://127.0.0.1:9000", "client", "config", "--namespace", "x", "claude", "--stop-hook"); r.code != exitOK || !strings.Contains(r.stdout, "--namespace x") {
+		t.Errorf("name between flags = %+v", r)
+	}
+	for _, args := range [][]string{{"client", "config"}, {"client", "config", "gemini"}, {"client", "config", "claude", "codex"}, {"client", "config", "--profile", "claude"}} {
 		if r := runCLI(t.Context(), "http://127.0.0.1:9000", args...); r.code != exitUsage {
 			t.Errorf("%v = %d, want usage error", args, r.code)
 		}
@@ -447,10 +451,10 @@ func TestShellWord(t *testing.T) {
 	}
 }
 
-func TestSkillsInstall(t *testing.T) {
+func TestClientSkills(t *testing.T) {
 	dir := t.TempDir()
 	install := func(args ...string) cliResult {
-		return runCLI(t.Context(), "http://127.0.0.1:1", append([]string{"skills", "install", "--dir", dir}, args...)...)
+		return runCLI(t.Context(), "http://127.0.0.1:1", append([]string{"client", "skills", "--dir", dir}, args...)...)
 	}
 	r := install()
 	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(dir, "agora", "SKILL.md")) || !strings.Contains(r.stdout, filepath.Join(dir, "convene", "SKILL.md")) {
@@ -481,8 +485,25 @@ func TestSkillsInstall(t *testing.T) {
 		t.Fatal("--force did not replace the file")
 	}
 
-	if r := runCLI(t.Context(), "", "skills", "install"); r.code != exitUsage {
-		t.Fatalf("no client = %+v", r)
+	for _, args := range [][]string{{"client", "skills"}, {"client", "skills", "claude", "--dir", dir}, {"client", "skills", "gemini"}} {
+		if r := runCLI(t.Context(), "", args...); r.code != exitUsage {
+			t.Fatalf("%v = %+v", args, r)
+		}
+	}
+
+	// A client name installs into that client's skills directory, with
+	// flags before or after the name.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, args := range [][]string{{"client", "skills", "claude"}, {"client", "skills", "--force", "codex"}} {
+		if r := runCLI(t.Context(), "", args...); r.code != exitOK {
+			t.Fatalf("%v = %+v", args, r)
+		}
+	}
+	for _, f := range []string{".claude/skills/agora/SKILL.md", ".agents/skills/agora/SKILL.md"} {
+		if _, err := os.Stat(filepath.Join(home, f)); err != nil {
+			t.Errorf("client skills did not write %s: %v", f, err)
+		}
 	}
 }
 
@@ -676,10 +697,10 @@ func TestAdminThroughTheServer(t *testing.T) {
 	}
 }
 
-func TestMCPConfigNeverPrintsTheToken(t *testing.T) {
+func TestClientConfigNeverPrintsTheToken(t *testing.T) {
 	env := map[string]string{"AGORA_TOKEN": "agora_supersecret"}
 	for _, profile := range []string{"claude", "codex"} {
-		r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "mcp-config", "--profile", profile, "--with-token", "--stop-hook")
+		r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "client", "config", profile, "--with-token", "--stop-hook")
 		if r.code != exitOK || strings.Contains(r.stdout, "supersecret") || !strings.Contains(r.stdout, "AGORA_TOKEN") {
 			t.Fatalf("%s: %+v", profile, r)
 		}

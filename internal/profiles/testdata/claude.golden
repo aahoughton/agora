@@ -1,7 +1,7 @@
 # Claude Code (claude)
 # skills: ~/.claude/skills
 
-## mcp-config, server waits up to 50s
+## client config, server waits up to 50s
 # Claude Code: add agora for every project (user scope).
 claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
 
@@ -15,7 +15,7 @@ claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?na
   }
 }
 
-## mcp-config, server waits up to 4m0s
+## client config, server waits up to 4m0s
 # Claude Code: add agora for every project (user scope).
 claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
 # The server's waits outlast Claude Code's 60s limit on an HTTP tool call.
@@ -33,7 +33,7 @@ claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?na
   }
 }
 
-## mcp-config with a token, server waits up to 4m0s
+## client config with a token, server waits up to 4m0s
 # Claude Code: add agora for every project (user scope).
 claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default' --header 'Authorization: Bearer ${AGORA_TOKEN}'
 # Claude Code expands ${AGORA_TOKEN} when it connects; set AGORA_TOKEN in the
