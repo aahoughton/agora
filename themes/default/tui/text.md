@@ -142,6 +142,24 @@ sending
 ## filter
 filter
 
+## search_title
+fields: Namespace
+Search {{.Namespace}}
+
+## search_order
+fields: Order
+by {{.Order}}
+
+## search_prompt
+Type words or "a phrase" to find; word* matches the start of a word.
+
+## search_empty
+No messages match.
+
+## search_count
+fields: Total
+{{.Total}} {{if eq .Total 1}}message matches{{else}}messages match{{end}}
+
 ## error
 fields: Err
 error: {{.Err}}
@@ -154,7 +172,7 @@ lost the server ({{.Err}}); retrying
 enter open · / filter · r refresh · q quit · ? help
 
 ## hints_conversations
-enter open · / filter · a archived · r refresh · esc back · ? help
+enter open · s search · / filter · a archived · r refresh · esc back · ? help
 
 ## hints_conversation
 i comment · p participants · g/G top/bottom · esc back · ? help
@@ -165,6 +183,12 @@ p participants · g/G top/bottom · esc back · ? help
 ## hints_composer
 enter send · shift+enter/ctrl+j new line · esc leave
 
+## hints_search
+enter open · s new search · o order · esc back · ? help
+
+## hints_search_input
+enter search · esc cancel
+
 ## help_title
 Keys
 
@@ -174,6 +198,8 @@ pgup pgdn       scroll a page
 g G             top, bottom (bottom follows new messages; the top loads earlier ones)
 enter           open
 /               filter a list
+s               search the namespace's messages (from its conversation list)
+o               change the search order: relevance, newest, oldest
 a               include archived conversations
 r               refresh a list
 p               show or hide participants
