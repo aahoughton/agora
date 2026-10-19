@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
-const tinyDump = `{"format":"agora-dump","version":1,"schema":2,"created_at":"x"}
+const tinyDump = `{"format":"smoot-dump","version":1,"schema":2,"created_at":"x"}
 {"table":"namespaces","row":{"id":1,"name":"default","created_at":1}}
 {"end":true,"rows":1}
 `
@@ -31,7 +31,7 @@ func loadFrom(t *testing.T, target, dump string) error {
 // replaced or removed.
 func TestLoadNeverTouchesAnExistingFile(t *testing.T) {
 	dir := t.TempDir()
-	target := filepath.Join(dir, "agora.db")
+	target := filepath.Join(dir, "smoot.db")
 	if err := os.WriteFile(target, []byte("precious"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestLoadNeverTouchesAnExistingFile(t *testing.T) {
 	if b, _ := os.ReadFile(target); string(b) != "precious" {
 		t.Fatal("a failed load removed the existing file")
 	}
-	if left, _ := filepath.Glob(filepath.Join(dir, ".agora-load-*")); len(left) != 0 {
+	if left, _ := filepath.Glob(filepath.Join(dir, ".smoot-load-*")); len(left) != 0 {
 		t.Fatalf("temporary files left: %v", left)
 	}
 }
@@ -58,7 +58,7 @@ func TestLoadedDatabaseIsPrivate(t *testing.T) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(dir, "agora.db")
+	target := filepath.Join(dir, "smoot.db")
 	if err := loadFrom(t, target, tinyDump); err != nil {
 		t.Fatal(err)
 	}

@@ -6,8 +6,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestFailedAuthenticationsAreLimited(t *testing.T) {
@@ -29,12 +29,12 @@ func TestFailedAuthenticationsAreLimited(t *testing.T) {
 		}
 	}
 	for range 3 {
-		if _, err := authn.Authenticate(from("10.0.0.1", "Bearer agora_wrong")); core.CodeOf(err) != core.CodeUnauthorized {
+		if _, err := authn.Authenticate(from("10.0.0.1", "Bearer smoot_wrong")); core.CodeOf(err) != core.CodeUnauthorized {
 			t.Fatalf("bad token: %v", err)
 		}
 	}
 	// Further bad tokens from that address are refused with a wait...
-	_, err = authn.Authenticate(from("10.0.0.1", "Bearer agora_wrong"))
+	_, err = authn.Authenticate(from("10.0.0.1", "Bearer smoot_wrong"))
 	if ce, ok := errors.AsType[*core.Error](err); !ok || ce.Code != core.CodeRateLimited || ce.RetryAfter <= 0 {
 		t.Fatalf("after failures: %v", err)
 	}

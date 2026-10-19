@@ -9,7 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/mcpserver"
 )
 
 // Sessions started at the same moment cannot pass a cap together.

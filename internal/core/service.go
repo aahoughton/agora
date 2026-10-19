@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aahoughton/agora/internal/ratelimit"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/ratelimit"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // Defaults for Options fields left zero.
@@ -51,7 +51,7 @@ type Options struct {
 	// its caller is still allowed, so revoking a credential or a
 	// membership cuts it off. Both also re-check before returning.
 	RecheckEvery time.Duration
-	// Feedback lets agents leave notes on agora itself (SubmitFeedback),
+	// Feedback lets agents leave notes on smoot itself (SubmitFeedback),
 	// and invites them to in the standing line once they are free to stop.
 	Feedback bool
 }

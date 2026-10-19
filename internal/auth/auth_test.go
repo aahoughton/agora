@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 func service(t *testing.T, mode config.AuthMode) *core.Service {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestModeToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, h := range []string{"", "Basic abc", "Bearer ", "Bearer agora_nope", "Bearer x"} {
+	for _, h := range []string{"", "Basic abc", "Bearer ", "Bearer smoot_nope", "Bearer x"} {
 		if _, err := authn.Authenticate(request(t, h)); core.CodeOf(err) != core.CodeUnauthorized {
 			t.Errorf("%q: err = %v", h, err)
 		}

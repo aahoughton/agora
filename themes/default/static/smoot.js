@@ -190,7 +190,7 @@
     fetch(form.action, {
       method: "POST",
       body: new URLSearchParams(new FormData(form)),
-      headers: { "X-Agora-Background": "1" },
+      headers: { "X-Smoot-Background": "1" },
       redirect: "manual",
       credentials: "same-origin",
     }).then(function (res) {

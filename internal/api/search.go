@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func (h *handler) search(w http.ResponseWriter, r *http.Request, p core.Principal) error {

@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // loadInto loads a dump into a new database at path and returns it opened
@@ -149,7 +149,7 @@ func TestLoadRefusesBadDumps(t *testing.T) {
 	tests := []struct {
 		name, dump, want string
 	}{
-		{"not a dump", "hello\n", "not an agora dump"},
+		{"not a dump", "hello\n", "not a smoot dump"},
 		{"future format", strings.Replace(header, `"version":1`, `"version":9`, 1) + "\n", "format version 9"},
 		{"future schema", regexp.MustCompile(`"schema":\d+`).ReplaceAllString(header, `"schema":99`) + "\n", "schema version 99"},
 		{"unknown column", header + "\n" + `{"table":"namespaces","row":{"id":7,"name":"x","created_at":1,"evil":1}}` + "\n", `no column "evil"`},
@@ -211,7 +211,7 @@ func TestBackup(t *testing.T) {
 	if err := f.db.QueryRowContext(t.Context(), "SELECT file FROM pragma_database_list WHERE name = 'main'").Scan(&file); err != nil {
 		t.Fatal(err)
 	}
-	left, _ := filepath.Glob(filepath.Join(filepath.Dir(file), ".agora-backup-*"))
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(file), ".smoot-backup-*"))
 	if len(left) != 0 {
 		t.Fatalf("temporary files left: %v", left)
 	}
@@ -340,7 +340,7 @@ func TestLoadNamespaceIntoALiveDatabase(t *testing.T) {
 			t.Fatalf("namespace %s was created by a refused load", ns)
 		}
 	}
-	left, err := filepath.Glob(filepath.Join(filepath.Dir(f.path), ".agora-load-*"))
+	left, err := filepath.Glob(filepath.Join(filepath.Dir(f.path), ".smoot-load-*"))
 	if err != nil || len(left) != 0 {
 		t.Fatalf("staging left behind: %v %v", left, err)
 	}
@@ -398,7 +398,7 @@ func TestLoadFullDumpFromBeforeFeedback(t *testing.T) {
 
 // A dump from an older schema is migrated before it is copied in.
 func TestLoadNamespaceFromAnOlderSchema(t *testing.T) {
-	const dump = `{"format":"agora-dump","version":1,"schema":1,"namespace":"old","created_at":"x"}
+	const dump = `{"format":"smoot-dump","version":1,"schema":1,"namespace":"old","created_at":"x"}
 {"table":"namespaces","row":{"id":7,"name":"old","created_at":1}}
 {"table":"conversations","row":{"id":3,"namespace_id":7,"name":"c","topic":"t","end_condition":"none","status":"concluded","created_by":"a","created_at":1,"concluded_at":2,"last_seq":2,"last_at":2}}
 {"table":"participants","row":{"conversation_id":3,"agent":"a","state":"left","joined_at":1,"read_seq":2,"last_seen_at":2}}

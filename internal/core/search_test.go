@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // searchFixture holds two conversations in default and one in another

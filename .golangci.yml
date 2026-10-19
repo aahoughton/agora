@@ -28,4 +28,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/aahoughton/agora
+        - github.com/aahoughton/smoot

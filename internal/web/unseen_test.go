@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 // seedCrossed starts "x", where alice posts #6 without having read bob's

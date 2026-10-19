@@ -72,7 +72,7 @@ const (
 )
 
 // SystemAuthor is the author of system messages not about one agent.
-const SystemAuthor = "agora"
+const SystemAuthor = "smoot"
 
 // Message is one entry in a conversation's append-only log. System messages
 // about one agent (joined, left, ...) carry that agent as Author.

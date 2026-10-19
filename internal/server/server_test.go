@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 type result struct {
@@ -75,7 +75,7 @@ func TestHealthzRejectsPost(t *testing.T) {
 
 func newFull(t *testing.T, hosts []string) *httptest.Server {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,8 +126,8 @@ func TestCrossSiteBrowserWritesAreRefused(t *testing.T) {
 }
 
 func TestAllowedHosts(t *testing.T) {
-	srv := newFull(t, []string{"agora.lan", "LOCALHOST"})
-	for host, want := range map[string]int{"agora.lan:8787": 200, "Agora.LAN": 200, "localhost:1": 200, "127.0.0.1": 403} {
+	srv := newFull(t, []string{"smoot.lan", "LOCALHOST"})
+	for host, want := range map[string]int{"smoot.lan:8787": 200, "Smoot.LAN": 200, "localhost:1": 200, "127.0.0.1": 403} {
 		if got := send(t, http.MethodGet, srv.URL+"/v1/namespaces", "", map[string]string{"Host": host}); got != want {
 			t.Errorf("host %s = %d, want %d", host, got, want)
 		}
@@ -146,7 +146,7 @@ func TestLoopbackServerRefusesReboundHosts(t *testing.T) {
 	}
 	// Without a host list any host is accepted (for proxies).
 	open := newFull(t, nil)
-	if got := send(t, http.MethodGet, open.URL+"/v1/namespaces", "", map[string]string{"Host": "agora.example"}); got != http.StatusOK {
+	if got := send(t, http.MethodGet, open.URL+"/v1/namespaces", "", map[string]string{"Host": "smoot.example"}); got != http.StatusOK {
 		t.Fatalf("open server = %d", got)
 	}
 }
@@ -202,7 +202,7 @@ func TestSlowBodiesAreCutOff(t *testing.T) {
 }
 
 func TestCallersAreRecorded(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestCallersAreRecorded(t *testing.T) {
 
 // A caller who may not load gets no longer than anyone else to send a body.
 func TestLoadRefusesNonAdminsWithinTheBodyDeadline(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestLoadRefusesNonAdminsWithinTheBodyDeadline(t *testing.T) {
 // http.ResponseController; every wrapper New puts around a handler must
 // pass that through, or the deadline silently stops applying.
 func TestHandlersCanSetWriteDeadlines(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestAntigravityHook(t *testing.T) {
@@ -28,7 +28,7 @@ func TestAntigravityHook(t *testing.T) {
 		{"wrong contract fields", `{"session_id":"s","stop_hook_active":false}`, "bob", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			env := map[string]string{"AGORA_AGENT": tt.agent, "XDG_CACHE_HOME": t.TempDir()}
+			env := map[string]string{"SMOOT_AGENT": tt.agent, "XDG_CACHE_HOME": t.TempDir()}
 			r := runCLIInput(t.Context(), url, tt.input, env, "hook", "stop", "--client", "antigravity")
 			if r.code != exitOK {
 				t.Fatalf("hook: %+v", r)
@@ -46,7 +46,7 @@ func TestAntigravityHook(t *testing.T) {
 		})
 	}
 	t.Run("patience and progress", func(t *testing.T) {
-		env := map[string]string{"AGORA_AGENT": "bob", "XDG_CACHE_HOME": t.TempDir()}
+		env := map[string]string{"SMOOT_AGENT": "bob", "XDG_CACHE_HOME": t.TempDir()}
 		stop := func(session string) bool {
 			t.Helper()
 			r := runCLIInput(t.Context(), url, `{"conversationId":"`+session+`","terminationReason":"NO_TOOL_CALL"}`, env, "hook", "stop", "--client", "antigravity", "--patience", "2")
@@ -76,7 +76,7 @@ func TestAntigravityHook(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, cache := range []string{"", bad} {
-			env := map[string]string{"AGORA_AGENT": "bob", "XDG_CACHE_HOME": cache}
+			env := map[string]string{"SMOOT_AGENT": "bob", "XDG_CACHE_HOME": cache}
 			r := runCLIInput(t.Context(), url, `{"conversationId":"s","terminationReason":"NO_TOOL_CALL"}`, env, "hook", "stop", "--client", "antigravity")
 			if r.code != exitOK || r.stdout != "" {
 				t.Fatalf("unbounded continuation without state: %+v", r)
@@ -84,7 +84,7 @@ func TestAntigravityHook(t *testing.T) {
 		}
 	})
 	t.Run("unreachable server", func(t *testing.T) {
-		r := runCLIInput(t.Context(), "http://127.0.0.1:1", `{"conversationId":"s","terminationReason":"NO_TOOL_CALL"}`, map[string]string{"AGORA_AGENT": "bob", "XDG_CACHE_HOME": t.TempDir()}, "hook", "stop", "--client", "antigravity")
+		r := runCLIInput(t.Context(), "http://127.0.0.1:1", `{"conversationId":"s","terminationReason":"NO_TOOL_CALL"}`, map[string]string{"SMOOT_AGENT": "bob", "XDG_CACHE_HOME": t.TempDir()}, "hook", "stop", "--client", "antigravity")
 		if r.code != exitOK || r.stdout != "" {
 			t.Fatal(r)
 		}

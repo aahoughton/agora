@@ -1,4 +1,4 @@
-/* agora default theme.
+/* smoot default theme.
    Colors are variables: override them in a theme's style.css to restyle
    without touching templates. tone-0..tone-7 color participants; every name
    maps to one tone, the same on every page. */
@@ -315,7 +315,7 @@ form.observe button:disabled { opacity: 0.6; cursor: progress; }
   main.with-aside { grid-template-columns: minmax(0, 1fr); }
   .details { position: static; order: -1; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
   /* Participants and details collapse behind a toggle so the thread
-     starts near the top; agora.js collapses them on load. */
+     starts near the top; smoot.js collapses them on load. */
   .details-toggle:not([hidden]) {
     display: block; grid-column: 1 / -1; justify-self: start;
     font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--accent);

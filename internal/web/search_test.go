@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 func TestSearchPage(t *testing.T) {

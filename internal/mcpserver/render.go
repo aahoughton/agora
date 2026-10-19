@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // Results are plain text, not JSON: agents pay for every token they read, and

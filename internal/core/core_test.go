@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 type clock struct {
@@ -42,7 +42,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, opts core.Options) *fixture {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)

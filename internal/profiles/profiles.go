@@ -17,7 +17,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/aahoughton/agora/internal/textfile"
+	"github.com/aahoughton/smoot/internal/textfile"
 )
 
 //go:embed text/*.md

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 // tokenEnv serves the viewer in auth mode token, with a member account
@@ -30,7 +30,7 @@ func newTokenEnv(t *testing.T, opts web.Options) *tokenEnv {
 
 func newTokenEnvWith(t *testing.T, opts web.Options, coreOpts core.Options) *tokenEnv {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestLogin(t *testing.T) {
 	}
 
 	// A bad token is refused without a cookie.
-	resp := e.postRaw("/login", url.Values{"token": {"agora_wrong"}, "next": {"/n/default"}})
+	resp := e.postRaw("/login", url.Values{"token": {"smoot_wrong"}, "next": {"/n/default"}})
 	if resp.StatusCode != http.StatusUnauthorized || e.sessionCookie() != nil {
 		t.Fatalf("bad token = %d", resp.StatusCode)
 	}
@@ -227,12 +227,12 @@ func TestNoLoginPageWithAuthOff(t *testing.T) {
 func TestFailedLoginsAreLimited(t *testing.T) {
 	e := newTokenEnv(t, web.Options{Failures: auth.NewFailures(2, nil, nil)})
 	for range 2 {
-		if r := e.postRaw("/login", url.Values{"token": {"agora_wrong"}}); r.StatusCode != http.StatusUnauthorized {
+		if r := e.postRaw("/login", url.Values{"token": {"smoot_wrong"}}); r.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("bad login = %d", r.StatusCode)
 		}
 	}
 	// A further bad token is refused until the limit refills...
-	if r := e.postRaw("/login", url.Values{"token": {"agora_wrong"}}); r.StatusCode != http.StatusTooManyRequests || r.Header.Get("Retry-After") == "" {
+	if r := e.postRaw("/login", url.Values{"token": {"smoot_wrong"}}); r.StatusCode != http.StatusTooManyRequests || r.Header.Get("Retry-After") == "" {
 		t.Fatalf("bad login after failures = %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
 	}
 	// ...but the right token still signs in.
@@ -244,7 +244,7 @@ func TestFailedLoginsAreLimited(t *testing.T) {
 func TestSignInsAndFailuresAreRecorded(t *testing.T) {
 	act := auth.NewActivity(nil, nil)
 	e := newTokenEnv(t, web.Options{Activity: act})
-	e.postRaw("/login", url.Values{"token": {"agora_wrong"}})
+	e.postRaw("/login", url.Values{"token": {"smoot_wrong"}})
 	e.postRaw("/login", url.Values{"token": {e.token}})
 	if code, _ := e.get("/n/default/c/c"); code != http.StatusOK {
 		t.Fatalf("page = %d", code)

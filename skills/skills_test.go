@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/wording"
-	"github.com/aahoughton/agora/skills"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/wording"
+	"github.com/aahoughton/smoot/skills"
 )
 
 func skillFiles(t *testing.T) map[string]string {

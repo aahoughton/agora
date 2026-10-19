@@ -15,16 +15,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/server"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/server"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 func newHandler(t *testing.T) (http.Handler, *core.Service) {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ type cliResult struct {
 func runCLI(ctx context.Context, url string, args ...string) cliResult {
 	var out, errOut bytes.Buffer
 	env := func(k string) string {
-		if k == "AGORA_URL" {
+		if k == "SMOOT_URL" {
 			return url
 		}
 		switch k {
@@ -84,10 +84,10 @@ func TestHealth(t *testing.T) {
 
 func TestCommandsWithoutANamespaceIgnoreIt(t *testing.T) {
 	url, _ := setup(t)
-	env := map[string]string{"AGORA_NAMESPACE": "bad/name"}
+	env := map[string]string{"SMOOT_NAMESPACE": "bad/name"}
 	for _, args := range [][]string{{"health"}, {"whoami"}} {
 		if r := runCLIInput(t.Context(), url, "", env, args...); r.code != exitOK {
-			t.Errorf("%v with an invalid AGORA_NAMESPACE = %+v", args, r)
+			t.Errorf("%v with an invalid SMOOT_NAMESPACE = %+v", args, r)
 		}
 		r := runCLI(t.Context(), url, append(args, "--namespace", "default")...)
 		if r.code != exitUsage || !strings.Contains(r.stderr, "flag provided but not defined: -namespace") {
@@ -285,7 +285,7 @@ func TestTUIUsage(t *testing.T) {
 func runCLIInput(ctx context.Context, url, stdin string, env map[string]string, args ...string) cliResult {
 	var out, errOut bytes.Buffer
 	getenv := func(k string) string {
-		if k == "AGORA_URL" {
+		if k == "SMOOT_URL" {
 			return url
 		}
 		return env[k]
@@ -302,11 +302,11 @@ func TestHookStop(t *testing.T) {
 		env         map[string]string
 		block       bool
 	}{
-		{"expected", `{"stop_hook_active":false}`, map[string]string{"AGORA_AGENT": "bob"}, true},
-		{"not expected", `{}`, map[string]string{"AGORA_AGENT": "carol"}, false},
+		{"expected", `{"stop_hook_active":false}`, map[string]string{"SMOOT_AGENT": "bob"}, true},
+		{"not expected", `{}`, map[string]string{"SMOOT_AGENT": "carol"}, false},
 		{"no agent", `{}`, nil, false},
-		{"already continuing", `{"stop_hook_active":true}`, map[string]string{"AGORA_AGENT": "bob"}, false},
-		{"bad input", `not json`, map[string]string{"AGORA_AGENT": "bob"}, false},
+		{"already continuing", `{"stop_hook_active":true}`, map[string]string{"SMOOT_AGENT": "bob"}, false},
+		{"bad input", `not json`, map[string]string{"SMOOT_AGENT": "bob"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -330,8 +330,8 @@ func TestHookStop(t *testing.T) {
 		})
 	}
 	t.Run("server down", func(t *testing.T) {
-		r := runCLIInput(t.Context(), "http://127.0.0.1:1", `{}`, map[string]string{"AGORA_AGENT": "bob"}, "hook", "stop")
-		if r.code != exitOK || r.stdout != "" || !strings.Contains(r.stderr, "agora hook stop:") {
+		r := runCLIInput(t.Context(), "http://127.0.0.1:1", `{}`, map[string]string{"SMOOT_AGENT": "bob"}, "hook", "stop")
+		if r.code != exitOK || r.stdout != "" || !strings.Contains(r.stderr, "smoot hook stop:") {
 			t.Fatalf("server down = %+v", r)
 		}
 	})
@@ -341,7 +341,7 @@ func TestHookStopPatience(t *testing.T) {
 	url, svc := setup(t)
 	p := core.Anonymous()
 	cache := t.TempDir()
-	env := map[string]string{"AGORA_AGENT": "bob", "XDG_CACHE_HOME": cache}
+	env := map[string]string{"SMOOT_AGENT": "bob", "XDG_CACHE_HOME": cache}
 	stop := func(stdin string, args ...string) bool {
 		t.Helper()
 		r := runCLIInput(t.Context(), url, stdin, env, append([]string{"hook", "stop"}, args...)...)
@@ -393,13 +393,13 @@ func TestHookStopPatience(t *testing.T) {
 	if stop(again) {
 		t.Fatal("blocked when not expected")
 	}
-	files, err := os.ReadDir(filepath.Join(cache, "agora", "stop-hook"))
+	files, err := os.ReadDir(filepath.Join(cache, "smoot", "stop-hook"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("state files = %v, %v; want only s2's", files, err)
 	}
 
 	t.Run("patience flag", func(t *testing.T) {
-		env["AGORA_AGENT"] = "alice"
+		env["SMOOT_AGENT"] = "alice"
 		if !stop(`{"session_id":"s3"}`, "--patience", "1") || stop(`{"session_id":"s3"}`, "--patience", "1") {
 			t.Fatal("--patience 1 did not block exactly once")
 		}
@@ -407,7 +407,7 @@ func TestHookStopPatience(t *testing.T) {
 	// Exit 2 from a Stop hook keeps the session going, so a mistake in the
 	// hook's command line must not exit 2.
 	t.Run("usage errors exit 1", func(t *testing.T) {
-		env["AGORA_AGENT"] = "alice"
+		env["SMOOT_AGENT"] = "alice"
 		for _, args := range [][]string{{"hook"}, {"hook", "start"}, {"hook", "stop", "--patience", "0"}, {"hook", "stop", "--bogus"}, {"hook", "stop", "extra"}, {"hook", "stop", "--namespace", "../x"}, {"hook", "stop", "--url", "ftp://x"}} {
 			if r := runCLIInput(t.Context(), url, `{"session_id":"s4"}`, env, args...); r.code != exitError || r.stderr == "" {
 				t.Errorf("%v = %+v, want exit 1 with the error", args, r)
@@ -424,7 +424,7 @@ func TestClientConfig(t *testing.T) {
 	for _, want := range []string{
 		`url = "http://127.0.0.1:9000/mcp?namespace=team-a"`,
 		`default_tools_approval_mode = "approve"`,
-		`"command": "agora hook stop --url http://127.0.0.1:9000 --namespace team-a"`,
+		`"command": "smoot hook stop --url http://127.0.0.1:9000 --namespace team-a"`,
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Errorf("missing %q in:\n%s", want, r.stdout)
@@ -461,7 +461,7 @@ func TestClientSkills(t *testing.T) {
 		return runCLI(t.Context(), "http://127.0.0.1:1", append([]string{"client", "skills", "--dir", dir}, args...)...)
 	}
 	r := install()
-	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(dir, "agora", "SKILL.md")) || !strings.Contains(r.stdout, filepath.Join(dir, "convene", "SKILL.md")) {
+	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(dir, "smoot", "SKILL.md")) || !strings.Contains(r.stdout, filepath.Join(dir, "convene", "SKILL.md")) {
 		t.Fatalf("first install = %+v", r)
 	}
 	if r := install(); r.code != exitOK || !strings.Contains(r.stdout, "unchanged") {
@@ -469,7 +469,7 @@ func TestClientSkills(t *testing.T) {
 	}
 
 	// A changed file blocks the install, and nothing else is written.
-	edited := filepath.Join(dir, "agora", "SKILL.md")
+	edited := filepath.Join(dir, "smoot", "SKILL.md")
 	if err := os.WriteFile(edited, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -488,7 +488,7 @@ func TestClientSkills(t *testing.T) {
 	if got, _ := os.ReadFile(edited); string(got) == "mine" {
 		t.Fatal("--force did not replace the file")
 	}
-	if got, err := os.ReadFile(edited + ".agora-bak"); err != nil || string(got) != "mine" {
+	if got, err := os.ReadFile(edited + ".smoot-bak"); err != nil || string(got) != "mine" {
 		t.Fatalf("skills backup: %s %v", got, err)
 	}
 
@@ -509,14 +509,14 @@ func TestClientSkills(t *testing.T) {
 			t.Fatalf("%v = %+v", args, r)
 		}
 	}
-	for _, f := range []string{".claude/skills/agora/SKILL.md", ".agents/skills/agora/SKILL.md"} {
+	for _, f := range []string{".claude/skills/smoot/SKILL.md", ".agents/skills/smoot/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(home, f)); err != nil {
 			t.Errorf("client skills did not write %s: %v", f, err)
 		}
 	}
 }
 
-// tokenServer serves agora in auth mode token and returns its URL and the
+// tokenServer serves smoot in auth mode token and returns its URL and the
 // bootstrapped server admin's token.
 func tokenServer(t *testing.T) (string, string, *core.Service) {
 	t.Helper()
@@ -526,7 +526,7 @@ func tokenServer(t *testing.T) (string, string, *core.Service) {
 func tokenServerWith(t *testing.T, opts core.Options) (string, string, *core.Service) {
 	t.Helper()
 	opts.Policy = core.RolePolicy()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +548,7 @@ func TestAdminFeedback(t *testing.T) {
 	url, token, svc := tokenServerWith(t, core.Options{Feedback: true})
 	ctx := t.Context()
 	admin := func(args ...string) cliResult {
-		return runCLIInput(ctx, url, "", map[string]string{"AGORA_TOKEN": token}, append([]string{"admin", "feedback"}, args...)...)
+		return runCLIInput(ctx, url, "", map[string]string{"SMOOT_TOKEN": token}, append([]string{"admin", "feedback"}, args...)...)
 	}
 	if r := admin("list"); r.code != exitOK || r.stdout != "No feedback.\n" {
 		t.Fatalf("empty list = %+v", r)
@@ -600,7 +600,7 @@ func TestAdminFeedback(t *testing.T) {
 
 func TestClientsSendTheToken(t *testing.T) {
 	url, token, _ := tokenServer(t)
-	with := map[string]string{"AGORA_TOKEN": token}
+	with := map[string]string{"SMOOT_TOKEN": token}
 
 	r := runCLIInput(t.Context(), url, "", with, "whoami")
 	if r.code != exitOK || !strings.Contains(r.stdout, "auth token") || !strings.Contains(r.stdout, "account: root (server admin)") {
@@ -613,7 +613,7 @@ func TestClientsSendTheToken(t *testing.T) {
 		t.Fatalf("status = %+v", r)
 	}
 	// --token beats the environment.
-	if r := runCLIInput(t.Context(), url, "", with, "whoami", "--token", "agora_wrong"); r.code != exitError {
+	if r := runCLIInput(t.Context(), url, "", with, "whoami", "--token", "smoot_wrong"); r.code != exitError {
 		t.Fatalf("whoami with a bad --token = %+v", r)
 	}
 }
@@ -632,7 +632,7 @@ func TestAdminBootstrapAndRecover(t *testing.T) {
 	if r := runCLI(t.Context(), "", "db", "bootstrap", "--db", missing, "--name", "root"); r.code != exitError {
 		t.Fatalf("bootstrap on a missing file = %+v", r)
 	}
-	path := filepath.Join(dir, "agora.db")
+	path := filepath.Join(dir, "smoot.db")
 	db, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -656,7 +656,7 @@ func TestAdminBootstrapAndRecover(t *testing.T) {
 func TestAdminThroughTheServer(t *testing.T) {
 	url, token, _ := tokenServer(t)
 	admin := func(args ...string) cliResult {
-		return runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": token}, append([]string{"admin"}, args...)...)
+		return runCLIInput(t.Context(), url, "", map[string]string{"SMOOT_TOKEN": token}, append([]string{"admin"}, args...)...)
 	}
 	steps := []struct {
 		args []string
@@ -707,10 +707,10 @@ func TestAdminThroughTheServer(t *testing.T) {
 }
 
 func TestClientConfigNeverPrintsTheToken(t *testing.T) {
-	env := map[string]string{"AGORA_TOKEN": "agora_supersecret", "HOME": t.TempDir()}
+	env := map[string]string{"SMOOT_TOKEN": "smoot_supersecret", "HOME": t.TempDir()}
 	for _, profile := range []string{"claude", "codex"} {
 		r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "client", "config", profile, "--with-token", "--stop-hook")
-		if r.code != exitOK || strings.Contains(r.stdout, "supersecret") || !strings.Contains(r.stdout, "AGORA_TOKEN") {
+		if r.code != exitOK || strings.Contains(r.stdout, "supersecret") || !strings.Contains(r.stdout, "SMOOT_TOKEN") {
 			t.Fatalf("%s: %+v", profile, r)
 		}
 	}
@@ -718,7 +718,7 @@ func TestClientConfigNeverPrintsTheToken(t *testing.T) {
 
 func TestTUIChecksItsToken(t *testing.T) {
 	url, _, _ := tokenServer(t)
-	r := runCLIInput(t.Context(), url, "", map[string]string{"AGORA_TOKEN": "agora_wrong"}, "tui")
+	r := runCLIInput(t.Context(), url, "", map[string]string{"SMOOT_TOKEN": "smoot_wrong"}, "tui")
 	if r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
 		t.Fatalf("tui with a bad token = %+v", r)
 	}
@@ -733,7 +733,7 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	if _, err := svc.Start(t.Context(), admin, "default", core.StartParams{Name: "c", Agent: "a", Join: true}); err != nil {
 		t.Fatal(err)
 	}
-	with := map[string]string{"AGORA_TOKEN": token}
+	with := map[string]string{"SMOOT_TOKEN": token}
 	dir := t.TempDir()
 	cli := func(env map[string]string, args ...string) cliResult {
 		return runCLIInput(t.Context(), url, "", env, args...)
@@ -769,13 +769,13 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	}
 	full, part := filepath.Join(dir, "full.jsonl"), filepath.Join(dir, "default.jsonl")
 	// --all wins over a namespace from the environment.
-	withNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "elsewhere"}
+	withNS := map[string]string{"SMOOT_TOKEN": token, "SMOOT_NAMESPACE": "elsewhere"}
 	if r := cli(withNS, "dump", "--all", "-o", full); r.code != exitOK {
 		t.Fatalf("dump --all = %+v", r)
 	}
-	badNS := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "bad/name"}
+	badNS := map[string]string{"SMOOT_TOKEN": token, "SMOOT_NAMESPACE": "bad/name"}
 	if r := cli(badNS, "dump", "--all", "-o", filepath.Join(dir, "all2.jsonl")); r.code != exitOK {
-		t.Fatalf("dump --all with an invalid AGORA_NAMESPACE = %+v", r)
+		t.Fatalf("dump --all with an invalid SMOOT_NAMESPACE = %+v", r)
 	}
 	if r := cli(with, "dump", "--namespace", "default", "-o", part); r.code != exitOK {
 		t.Fatalf("dump --namespace = %+v", r)
@@ -783,9 +783,9 @@ func TestBackupDumpAndLoad(t *testing.T) {
 	// Without --namespace, the namespace comes from the environment, then
 	// the default.
 	fromEnv := filepath.Join(dir, "env.jsonl")
-	envDefault := map[string]string{"AGORA_TOKEN": token, "AGORA_NAMESPACE": "default"}
+	envDefault := map[string]string{"SMOOT_TOKEN": token, "SMOOT_NAMESPACE": "default"}
 	if r := cli(envDefault, "dump", "-o", fromEnv); r.code != exitOK {
-		t.Fatalf("dump with AGORA_NAMESPACE = %+v", r)
+		t.Fatalf("dump with SMOOT_NAMESPACE = %+v", r)
 	}
 	if r := cli(withNS, "dump", "-o", filepath.Join(dir, "missing.jsonl")); r.code != exitError {
 		t.Fatalf("dump of a missing namespace from the environment = %+v", r)
@@ -875,7 +875,7 @@ func dumpBody(t *testing.T, path string) string {
 
 func TestMigrate(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "agora.db")
+	path := filepath.Join(dir, "smoot.db")
 	if r := runCLI(t.Context(), "", "db", "migrate", "--db", path, "--check"); r.code != exitError {
 		t.Fatalf("migrate on a missing file = %+v", r)
 	}
@@ -903,7 +903,7 @@ func TestMigrate(t *testing.T) {
 // an out-of-date database instead of migrating it unseen.
 func TestAdminStatus(t *testing.T) {
 	url, token, svc := tokenServer(t)
-	env := map[string]string{"AGORA_TOKEN": token}
+	env := map[string]string{"SMOOT_TOKEN": token}
 	root, err := svc.AuthenticateToken(t.Context(), token)
 	if err != nil {
 		t.Fatal(err)
@@ -920,7 +920,7 @@ func TestAdminStatus(t *testing.T) {
 		"last message now: default/c #",
 		"default/c     open    now   1       0        0",
 		"No open MCP sessions.",
-		"root     api      127.0.0.1  agora-cli",
+		"root     api      127.0.0.1  smoot-cli",
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Errorf("status lacks %q:\n%s", want, r.stdout)
@@ -949,14 +949,14 @@ func TestAge(t *testing.T) {
 }
 
 func TestBootstrapRefusesAnOldDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := store.OpenAt(t.Context(), path, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = db.Close()
 	r := runCLI(t.Context(), "", "db", "bootstrap", "--db", path, "--name", "root")
-	if r.code != exitError || !strings.Contains(r.stderr, "agora db migrate") {
+	if r.code != exitError || !strings.Contains(r.stderr, "smoot db migrate") {
 		t.Fatalf("bootstrap on an old database = %+v", r)
 	}
 	if v, err := store.Inspect(t.Context(), path); err != nil || v != 1 {

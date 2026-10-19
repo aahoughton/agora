@@ -1,6 +1,6 @@
 # TUI palette
 
-Colors for `agora tui`. Each `## key` section holds two colors, for a light
+Colors for `smoot tui`. Each `## key` section holds two colors, for a light
 and a dark terminal background. The TUI never paints a background, so only
 foreground colors are listed. The values match the CSS variables of the same
 name in `static/style.css` (`tone_0` is `--tone-0`); a test keeps the default

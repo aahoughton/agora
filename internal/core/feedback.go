@@ -10,7 +10,7 @@ import (
 // MaxFeedbackBytes caps a feedback note.
 const MaxFeedbackBytes = 4000
 
-// Feedback is an agent's note on agora itself, left in one conversation.
+// Feedback is an agent's note on smoot itself, left in one conversation.
 // An agent has at most one note per conversation; submitting again
 // replaces it.
 type Feedback struct {
@@ -46,7 +46,7 @@ type FeedbackResult struct {
 // (Options.Feedback). The MCP server registers its feedback tool only then.
 func (s *Service) FeedbackEnabled() bool { return s.opts.Feedback }
 
-// SubmitFeedback stores agent's note on agora in conversation name,
+// SubmitFeedback stores agent's note on smoot in conversation name,
 // replacing the agent's earlier note there. The agent must have joined the
 // conversation (any state, concluded or not) under the caller's account.
 // It fails unless the server enables feedback (Options.Feedback).

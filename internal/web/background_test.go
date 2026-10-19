@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 // A comment posted by the page's script gets 204 when it lands, so a
@@ -20,7 +20,7 @@ func TestBackgroundCommentsAreToldApartFromSignIn(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("X-Agora-Background", "1")
+		req.Header.Set("X-Smoot-Background", "1")
 		resp, err := e.c.Do(req)
 		if err != nil {
 			t.Fatal(err)

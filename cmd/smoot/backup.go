@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // writeNewFile writes a new file at path through fill: into a 0600 temporary
@@ -48,7 +48,7 @@ func runBackup(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora backup -o FILE [flags]
+		fmt.Fprint(stderr, `usage: smoot backup -o FILE [flags]
 
 Downloads a consistent copy of the server's database (server admins).
 To restore: stop the server, replace its database file with the copy,
@@ -74,7 +74,7 @@ and start it again. The file is written with mode 0600.
 		return flagError(stderr, err)
 	}
 	if err := writeNewFile(*out, func(w io.Writer) error { return cl.Backup(ctx, w) }); err != nil {
-		fmt.Fprintln(stderr, "agora backup:", err)
+		fmt.Fprintln(stderr, "smoot backup:", err)
 		return exitError
 	}
 	fmt.Fprintln(stdout, "wrote", *out)
@@ -85,10 +85,10 @@ func runDump(ctx context.Context, args []string, stdout, stderr io.Writer, geten
 	fs := flag.NewFlagSet("dump", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora dump [--namespace NAME | --all] -o FILE [flags]
+		fmt.Fprint(stderr, `usage: smoot dump [--namespace NAME | --all] -o FILE [flags]
 
 Downloads a dump of one namespace (namespace admins) or of everything
-(server admins), for agora load or agora db load. A namespace dump
+(server admins), for smoot load or smoot db load. A namespace dump
 carries conversations, participants and messages without any account,
 role or token, so loading it grants nothing. A full dump carries everything but browser sessions,
 including token hashes. The file is written with mode 0600; -o - writes
@@ -135,13 +135,13 @@ the dump to standard output instead.
 	}
 	if *out == "-" {
 		if err := cl.Dump(ctx, ns, stdout); err != nil {
-			fmt.Fprintln(stderr, "agora dump:", err)
+			fmt.Fprintln(stderr, "smoot dump:", err)
 			return exitError
 		}
 		return exitOK
 	}
 	if err := writeNewFile(*out, func(w io.Writer) error { return cl.Dump(ctx, ns, w) }); err != nil {
-		fmt.Fprintln(stderr, "agora dump:", err)
+		fmt.Fprintln(stderr, "smoot dump:", err)
 		return exitError
 	}
 	fmt.Fprintln(stdout, "wrote", *out)
@@ -152,11 +152,11 @@ func runLoad(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	fs := flag.NewFlagSet("load", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora load [-i FILE] [--name NAME] [flags]
+		fmt.Fprint(stderr, `usage: smoot load [-i FILE] [--name NAME] [flags]
 
-Adds a namespace dump (agora dump --namespace) to a running server, with a
+Adds a namespace dump (smoot dump --namespace) to a running server, with a
 server admin's token, as namespace --name or the dump's own name, which must
-not exist there yet. To make a new database file from a dump, use agora db
+not exist there yet. To make a new database file from a dump, use smoot db
 load.
 
 `)
@@ -181,13 +181,13 @@ load.
 	}
 	src, closeSrc, err := openInput(*in, stdin)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora load:", err)
+		fmt.Fprintln(stderr, "smoot load:", err)
 		return exitError
 	}
 	defer closeSrc()
 	res, err := cl.LoadNamespace(ctx, src, *name)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora load:", err)
+		fmt.Fprintln(stderr, "smoot load:", err)
 		return exitError
 	}
 	fmt.Fprintf(stdout, "loaded namespace %s into %s: %d conversations, %d messages\n",
@@ -213,12 +213,12 @@ func openInput(path string, stdin io.Reader) (io.Reader, func(), error) {
 // nothing behind, and nothing outside its own directory is opened or
 // removed.
 func loadNew(ctx context.Context, path string, h core.DumpHeader, r *bufio.Reader) (int, error) {
-	dir, err := os.MkdirTemp(filepath.Dir(path), ".agora-load-")
+	dir, err := os.MkdirTemp(filepath.Dir(path), ".smoot-load-")
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	tmp := filepath.Join(dir, "agora.db")
+	tmp := filepath.Join(dir, "smoot.db")
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return 0, err

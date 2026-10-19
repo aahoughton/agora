@@ -27,14 +27,14 @@ jobs:
         with:
           context: .
           load: true
-          tags: agora:ci
+          tags: smoot:ci
           build-args: VERSION=ci
       - name: smoke
         run: |
-          docker run -d --name agora -p 127.0.0.1:8787:8787 agora:ci
+          docker run -d --name smoot -p 127.0.0.1:8787:8787 smoot:ci
           for i in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8787/healthz && exit 0
             sleep 0.5
           done
-          docker logs agora
+          docker logs smoot
           exit 1

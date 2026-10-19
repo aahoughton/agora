@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // searchPage is how many hits the search screen loads at a time.

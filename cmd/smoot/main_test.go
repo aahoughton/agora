@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/server"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/server"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 func testEnv(k string) string {
@@ -34,30 +34,30 @@ func TestRunDispatch(t *testing.T) {
 		wantStdout string
 		wantStderr string
 	}{
-		{"no args", nil, 2, "", "usage: agora"},
-		{"help", []string{"help"}, 0, "usage: agora", ""},
+		{"no args", nil, 2, "", "usage: smoot"},
+		{"help", []string{"help"}, 0, "usage: smoot", ""},
 		{"version", []string{"version"}, 0, "dev\n", ""},
 		{"unknown", []string{"bogus"}, 2, "", `unknown command "bogus"`},
 		{"serve bad flag", []string{"serve", "--auth", "ldap"}, 2, "", "unknown auth mode"},
-		{"serve help", []string{"serve", "-h"}, 0, "", "usage: agora serve"},
+		{"serve help", []string{"serve", "-h"}, 0, "", "usage: smoot serve"},
 		{"version flag", []string{"--version"}, 0, "dev\n", ""},
-		{"version help", []string{"version", "-h"}, 0, "usage: agora version", ""},
+		{"version help", []string{"version", "-h"}, 0, "usage: smoot version", ""},
 		{"version argument", []string{"version", "x"}, 2, "", "unexpected argument"},
-		{"status help", []string{"status", "-h"}, 0, "", "usage: agora status"},
-		{"health help", []string{"health", "-h"}, 0, "", "usage: agora health"},
+		{"status help", []string{"status", "-h"}, 0, "", "usage: smoot status"},
+		{"health help", []string{"health", "-h"}, 0, "", "usage: smoot health"},
 		{"health argument", []string{"health", "x"}, 2, "", "unexpected argument"},
-		{"client help", []string{"client", "-h"}, 0, "usage: agora client", ""},
-		{"client alone", []string{"client"}, 2, "", "usage: agora client"},
+		{"client help", []string{"client", "-h"}, 0, "usage: smoot client", ""},
+		{"client alone", []string{"client"}, 2, "", "usage: smoot client"},
 		{"client unknown", []string{"client", "remove"}, 2, "", `unknown command "remove"`},
-		{"client config help", []string{"client", "config", "-h"}, 0, "", "usage: agora client config NAME"},
+		{"client config help", []string{"client", "config", "-h"}, 0, "", "usage: smoot client config NAME"},
 		{"old mcp-config", []string{"mcp-config", "--profile", "claude"}, 2, "", `unknown command "mcp-config"`},
 		{"old skills install", []string{"skills", "install"}, 2, "", `unknown command "skills"`},
-		{"hook help", []string{"hook", "--help"}, 0, "usage: agora hook stop", ""},
-		{"admin leaf help", []string{"admin", "tokens", "issue", "-h"}, 0, "", "usage: agora admin tokens issue ACCOUNT"},
-		{"admin status help", []string{"admin", "status", "-h"}, 0, "", "usage: agora admin status"},
-		{"db bootstrap help", []string{"db", "bootstrap", "-h"}, 0, "", "usage: agora db bootstrap --db PATH"},
-		{"db help", []string{"db", "help"}, 0, "usage: agora db", ""},
-		{"db alone", []string{"db"}, 2, "", "usage: agora db"},
+		{"hook help", []string{"hook", "--help"}, 0, "usage: smoot hook stop", ""},
+		{"admin leaf help", []string{"admin", "tokens", "issue", "-h"}, 0, "", "usage: smoot admin tokens issue ACCOUNT"},
+		{"admin status help", []string{"admin", "status", "-h"}, 0, "", "usage: smoot admin status"},
+		{"db bootstrap help", []string{"db", "bootstrap", "-h"}, 0, "", "usage: smoot db bootstrap --db PATH"},
+		{"db help", []string{"db", "help"}, 0, "usage: smoot db", ""},
+		{"db alone", []string{"db"}, 2, "", "usage: smoot db"},
 		{"db load argument", []string{"db", "load", "--db", "x.db", "extra"}, 2, "", `unexpected argument "extra"`},
 		{"db migrate argument", []string{"db", "migrate", "--db", "x.db", "extra"}, 2, "", `unexpected argument "extra"`},
 		{"old migrate", []string{"migrate", "--db", "x"}, 2, "", `unknown command "migrate"`},
@@ -86,7 +86,7 @@ func TestServeStartsAndStops(t *testing.T) {
 
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	cfg := config.Serve{DB: filepath.Join(t.TempDir(), "agora.db"), Addr: "127.0.0.1:0", Auth: config.AuthNone}
+	cfg := config.Serve{DB: filepath.Join(t.TempDir(), "smoot.db"), Addr: "127.0.0.1:0", Auth: config.AuthNone}
 
 	ready := make(chan string, 1)
 	done := make(chan error, 1)
@@ -136,7 +136,7 @@ func TestServeStartsAndStops(t *testing.T) {
 func TestShutdownDoesNotWaitForLongPolls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := config.Serve{DB: filepath.Join(t.TempDir(), "agora.db"), Addr: "127.0.0.1:0", Auth: config.AuthNone}
+	cfg := config.Serve{DB: filepath.Join(t.TempDir(), "smoot.db"), Addr: "127.0.0.1:0", Auth: config.AuthNone}
 	ready := make(chan string, 1)
 	done := make(chan error, 1)
 	go func() { done <- serve(ctx, cfg, slog.New(slog.DiscardHandler), ready) }()
@@ -208,7 +208,7 @@ func TestAllowedHostsResolution(t *testing.T) {
 	}{
 		{"loopback default", config.Serve{}, loop, server.LoopbackHosts},
 		{"wildcard default", config.Serve{}, wild, nil},
-		{"explicit wins", config.Serve{AllowedHosts: []string{"agora.lan"}}, wild, []string{"agora.lan"}},
+		{"explicit wins", config.Serve{AllowedHosts: []string{"smoot.lan"}}, wild, []string{"smoot.lan"}},
 		{"star wins on loopback", config.Serve{AnyHost: true}, loop, nil},
 	}
 	for _, tt := range tests {
@@ -221,7 +221,7 @@ func TestAllowedHostsResolution(t *testing.T) {
 func TestServeWithTokens(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	dbPath := filepath.Join(t.TempDir(), "agora.db")
+	dbPath := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := store.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)

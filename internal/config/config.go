@@ -1,4 +1,4 @@
-// Package config resolves runtime settings for agora subcommands.
+// Package config resolves runtime settings for smoot subcommands.
 //
 // Precedence for every setting is: command-line flag, then environment
 // variable, then built-in default.
@@ -20,25 +20,25 @@ import (
 
 // Environment variable names.
 const (
-	EnvDB   = "AGORA_DB"
-	EnvAddr = "AGORA_ADDR"
-	EnvWeb  = "AGORA_WEB"
-	EnvAuth = "AGORA_AUTH"
+	EnvDB   = "SMOOT_DB"
+	EnvAddr = "SMOOT_ADDR"
+	EnvWeb  = "SMOOT_WEB"
+	EnvAuth = "SMOOT_AUTH"
 
-	EnvAllowedHosts = "AGORA_ALLOWED_HOSTS"
-	EnvThemeDir     = "AGORA_THEME_DIR"
+	EnvAllowedHosts = "SMOOT_ALLOWED_HOSTS"
+	EnvThemeDir     = "SMOOT_THEME_DIR"
 
-	EnvMCPMaxWait = "AGORA_MCP_MAX_WAIT"
+	EnvMCPMaxWait = "SMOOT_MCP_MAX_WAIT"
 
-	EnvPublicURL = "AGORA_PUBLIC_URL"
-	EnvFeedback  = "AGORA_FEEDBACK"
+	EnvPublicURL = "SMOOT_PUBLIC_URL"
+	EnvFeedback  = "SMOOT_FEEDBACK"
 
-	EnvWriteLimit       = "AGORA_WRITE_LIMIT"
-	EnvAuthFailureLimit = "AGORA_AUTH_FAILURE_LIMIT"
-	EnvTrustedProxies   = "AGORA_TRUSTED_PROXIES"
+	EnvWriteLimit       = "SMOOT_WRITE_LIMIT"
+	EnvAuthFailureLimit = "SMOOT_AUTH_FAILURE_LIMIT"
+	EnvTrustedProxies   = "SMOOT_TRUSTED_PROXIES"
 
-	EnvLogLevel  = "AGORA_LOG_LEVEL"
-	EnvLogFormat = "AGORA_LOG_FORMAT"
+	EnvLogLevel  = "SMOOT_LOG_LEVEL"
+	EnvLogFormat = "SMOOT_LOG_FORMAT"
 )
 
 // DefaultMCPMaxWait keeps MCP waits under the 60s tool-call timeout several
@@ -52,7 +52,7 @@ const (
 )
 
 // DefaultAddr listens on loopback only. Exposing the server to a network is a
-// deliberate choice made with --addr or AGORA_ADDR.
+// deliberate choice made with --addr or SMOOT_ADDR.
 const DefaultAddr = "127.0.0.1:8787"
 
 // AuthMode selects how requests are authenticated.
@@ -72,7 +72,7 @@ const (
 // specially, since agents are given it in a command.
 const urlSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/%[]"
 
-// Serve holds the settings for `agora serve`.
+// Serve holds the settings for `smoot serve`.
 type Serve struct {
 	DB   string
 	Addr string
@@ -101,7 +101,7 @@ type Serve struct {
 	// The MCP instructions quote it, and an https URL marks the viewer's
 	// session cookie Secure.
 	PublicURL string
-	// Feedback offers agents the MCP feedback tool, for notes on agora
+	// Feedback offers agents the MCP feedback tool, for notes on smoot
 	// itself that only server admins read.
 	Feedback bool
 	// LogLevel is the least severe level logged. At info the server logs
@@ -123,13 +123,13 @@ func (cfg Serve) NewLogger(w io.Writer) *slog.Logger {
 // Getenv looks up an environment variable; os.Getenv satisfies it.
 type Getenv func(string) string
 
-// ParseServe parses `agora serve` arguments.
+// ParseServe parses `smoot serve` arguments.
 func ParseServe(args []string, getenv Getenv, output io.Writer) (Serve, error) {
 	var cfg Serve
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(output)
 	fs.Usage = func() {
-		fmt.Fprint(output, `usage: agora serve --db PATH [flags]
+		fmt.Fprint(output, `usage: smoot serve --db PATH [flags]
 
 Runs the server: the JSON API at /v1 and MCP at /mcp, and with --web the
 HTML viewer. Each flag also reads the environment variable it names.
@@ -140,11 +140,11 @@ HTML viewer. Each flag also reads the environment variable it names.
 	fs.StringVar(&cfg.DB, "db", "", "SQLite database path (env "+EnvDB+")")
 	fs.StringVar(&cfg.Addr, "addr", "", "listen address (env "+EnvAddr+", default "+DefaultAddr+")")
 	web := fs.Bool("web", false, "serve the HTML viewer (env "+EnvWeb+"=true)")
-	feedback := fs.Bool("feedback", false, "offer agents a feedback tool for notes on agora itself, read with agora admin feedback (env "+EnvFeedback+"=true)")
+	feedback := fs.Bool("feedback", false, "offer agents a feedback tool for notes on smoot itself, read with smoot admin feedback (env "+EnvFeedback+"=true)")
 	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
 	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
-	publicURL := fs.String("public-url", "", "the URL browsers and agents reach the server at, e.g. https://agora.example; MCP instructions quote it, and https marks session cookies Secure (env "+EnvPublicURL+")")
+	publicURL := fs.String("public-url", "", "the URL browsers and agents reach the server at, e.g. https://smoot.example; MCP instructions quote it, and https marks session cookies Secure (env "+EnvPublicURL+")")
 	writeLimit := fs.String("write-limit", "", "writes per minute each account may make with --auth token; 0 for no limit (env "+EnvWriteLimit+", default "+strconv.Itoa(DefaultWriteLimit)+")")
 	failLimit := fs.String("auth-failure-limit", "", "failed sign-ins per minute per client address with --auth token; 0 for no limit (env "+EnvAuthFailureLimit+", default "+strconv.Itoa(DefaultAuthFailureLimit)+")")
 	proxies := fs.String("trusted-proxies", "", "comma-separated proxy addresses or CIDRs whose X-Forwarded-For names the client (env "+EnvTrustedProxies+")")
@@ -275,20 +275,20 @@ HTML viewer. Each flag also reads the environment variable it names.
 	return cfg, nil
 }
 
-// DefaultDBPath returns $XDG_DATA_HOME/agora/agora.db, falling back to
-// $HOME/.local/share/agora/agora.db.
+// DefaultDBPath returns $XDG_DATA_HOME/smoot/smoot.db, falling back to
+// $HOME/.local/share/smoot/smoot.db.
 func DefaultDBPath(getenv Getenv) (string, error) {
 	if dir := getenv("XDG_DATA_HOME"); dir != "" {
 		if !filepath.IsAbs(dir) {
 			return "", fmt.Errorf("XDG_DATA_HOME must be absolute, got %q", dir)
 		}
-		return filepath.Join(dir, "agora", "agora.db"), nil
+		return filepath.Join(dir, "smoot", "smoot.db"), nil
 	}
 	home := getenv("HOME")
 	if home == "" {
 		return "", errors.New("cannot choose a default database path: set " + EnvDB + " or HOME")
 	}
-	return filepath.Join(home, ".local", "share", "agora", "agora.db"), nil
+	return filepath.Join(home, ".local", "share", "smoot", "smoot.db"), nil
 }
 
 func parseAuth(s string) (AuthMode, error) {

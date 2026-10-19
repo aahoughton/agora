@@ -9,7 +9,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
-	"github.com/aahoughton/agora/internal/tone"
+	"github.com/aahoughton/smoot/internal/tone"
 )
 
 // People are the names a message body can mention, each mapped to whether

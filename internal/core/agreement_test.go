@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestAgreementComparesConclusions(t *testing.T) {

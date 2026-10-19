@@ -1,13 +1,13 @@
 ---
 name: convene
-description: Start and staff an agora conversation between agents, from a quick huddle (a second opinion, a decision among two or three agents) to an engagement where one agent implements and others review until they agree. Use when asked to get another agent's view, to pair or spike with another agent, or to have agents work something out together in agora.
+description: Start and staff a smoot conversation between agents, from a quick huddle (a second opinion, a decision among two or three agents) to an engagement where one agent implements and others review until they agree. Use when asked to get another agent's view, to pair or spike with another agent, or to have agents work something out together in smoot.
 ---
 
-# Convening agents in agora
+# Convening agents in smoot
 
 Your job is to get the right agents into one conversation with a clear
 question, let them reach an outcome, check that outcome yourself, and report
-it to your user. Taking part follows the `agora` skill; this one covers
+it to your user. Taking part follows the `smoot` skill; this one covers
 setting the conversation up and seeing it through.
 
 ## Scale
@@ -69,27 +69,27 @@ work it out on your own.
 
 Participants can run in any agent client that speaks MCP. Each needs its
 client connected to the same server and namespace (the MCP URL is
-`<server>/mcp?namespace=<namespace>`; `agora client config <client>`
-prints the setup for clients agora has a profile for) and these skills
-where that client reads skills (`agora client skills <client>`,
+`<server>/mcp?namespace=<namespace>`; `smoot client config <client>`
+prints the setup for clients smoot has a profile for) and these skills
+where that client reads skills (`smoot client skills <client>`,
 or `--dir <directory>` for any other). Give each one a short
-prompt, for example: "Use the agora skill. Join `<conversation>` as
+prompt, for example: "Use the smoot skill. Join `<conversation>` as
 `<name>`; you are the `<role>`; the first message is the brief." Set
-`AGORA_AGENT=<name>` in its environment when you can, so a Stop hook (if
+`SMOOT_AGENT=<name>` in its environment when you can, so a Stop hook (if
 installed) keeps it in the conversation. If the server uses tokens, each
-participant also needs `AGORA_TOKEN` set to a token of an account that is
+participant also needs `SMOOT_TOKEN` set to a token of an account that is
 a member of the namespace.
 
 - In herdr (`HERDR_ENV=1`), give each agent a tab of its own in your
   workspace: `herdr tab create --workspace "$HERDR_WORKSPACE_ID" --label
-  <name> --cwd <dir> --env AGORA_AGENT=<name> --no-focus` (without
+  <name> --cwd <dir> --env SMOOT_AGENT=<name> --no-focus` (without
   `--workspace`, herdr uses whichever workspace your user is looking at),
   then `herdr agent start <name> --kind <client> --pane <its root pane>`
   (`herdr agent start --help` lists the clients it knows) and `herdr agent
   prompt <name> "<prompt>"`. Read the IDs from each command's JSON result,
   and check `--help` if a command has changed.
 - In tmux (`$TMUX` set), give each agent a window: `tmux new-window -d -n
-  <name> -e AGORA_AGENT=<name> -c <dir> '<client> "<prompt>"'`.
+  <name> -e SMOOT_AGENT=<name> -c <dir> '<client> "<prompt>"'`.
 - Otherwise, give your user one command per agent to run.
 
 ## Seeing it through

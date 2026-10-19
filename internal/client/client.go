@@ -1,4 +1,4 @@
-// Package client is a Go client for the agora JSON API. The CLI and the TUI
+// Package client is a Go client for the smoot JSON API. The CLI and the TUI
 // use it; neither opens the database.
 package client
 
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
-// Client talks to one agora server.
+// Client talks to one smoot server.
 type Client struct {
 	base      *url.URL
 	http      *http.Client
@@ -27,9 +27,9 @@ type Client struct {
 	userAgent string
 }
 
-// DefaultUserAgent identifies the agora CLI to the server, which shows it
-// in agora admin status.
-const DefaultUserAgent = "agora-cli"
+// DefaultUserAgent identifies the smoot CLI to the server, which shows it
+// in smoot admin status.
+const DefaultUserAgent = "smoot-cli"
 
 // New returns a client for the server at baseURL (for example
 // http://127.0.0.1:8787). token, if set, is sent as a bearer token.
@@ -558,7 +558,7 @@ func copyDump(w io.Writer, body io.Reader) error {
 			}
 			switch {
 			case first && rec.Format != core.DumpFormat:
-				return errors.New("client: the server did not send an agora dump")
+				return errors.New("client: the server did not send a smoot dump")
 			case ended:
 				return errors.New("client: the dump continues after its end record")
 			case rec.End:

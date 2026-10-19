@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/markdown"
-	"github.com/aahoughton/agora/internal/store"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/markdown"
+	"github.com/aahoughton/smoot/internal/store"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/*.golden.html")
@@ -44,7 +44,7 @@ func (e *env) advance(d time.Duration) { e.offset.Add(int64(d)) }
 
 func newEnv(t *testing.T, opts web.Options) *env {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestThemeOverride(t *testing.T) {
 	if _, css := e.get("/static/style.css"); css != "body{color:red}" {
 		t.Fatalf("static override = %q", css)
 	}
-	if status, js := e.get("/static/agora.js"); status != http.StatusOK || !strings.Contains(js, "EventSource") {
+	if status, js := e.get("/static/smoot.js"); status != http.StatusOK || !strings.Contains(js, "EventSource") {
 		t.Fatalf("default static missing: %d", status)
 	}
 }
@@ -514,7 +514,7 @@ func TestStreamErrorsAreHTTPErrors(t *testing.T) {
 }
 
 func TestStreamRefusesOverTheViewerCap(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

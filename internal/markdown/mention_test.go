@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/tone"
+	"github.com/aahoughton/smoot/internal/tone"
 )
 
 func TestMentions(t *testing.T) {

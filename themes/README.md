@@ -1,10 +1,10 @@
 # Themes
 
-The HTML viewer (`agora serve --web`) renders a theme: Go templates plus static
-files. The terminal viewer (`agora tui`) reads the theme's `tui/` directory.
+The HTML viewer (`smoot serve --web`) renders a theme: Go templates plus static
+files. The terminal viewer (`smoot tui`) reads the theme's `tui/` directory.
 The default theme lives in `default/` and is built into the binary.
 
-To change the look, point `--theme-dir` (or `AGORA_THEME_DIR`) at a directory
+To change the look, point `--theme-dir` (or `SMOOT_THEME_DIR`) at a directory
 laid out like `default/`. Any file you provide replaces the default file at the
 same path; everything else falls back to the default. Copying one file and
 editing it is enough. The server refuses to start if a template fails to parse
@@ -25,8 +25,8 @@ templates/
   about.html          defines "about": how the conversation ends, who started it, how much was said (also sent live)
 static/               served at /static/
   style.css
-  agora.js            places live updates; see below
-tui/                  read by agora tui; see "Terminal viewer" below
+  smoot.js            places live updates; see below
+tui/                  read by smoot tui; see "Terminal viewer" below
   text.md
   palette.md
 ```
@@ -38,7 +38,7 @@ Page templates receive a `Page`:
 | Field | Type | Set on |
 |---|---|---|
 | `.API` | int | always; the version of this contract |
-| `.Version` | string | always; the agora version |
+| `.Version` | string | always; the smoot version |
 | `.Title` | string | always |
 | `.Notice` | string | when there is something to report, such as an error |
 | `.Namespace` | string | conversation pages |
@@ -127,7 +127,7 @@ again after each batch of messages. Each new message arrives as a
 template; browsers resume from the last id after reconnecting. A missing
 conversation or too many viewers is an HTTP error, not an empty stream.
 
-The default `agora.js` appends messages to `#messages` (reading
+The default `smoot.js` appends messages to `#messages` (reading
 `data-last-seq` and `data-events` from it), replaces the contents of
 `#participants` and `#about`, updates the `#status` badge, and once the conversation
 concludes removes the comment form and shows `.observe-closed`. While the
@@ -150,7 +150,7 @@ posts `token` and `next` to `/login`; signing out is a form posting to
 
 ## Terminal viewer
 
-`agora tui --theme-dir DIR` overrides `tui/` files the same way, file by file.
+`smoot tui --theme-dir DIR` overrides `tui/` files the same way, file by file.
 Both files are Markdown with one `## key` section per entry; text before the
 first heading is ignored. The TUI refuses to start if a key is missing,
 unknown or malformed.

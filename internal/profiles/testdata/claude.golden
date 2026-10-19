@@ -2,28 +2,28 @@
 # skills: @/skills
 
 ## client config, server waits up to 50s
-claude mcp add-json --scope user agora '{
+claude mcp add-json --scope user smoot '{
   "type": "http",
   "url": "http://127.0.0.1:8787/mcp?namespace=default"
 }'
 
 ## client config, server waits up to 4m0s
-claude mcp add-json --scope user agora '{
+claude mcp add-json --scope user smoot '{
   "type": "http",
   "url": "http://127.0.0.1:8787/mcp?namespace=default",
   "timeout": 250000
 }'
 
 ## client config with a token, server waits up to 4m0s
-claude mcp add-json --scope user agora '{
+claude mcp add-json --scope user smoot '{
   "type": "http",
   "url": "http://127.0.0.1:8787/mcp?namespace=default",
-  "headers": {"Authorization": "Bearer ${AGORA_TOKEN}"},
+  "headers": {"Authorization": "Bearer ${SMOOT_TOKEN}"},
   "timeout": 250000
 }'
-# Set AGORA_TOKEN in the environment Claude Code runs in; it expands the header reference when connecting.
+# Set SMOOT_TOKEN in the environment Claude Code runs in; it expands the header reference when connecting.
 
 ## stop hook
 # add to @/settings.json at hooks.Stop:
-{"hooks": [{"type": "command", "command": "agora hook stop"}]}
-# Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.
+{"hooks": [{"type": "command", "command": "smoot hook stop"}]}
+# Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.

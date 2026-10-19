@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/contract.golden")
@@ -31,7 +31,7 @@ var update = flag.Bool("update", false, "rewrite testdata/contract.golden")
 // a visible diff. After an intended change, run go test ./internal/api
 // -update and review the golden alongside openapi.yaml.
 func TestResponsesMatchTheContract(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,14 +188,14 @@ func TestResponsesMatchTheContract(t *testing.T) {
 }
 
 var (
-	secretRE = regexp.MustCompile(`"agoras?_[a-z0-9]+"`)
+	secretRE = regexp.MustCompile(`"smoots?_[a-z0-9]+"`)
 	timeRE   = regexp.MustCompile(`"\d{4}-\d\d-\d\dT[0-9:.]+Z"`)
 )
 
 // mask hides token secrets, which are random, and times not on the test's
 // clock (the default namespace is created by the migration, at real time).
 func mask(b []byte) []byte {
-	b = secretRE.ReplaceAll(b, []byte(`"agora_<secret>"`))
+	b = secretRE.ReplaceAll(b, []byte(`"smoot_<secret>"`))
 	return timeRE.ReplaceAllFunc(b, func(ts []byte) []byte {
 		if bytes.HasPrefix(ts, []byte(`"2030-`)) {
 			return ts

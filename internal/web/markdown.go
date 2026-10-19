@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"html/template"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/markdown"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/markdown"
 )
 
 // Message is a message as the message template sees it: the record's

@@ -1,7 +1,7 @@
 ## .claude.json
 {
   "mcpServers": {
-    "agora": {
+    "smoot": {
       "timeout": 250000,
       "type": "http",
       "url": "http://127.0.0.1:8790/mcp?namespace=team"
@@ -10,6 +10,6 @@
 }
 ## .claude/settings.json
 {"hooks": {"Stop": [{"hooks": [{
-	"command": "agora hook stop --url http://127.0.0.1:8790 --namespace team",
+	"command": "smoot hook stop --url http://127.0.0.1:8790 --namespace team",
 	"type":    "command"
-}]}]},"permissions":{"allow":["mcp__agora"]}}
+}]}]},"permissions":{"allow":["mcp__smoot"]}}

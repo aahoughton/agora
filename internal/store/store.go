@@ -44,7 +44,7 @@ type Options struct {
 	Snapshot bool
 }
 
-// OpenWith is Open with options; agora serve and agora db migrate use it.
+// OpenWith is Open with options; smoot serve and smoot db migrate use it.
 func OpenWith(ctx context.Context, path string, opts Options) (*sql.DB, error) {
 	return openAt(ctx, path, 0, opts)
 }
@@ -128,12 +128,12 @@ func Pending(ctx context.Context, db *sql.DB) (current, pending int, err error) 
 // database and only then published, never over an existing file; nothing is
 // left behind if it fails.
 func snapshot(ctx context.Context, db *sql.DB, path string, version int) (string, error) {
-	dir, err := os.MkdirTemp(filepath.Dir(path), ".agora-snapshot-")
+	dir, err := os.MkdirTemp(filepath.Dir(path), ".smoot-snapshot-")
 	if err != nil {
 		return "", fmt.Errorf("store: snapshot before migrating: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	tmp := filepath.Join(dir, "agora.db")
+	tmp := filepath.Join(dir, "smoot.db")
 	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", tmp); err != nil {
 		return "", fmt.Errorf("store: snapshot before migrating: %w", err)
 	}
@@ -164,7 +164,7 @@ func LatestVersion() int {
 // OpenExisting opens the existing database at path without changing its
 // schema. It refuses a path that does not name an existing regular file, so
 // a mistyped path is an error instead of a new, empty database, and a
-// database whose schema is not this build's: only agora serve and agora
+// database whose schema is not this build's: only smoot serve and smoot
 // migrate migrate.
 func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
 	info, err := os.Stat(path)
@@ -179,7 +179,7 @@ func OpenExisting(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, err
 	}
 	if latest := LatestVersion(); v != latest {
-		return nil, fmt.Errorf("store: %s is at schema %d and this build needs %d; run agora db migrate --db %s (or use the matching build)", path, v, latest, path)
+		return nil, fmt.Errorf("store: %s is at schema %d and this build needs %d; run smoot db migrate --db %s (or use the matching build)", path, v, latest, path)
 	}
 	return Open(ctx, path)
 }

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // hookTimeout bounds the hook's requests: a client waits on its hooks.
@@ -41,22 +41,22 @@ func runHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	// A client reads exit 2 from a Stop hook as "do not stop", so a
 	// mistake in the hook's command line exits 1 instead: the session may
 	// stop and the client shows the error.
-	if code, ok := groupUsage(args, "stop", "usage: agora hook stop [--agent NAME] [flags]\n", stdout, stderr); !ok {
+	if code, ok := groupUsage(args, "stop", "usage: smoot hook stop [--agent NAME] [flags]\n", stdout, stderr); !ok {
 		return min(code, exitError)
 	}
 	fs := flag.NewFlagSet("hook stop", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora hook stop [--agent NAME] [flags]
+		fmt.Fprint(stderr, `usage: smoot hook stop [--agent NAME] [flags]
 
-A Stop hook for Claude Code, Codex and Antigravity (see agora client config --stop-hook).
+A Stop hook for Claude Code, Codex and Antigravity (see smoot client config --stop-hook).
 It reads the hook's JSON on stdin and, while the agent is expected in an
 open conversation, tells the client to continue with the agent's status
 lines as the reason. It keeps holding a session while it makes progress
 (the agent calls a tool in the conversation, such as wait, or a message
 arrives), and lets it stop once it has blocked --patience times in a row
 with no progress. It keeps that count per session in
-$XDG_CACHE_HOME/agora/stop-hook (default ~/.cache). It lets the session
+$XDG_CACHE_HOME/smoot/stop-hook (default ~/.cache). It lets the session
 stop when no agent name is set or the server cannot be reached, so it
 never traps a session.
 
@@ -81,7 +81,7 @@ never traps a session.
 	}
 	in, err := decodeHookInput(stdin, *contract)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora hook stop: unreadable hook input:", err)
+		fmt.Fprintln(stderr, "smoot hook stop: unreadable hook input:", err)
 		return exitOK
 	}
 	if !in.Hold {
@@ -100,7 +100,7 @@ never traps a session.
 	if in.SessionID != "" {
 		dir, err := hookStateDir(getenv)
 		if err != nil {
-			fmt.Fprintln(stderr, "agora hook stop:", err)
+			fmt.Fprintln(stderr, "smoot hook stop:", err)
 		} else {
 			statePath = filepath.Join(dir, sessionFile(in.SessionID))
 		}
@@ -115,19 +115,19 @@ never traps a session.
 	}
 	cc, err := resolveClient(getenv)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora hook stop:", err)
+		fmt.Fprintln(stderr, "smoot hook stop:", err)
 		return exitError
 	}
 	cl, err := client.New(cc.URL, cc.Token)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora hook stop:", err)
+		fmt.Fprintln(stderr, "smoot hook stop:", err)
 		return exitError
 	}
 	ctx, cancel := context.WithTimeout(ctx, hookTimeout)
 	defer cancel()
 	sts, err := cl.Status(ctx, cc.Namespace, agent)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora hook stop:", err)
+		fmt.Fprintln(stderr, "smoot hook stop:", err)
 		return exitOK
 	}
 	var lines, progress []string
@@ -138,7 +138,7 @@ never traps a session.
 		lines = append(lines, st.Line)
 		c, err := cl.GetConversation(ctx, st.Namespace, st.Conversation)
 		if err != nil {
-			fmt.Fprintln(stderr, "agora hook stop:", err)
+			fmt.Fprintln(stderr, "smoot hook stop:", err)
 			return exitOK
 		}
 		// Progress is a new message, or the agent calling in (any tool call
@@ -166,20 +166,20 @@ never traps a session.
 			st = hookState{Progress: p, Blocks: 1}
 		}
 		if err := writeHookState(statePath, st); err != nil {
-			fmt.Fprintln(stderr, "agora hook stop:", err)
+			fmt.Fprintln(stderr, "smoot hook stop:", err)
 			if in.StopHookActive || in.NeedsState {
 				return exitOK
 			}
 		}
 		if st.Blocks > *patience {
-			fmt.Fprintf(stderr, "agora hook stop: no progress in %d stops; letting the session stop\n", *patience)
+			fmt.Fprintf(stderr, "smoot hook stop: no progress in %d stops; letting the session stop\n", *patience)
 			return exitOK
 		}
 	}
 	reason := wording.Default().Phrase(wording.StopHook, map[string]any{"Lines": strings.Join(lines, "\n")})
 	out, err := json.Marshal(map[string]string{"decision": in.Decision, "reason": reason})
 	if err != nil {
-		fmt.Fprintln(stderr, "agora hook stop:", err)
+		fmt.Fprintln(stderr, "smoot hook stop:", err)
 		return exitOK
 	}
 	fmt.Fprintln(stdout, string(out))
@@ -213,8 +213,8 @@ func decodeHookInput(input io.Reader, contract string) (hookInput, error) {
 	return hookInput{SessionID: in.SessionID, StopHookActive: in.StopHookActive, Hold: true, Decision: "block"}, err
 }
 
-// hookStateDir is $XDG_CACHE_HOME/agora/stop-hook, falling back to
-// $HOME/.cache/agora/stop-hook.
+// hookStateDir is $XDG_CACHE_HOME/smoot/stop-hook, falling back to
+// $HOME/.cache/smoot/stop-hook.
 func hookStateDir(getenv config.Getenv) (string, error) {
 	base := getenv("XDG_CACHE_HOME")
 	if base == "" {
@@ -226,7 +226,7 @@ func hookStateDir(getenv config.Getenv) (string, error) {
 	} else if !filepath.IsAbs(base) {
 		return "", fmt.Errorf("XDG_CACHE_HOME must be absolute, got %q", base)
 	}
-	return filepath.Join(base, "agora", "stop-hook"), nil
+	return filepath.Join(base, "smoot", "stop-hook"), nil
 }
 
 // sessionFile names a session's state file without putting the client's

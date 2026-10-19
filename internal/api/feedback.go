@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // Agents submit feedback over MCP; server admins read it here.

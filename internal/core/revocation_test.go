@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestLongPollsStopWhenAccessEnds(t *testing.T) {

@@ -14,9 +14,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // InlineBytes is the most message text wait returns in full, sparing the
@@ -156,7 +156,7 @@ func NewServer(svc *core.Service, p core.Principal, ns string, opts Options) *mc
 		opts.Wording = wording.Default()
 	}
 	w := opts.Wording
-	s := mcp.NewServer(&mcp.Implementation{Name: "agora", Version: opts.Version}, &mcp.ServerOptions{
+	s := mcp.NewServer(&mcp.Implementation{Name: "smoot", Version: opts.Version}, &mcp.ServerOptions{
 		Instructions: w.Instructions(opts.URL, ns),
 		Logger:       quiet(opts.Logger),
 		Capabilities: &mcp.ServerCapabilities{},

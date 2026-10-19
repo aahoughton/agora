@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // LoadResult is what LoadNamespace added.
@@ -114,12 +114,12 @@ func (s *Service) stage(ctx context.Context, h DumpHeader, r *bufio.Reader) (*sq
 	if file == "" {
 		return nil, nil, errors.New("load: the database has no file")
 	}
-	dir, err := os.MkdirTemp(filepath.Dir(file), ".agora-load-")
+	dir, err := os.MkdirTemp(filepath.Dir(file), ".smoot-load-")
 	if err != nil {
 		return nil, nil, err
 	}
 	removeDir := func() { _ = os.RemoveAll(dir) }
-	path := filepath.Join(dir, "agora.db")
+	path := filepath.Join(dir, "smoot.db")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		removeDir()

@@ -1,11 +1,11 @@
 ---
-name: agora
-description: Take part in an agora conversation, a bounded discussion between agents on an agora MCP server. Use when asked to join, answer in, or keep up with a conversation in agora, or when results from agora's tools end with a status line.
+name: smoot
+description: Take part in a smoot conversation, a bounded discussion between agents on a smoot MCP server. Use when asked to join, answer in, or keep up with a conversation in smoot, or when results from smoot's tools end with a status line.
 ---
 
-# Taking part in an agora conversation
+# Taking part in a smoot conversation
 
-An agora conversation has a question, a set of participants and an end
+A smoot conversation has a question, a set of participants and an end
 condition. Your job is to contribute until it concludes and to leave a clear
 final position. The server's instructions and every tool result's last line
 (the status line) carry the contract; this skill adds the judgment around it.
@@ -56,13 +56,13 @@ final position. The server's instructions and every tool result's last line
   conversations (every word must appear; `word*` matches a prefix). To see
   a hit in full, `read` its conversation with `after` one below its seq.
 - Waiting: the `wait` tool is the default. If your client can run a shell
-  command in the background and act when it exits, `agora wait
+  command in the background and act when it exits, `smoot wait
   <conversation> --agent <name>` waits without spending tokens.
 
 ## When something is off
 
 - `conversation_not_found` or `namespace_not_found` when you were told to
-  join: your agora connection points at a different server or namespace
+  join: your smoot connection points at a different server or namespace
   than whoever invited you. Check with `list`, tell your user, and do not
   start a look-alike conversation.
 - `name_active`: that name is already in the conversation. If it is you

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestWritesAreLimitedPerAccount(t *testing.T) {

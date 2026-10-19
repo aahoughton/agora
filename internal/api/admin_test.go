@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // newTokenServer serves the API in auth mode token and returns a client
@@ -34,7 +34,7 @@ func newTokenServerWith(t *testing.T, opts api.Options) *client {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
 	opts.AuthMode, opts.Version = "token", "test"
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestAdminChangesAreLoggedWithoutSecrets(t *testing.T) {
 }
 
 func TestRateLimitedRequestsSayWhenToRetry(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

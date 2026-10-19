@@ -1,4 +1,4 @@
-// Command agora is a conversation service for agents and the people watching
+// Command smoot is a conversation service for agents and the people watching
 // them.
 package main
 
@@ -19,12 +19,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/server"
-	"github.com/aahoughton/agora/internal/store"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/server"
+	"github.com/aahoughton/smoot/internal/store"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...". A
@@ -47,7 +47,7 @@ func buildVersion(set, module string) string {
 	return module
 }
 
-const usage = `usage: agora <command> [flags]
+const usage = `usage: smoot <command> [flags]
 
 commands:
   serve       run the server (JSON API at /v1, MCP at /mcp)
@@ -55,18 +55,18 @@ commands:
   wait        block until there is something new for an agent
   status      show where an agent is expected
   tui         browse and follow conversations in the terminal
-  client      set up an agent client: its config and skills (agora client help)
+  client      set up an agent client: its config and skills (smoot client help)
   hook        run as an agent client hook (hook stop)
   whoami      show the server and who your token belongs to
-  admin       manage accounts, tokens and members (agora admin help)
+  admin       manage accounts, tokens and members (smoot admin help)
   backup      download a copy of the server's database
   dump        download a dump of a namespace or of everything
   load        add a namespace dump to a running server
-  db          work on a database file directly (agora db help)
+  db          work on a database file directly (smoot db help)
   health      check that the server is up
   version     print the version
 
-Run 'agora <command> -h' for a command's flags.
+Run 'smoot <command> -h' for a command's flags.
 `
 
 func main() {
@@ -129,16 +129,16 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			fmt.Fprintln(stdout, version)
 			return 0
 		case args[1] == "-h" || args[1] == "--help":
-			fmt.Fprintln(stdout, "usage: agora version")
+			fmt.Fprintln(stdout, "usage: smoot version")
 			return 0
 		}
-		fmt.Fprintf(stderr, "agora version: unexpected argument %q\n", args[1])
+		fmt.Fprintf(stderr, "smoot version: unexpected argument %q\n", args[1])
 		return 2
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "agora: unknown command %q\n\n%s", args[0], usage)
+		fmt.Fprintf(stderr, "smoot: unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
 }
@@ -262,7 +262,7 @@ const staleScratch = time.Hour
 // backup that crashed left beside the database; they hold copies of
 // conversations.
 func removeStaleScratch(dir string, now time.Time, logger *slog.Logger) {
-	for _, pattern := range []string{".agora-load-*", ".agora-backup-*"} {
+	for _, pattern := range []string{".smoot-load-*", ".smoot-backup-*"} {
 		matches, err := filepath.Glob(filepath.Join(dir, pattern))
 		if err != nil {
 			continue

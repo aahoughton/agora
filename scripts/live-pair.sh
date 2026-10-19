@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run one live agent through an agora conversation against a scripted host,
+# Run one live agent through a smoot conversation against a scripted host,
 # to see whether the agent stays engaged until the conversation concludes.
 #
 # Usage: scripts/live-pair.sh codex|claude [output-dir]
@@ -27,7 +27,7 @@ codex | claude) ;;
 	exit 2
 	;;
 esac
-OUT=${2:-$(mktemp -d -t agora-live-pair)}
+OUT=${2:-$(mktemp -d -t smoot-live-pair)}
 mkdir -p "$OUT"
 for cmd in go jq curl "$AGENT_CLI"; do
 	command -v "$cmd" >/dev/null || {
@@ -40,17 +40,17 @@ CONV=${CONV:-live-pair}
 HOST=live-host
 AGENT_NAME=${AGENT_NAME:-$AGENT_CLI-reviewer}
 TURN_TIMEOUT=${TURN_TIMEOUT:-5m}
-QUESTION=${QUESTION:-"Review question: agora caps the MCP wait tool at 50 seconds by default, to stay under the 60-second tool timeout several clients use. Is 50s the right default? Give a number and one reason. I will push back once before we agree."}
+QUESTION=${QUESTION:-"Review question: smoot caps the MCP wait tool at 50 seconds by default, to stay under the 60-second tool timeout several clients use. Is 50s the right default? Give a number and one reason. I will push back once before we agree."}
 PUSHBACK=${PUSHBACK:-"Pushback: the server usually runs on localhost or a LAN, so transit takes milliseconds, and every extra renewal costs a tool call. Would you accept 50s if the cap is configurable with --mcp-max-wait? If yes, conclude with your final position; if not, say what would change your mind."}
-PROMPT=${PROMPT:-"You have an MCP server named agora. Join the conversation $CONV as agent $AGENT_NAME and take part until it concludes."}
+PROMPT=${PROMPT:-"You have an MCP server named smoot. Join the conversation $CONV as agent $AGENT_NAME and take part until it concludes."}
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="$OUT/agora"
-(cd "$ROOT" && go build -o "$BIN" ./cmd/agora)
+BIN="$OUT/smoot"
+(cd "$ROOT" && go build -o "$BIN" ./cmd/smoot)
 
 PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])' 2>/dev/null || echo 18799)
 URL="http://127.0.0.1:$PORT"
-"$BIN" serve --db "$OUT/agora.db" --addr "127.0.0.1:$PORT" 2>"$OUT/serve.log" &
+"$BIN" serve --db "$OUT/smoot.db" --addr "127.0.0.1:$PORT" 2>"$OUT/serve.log" &
 SERVER=$!
 AGENT_PID=
 cleanup() {
@@ -59,7 +59,7 @@ cleanup() {
 }
 trap cleanup EXIT
 for _ in $(seq 1 50); do
-	AGORA_URL=$URL "$BIN" health >/dev/null 2>&1 && break
+	SMOOT_URL=$URL "$BIN" health >/dev/null 2>&1 && break
 	sleep 0.1
 done
 
@@ -70,17 +70,17 @@ post "$CONV/messages" "$(jq -n --arg a "$HOST" --arg b "$QUESTION" '{agent:$a, b
 
 case "$AGENT_CLI" in
 codex)
-	# The user's own config may give agora a token variable; this server
+	# The user's own config may give smoot a token variable; this server
 	# runs with auth off, so point it at one that is always set.
-	(cd "$OUT" && AGORA_LIVE_PAIR_TOKEN=unused codex exec --approve-for-me --skip-git-repo-check ${MODEL:+-m "$MODEL"} \
-		-c "mcp_servers.agora.url=\"$URL/mcp\"" -c 'mcp_servers.agora.tool_timeout_sec=60' \
-		-c 'mcp_servers.agora.bearer_token_env_var="AGORA_LIVE_PAIR_TOKEN"' \
+	(cd "$OUT" && SMOOT_LIVE_PAIR_TOKEN=unused codex exec --approve-for-me --skip-git-repo-check ${MODEL:+-m "$MODEL"} \
+		-c "mcp_servers.smoot.url=\"$URL/mcp\"" -c 'mcp_servers.smoot.tool_timeout_sec=60' \
+		-c 'mcp_servers.smoot.bearer_token_env_var="SMOOT_LIVE_PAIR_TOKEN"' \
 		-o "$OUT/agent-final.txt" "$PROMPT" >"$OUT/agent.log" 2>&1) &
 	;;
 claude)
-	MCP=$(jq -n --arg u "$URL/mcp" '{mcpServers:{agora:{type:"http", url:$u}}}')
+	MCP=$(jq -n --arg u "$URL/mcp" '{mcpServers:{smoot:{type:"http", url:$u}}}')
 	(cd "$OUT" && claude -p "$PROMPT" ${MODEL:+--model "$MODEL"} --mcp-config "$MCP" --strict-mcp-config \
-		--allowedTools 'mcp__agora__*' --output-format json </dev/null >"$OUT/agent.json" 2>"$OUT/agent.log") &
+		--allowedTools 'mcp__smoot__*' --output-format json </dev/null >"$OUT/agent.json" 2>"$OUT/agent.log") &
 	;;
 esac
 AGENT_PID=$!
@@ -93,7 +93,7 @@ agent_position=
 replied_after_pushback=no
 outcome=ok
 while :; do
-	if ! AGORA_URL=$URL "$BIN" wait "$CONV" --agent "$HOST" --timeout "$TURN_TIMEOUT" >/dev/null; then
+	if ! SMOOT_URL=$URL "$BIN" wait "$CONV" --agent "$HOST" --timeout "$TURN_TIMEOUT" >/dev/null; then
 		outcome="agent went quiet for $TURN_TIMEOUT"
 		break
 	fi

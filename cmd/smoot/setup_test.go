@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 func TestClientInstall(t *testing.T) {
@@ -66,7 +66,7 @@ func TestClientInstallSharedHookConflictPreventsAllWrites(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", "")
 	hookPath := filepath.Join(home, ".codex", "hooks.json")
-	before := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"},{"type":"command","command":"agora hook stop --url old"}]}]}}`
+	before := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"},{"type":"command","command":"smoot hook stop --url old"}]}]}}`
 	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestClientInstallSharedHookConflictPreventsAllWrites(t *testing.T) {
 	if err != nil || string(got) != before {
 		t.Fatalf("hook changed: %s, %v", got, err)
 	}
-	for _, path := range []string{".codex/config.toml", ".codex/hooks.json.agora-bak", ".agents/skills/agora/SKILL.md"} {
+	for _, path := range []string{".codex/config.toml", ".codex/hooks.json.smoot-bak", ".agents/skills/smoot/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(home, path)); !os.IsNotExist(err) {
 			t.Fatalf("created %s: %v", path, err)
 		}
@@ -93,7 +93,7 @@ func TestClientInstallForceReplacesOwnHookFields(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", "")
 	hookPath := filepath.Join(home, ".codex", "hooks.json")
-	before := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"agora hook stop --url old","timeout":5}]}]}}`
+	before := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"smoot hook stop --url old","timeout":5}]}]}}`
 	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestClientInstallApprovalsAreOptIn(t *testing.T) {
 		t.Fatalf("approvals = %v", cfg.Permissions.Allow)
 	}
 	for i, name := range names {
-		if cfg.Permissions.Allow[i] != "mcp(agora/"+name+")" {
+		if cfg.Permissions.Allow[i] != "mcp(smoot/"+name+")" {
 			t.Fatalf("missing registered tool %s", name)
 		}
 	}
@@ -176,7 +176,7 @@ func TestUnsupportedApprovalsWriteNothing(t *testing.T) {
 func TestClientSkillsRefusesSymlink(t *testing.T) {
 	home := t.TempDir()
 	target := filepath.Join(t.TempDir(), "notes.md")
-	link := filepath.Join(home, ".agents", "skills", "agora", "SKILL.md")
+	link := filepath.Join(home, ".agents", "skills", "smoot", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestClientSkillsRefusesSymlink(t *testing.T) {
 	if r.code != exitError || !strings.Contains(r.stderr, link+" -> "+target) {
 		t.Fatalf("symlink accepted: %+v", r)
 	}
-	if !strings.Contains(r.stderr, "agora client skills --dir DIR") || !strings.Contains(r.stderr, "replace the link with a regular file") {
+	if !strings.Contains(r.stderr, "smoot client skills --dir DIR") || !strings.Contains(r.stderr, "replace the link with a regular file") {
 		t.Fatalf("missing symlink advice: %+v", r)
 	}
 	got, err := os.ReadFile(target)
@@ -216,7 +216,7 @@ func TestClientInstallSymlinkGuidance(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runCLIInput(t.Context(), "http://127.0.0.1:9100", "", map[string]string{"HOME": home}, "client", "install", "codex", "--namespace", "team", "--with-token", "--stop-hook", "--max-wait", "4m", "--force")
-	for _, want := range []string{link + " -> " + target, "agora client config codex --url http://127.0.0.1:9100 --namespace team --max-wait 4m0s --with-token --stop-hook", "apply the printed setup", "replace the link with a regular file"} {
+	for _, want := range []string{link + " -> " + target, "smoot client config codex --url http://127.0.0.1:9100 --namespace team --max-wait 4m0s --with-token --stop-hook", "apply the printed setup", "replace the link with a regular file"} {
 		if !strings.Contains(r.stderr, want) {
 			t.Fatalf("missing %q: %+v", want, r)
 		}

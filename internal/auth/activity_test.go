@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestActivityRecordsCallers(t *testing.T) {
@@ -23,7 +23,7 @@ func TestActivityRecordsCallers(t *testing.T) {
 	a.Seen(from("10.0.0.1", "claude-code/2.1"), alice, SurfaceMCP)
 	clock = clock.Add(time.Minute)
 	a.Seen(from("10.0.0.1", "claude-code/2.1"), alice, SurfaceMCP)
-	a.Seen(from("10.0.0.2", "agora-tui\x1b[31m"), core.Principal{AccountID: 2}, SurfaceAPI)
+	a.Seen(from("10.0.0.2", "smoot-tui\x1b[31m"), core.Principal{AccountID: 2}, SurfaceAPI)
 
 	callers, failures := a.Snapshot()
 	if len(failures) != 0 {
@@ -31,7 +31,7 @@ func TestActivityRecordsCallers(t *testing.T) {
 	}
 	want := []Caller{
 		{AccountID: 1, Surface: SurfaceMCP, Address: "10.0.0.1", Client: "claude-code/2.1", FirstSeen: clock.Add(-time.Minute), LastSeen: clock, Requests: 2},
-		{AccountID: 2, Surface: SurfaceAPI, Address: "10.0.0.2", Client: "agora-tui[31m", FirstSeen: clock, LastSeen: clock, Requests: 1},
+		{AccountID: 2, Surface: SurfaceAPI, Address: "10.0.0.2", Client: "smoot-tui[31m", FirstSeen: clock, LastSeen: clock, Requests: 1},
 	}
 	if fmt.Sprint(callers) != fmt.Sprint(want) {
 		t.Fatalf("callers:\n got %v\nwant %v", callers, want)
@@ -73,8 +73,8 @@ func TestLimitedRecordsRejectedCredentials(t *testing.T) {
 		return r
 	}
 	_, _ = authn.Authenticate(from("10.0.0.1", ""))                   // nothing presented
-	_, _ = authn.Authenticate(from("10.0.0.2", "Bearer agora_wrong")) // rejected
-	_, err := authn.Authenticate(from("10.0.0.2", "Bearer agora_wrong"))
+	_, _ = authn.Authenticate(from("10.0.0.2", "Bearer smoot_wrong")) // rejected
+	_, err := authn.Authenticate(from("10.0.0.2", "Bearer smoot_wrong"))
 	if core.CodeOf(err) != core.CodeRateLimited {
 		t.Fatalf("second failure: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestLimitedRecordsRejectedCredentials(t *testing.T) {
 
 	// A nil Activity and nil Failures record and limit nothing.
 	authn = Limited{Next: Bearer{Service: svc}}
-	if _, err := authn.Authenticate(from("10.0.0.2", "Bearer agora_wrong")); core.CodeOf(err) != core.CodeUnauthorized {
+	if _, err := authn.Authenticate(from("10.0.0.2", "Bearer smoot_wrong")); core.CodeOf(err) != core.CodeUnauthorized {
 		t.Fatalf("unlimited: %v", err)
 	}
 }

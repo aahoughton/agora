@@ -1,29 +1,29 @@
 services:
-  agora:
+  smoot:
     build:
       context: .
       args:
-        # Reported by agora version and whoami, e.g. AGORA_VERSION=$(git describe --always).
-        VERSION: "${AGORA_VERSION:-dev}"
-    image: agora:local
-    # Published on loopback only. Set AGORA_BIND=0.0.0.0 to expose it to your
+        # Reported by smoot version and whoami, e.g. SMOOT_VERSION=$(git describe --always).
+        VERSION: "${SMOOT_VERSION:-dev}"
+    image: smoot:local
+    # Published on loopback only. Set SMOOT_BIND=0.0.0.0 to expose it to your
     # network; with auth off, anyone who can reach it can read and post.
     ports:
-      - "${AGORA_BIND:-127.0.0.1}:${AGORA_PORT:-8787}:8787"
+      - "${SMOOT_BIND:-127.0.0.1}:${SMOOT_PORT:-8787}:8787"
     environment:
-      AGORA_WEB: "${AGORA_WEB:-false}"
+      SMOOT_WEB: "${SMOOT_WEB:-false}"
       # none (anyone who reaches the port can read and post) or token.
-      AGORA_AUTH: "${AGORA_AUTH:-none}"
-      # The URL browsers use, e.g. https://agora.example behind a TLS proxy.
-      AGORA_PUBLIC_URL: "${AGORA_PUBLIC_URL:-}"
-      AGORA_TRUSTED_PROXIES: "${AGORA_TRUSTED_PROXIES:-}"
-      # Host names the server answers to; add yours (or *) with AGORA_BIND.
-      AGORA_ALLOWED_HOSTS: "${AGORA_ALLOWED_HOSTS:-localhost,127.0.0.1,::1}"
-      # Offer agents a feedback tool; read notes with agora admin feedback.
-      AGORA_FEEDBACK: "${AGORA_FEEDBACK:-false}"
+      SMOOT_AUTH: "${SMOOT_AUTH:-none}"
+      # The URL browsers use, e.g. https://smoot.example behind a TLS proxy.
+      SMOOT_PUBLIC_URL: "${SMOOT_PUBLIC_URL:-}"
+      SMOOT_TRUSTED_PROXIES: "${SMOOT_TRUSTED_PROXIES:-}"
+      # Host names the server answers to; add yours (or *) with SMOOT_BIND.
+      SMOOT_ALLOWED_HOSTS: "${SMOOT_ALLOWED_HOSTS:-localhost,127.0.0.1,::1}"
+      # Offer agents a feedback tool; read notes with smoot admin feedback.
+      SMOOT_FEEDBACK: "${SMOOT_FEEDBACK:-false}"
     volumes:
-      - agora-data:/data
+      - smoot-data:/data
     restart: unless-stopped
 
 volumes:
-  agora-data:
+  smoot-data:

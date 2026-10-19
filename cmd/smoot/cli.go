@@ -13,12 +13,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/tui"
-	"github.com/aahoughton/agora/themes"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/tui"
+	"github.com/aahoughton/smoot/themes"
 )
 
 // Exit codes for client commands.
@@ -75,7 +75,7 @@ func runWait(ctx context.Context, args []string, stdout, stderr io.Writer, geten
 	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora wait <conversation> --agent NAME [flags]
+		fmt.Fprint(stderr, `usage: smoot wait <conversation> --agent NAME [flags]
 
 Blocks until someone else posts in the conversation or it concludes, then
 prints a short summary and exits 0. Run it in the background to wait without
@@ -140,14 +140,14 @@ the server is unreachable.
 				return timedOut(last)
 			}
 			if !client.IsTemporary(err) && !errors.Is(err, context.DeadlineExceeded) {
-				fmt.Fprintln(stderr, "agora wait:", err)
+				fmt.Fprintln(stderr, "smoot wait:", err)
 				return exitError
 			}
 			sleep := backoff
 			if !deadline.IsZero() {
 				sleep = min(sleep, time.Until(deadline))
 			}
-			fmt.Fprintf(stderr, "agora wait: %v; retrying in %s\n", err, sleep.Round(time.Millisecond))
+			fmt.Fprintf(stderr, "smoot wait: %v; retrying in %s\n", err, sleep.Round(time.Millisecond))
 			select {
 			case <-time.After(sleep):
 			case <-ctx.Done():
@@ -181,7 +181,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora status --agent NAME [flags]
+		fmt.Fprint(stderr, `usage: smoot status --agent NAME [flags]
 
 Prints the agent's status line in each open conversation of the namespace
 where it is expected.
@@ -211,7 +211,7 @@ where it is expected.
 	}
 	sts, err := cl.Status(ctx, cc.Namespace, agent)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora status:", err)
+		fmt.Fprintln(stderr, "smoot status:", err)
 		return exitError
 	}
 	if len(sts) == 0 {
@@ -227,7 +227,7 @@ func runHealth(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora health [--url URL]
+		fmt.Fprint(stderr, `usage: smoot health [--url URL]
 
 Checks that the server answers GET /healthz, which needs no token. Exits 0
 when it does, 1 when it does not.
@@ -253,7 +253,7 @@ when it does, 1 when it does not.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := cl.Health(ctx); err != nil {
-		fmt.Fprintln(stderr, "agora health:", err)
+		fmt.Fprintln(stderr, "smoot health:", err)
 		return exitError
 	}
 	fmt.Fprintln(stdout, "ok")
@@ -264,9 +264,9 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer, getenv config.
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora mcp [flags]
+		fmt.Fprint(stderr, `usage: smoot mcp [flags]
 
-Serves MCP on stdin/stdout by relaying to a running agora server's /mcp
+Serves MCP on stdin/stdout by relaying to a running smoot server's /mcp
 endpoint. Use it for MCP clients that only launch stdio servers. Logs go to
 stderr; stdout carries protocol frames only.
 
@@ -291,7 +291,7 @@ stderr; stdout carries protocol frames only.
 	endpoint := cl.URL() + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 	if err := mcpserver.Bridge(ctx, endpoint, cc.Token, &mcp.StdioTransport{}, version, logger); err != nil && ctx.Err() == nil {
-		fmt.Fprintln(stderr, "agora mcp:", err)
+		fmt.Fprintln(stderr, "smoot mcp:", err)
 		return exitError
 	}
 	return exitOK
@@ -301,7 +301,7 @@ func runTUI(ctx context.Context, args []string, stderr io.Writer, getenv config.
 	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora tui [namespace[/conversation]] [flags]
+		fmt.Fprint(stderr, `usage: smoot tui [namespace[/conversation]] [flags]
 
 Browses namespaces and conversations on a running server and follows a
 conversation live, with a composer for observer comments. Without an
@@ -347,7 +347,7 @@ argument it opens the conversations of --namespace.
 	if opts.Client, err = client.New(cc.URL, cc.Token); err != nil {
 		return flagError(stderr, err)
 	}
-	opts.Client.SetUserAgent("agora-tui")
+	opts.Client.SetUserAgent("smoot-tui")
 	if cc.Token != "" {
 		// With a token the server posts comments under its account, so
 		// show that name, and fail now if the token does not work.
@@ -355,7 +355,7 @@ argument it opens the conversations of --namespace.
 		w, err := opts.Client.Whoami(wctx)
 		cancel()
 		if err != nil {
-			fmt.Fprintln(stderr, "agora tui:", err)
+			fmt.Fprintln(stderr, "smoot tui:", err)
 			return exitError
 		}
 		if w.Account != nil {
@@ -367,15 +367,15 @@ argument it opens the conversations of --namespace.
 	}
 	theme, err := themes.Open(*themeDir)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora tui:", err)
+		fmt.Fprintln(stderr, "smoot tui:", err)
 		return exitError
 	}
 	if opts.Skin, err = tui.LoadSkin(theme); err != nil {
-		fmt.Fprintln(stderr, "agora tui:", err)
+		fmt.Fprintln(stderr, "smoot tui:", err)
 		return exitError
 	}
 	if err := tui.Run(ctx, opts); err != nil {
-		fmt.Fprintln(stderr, "agora tui:", err)
+		fmt.Fprintln(stderr, "smoot tui:", err)
 		return exitError
 	}
 	return exitOK
@@ -404,7 +404,7 @@ func runWhoami(ctx context.Context, args []string, stdout, stderr io.Writer, get
 	fs := flag.NewFlagSet("whoami", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora whoami [flags]
+		fmt.Fprint(stderr, `usage: smoot whoami [flags]
 
 Prints the server, its version and auth mode, and who the token (if any)
 belongs to, with its role in each namespace.
@@ -431,7 +431,7 @@ belongs to, with its role in each namespace.
 	defer cancel()
 	w, err := cl.Whoami(ctx)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora whoami:", err)
+		fmt.Fprintln(stderr, "smoot whoami:", err)
 		return exitError
 	}
 	fmt.Fprintf(stdout, "server:  %s (version %s, auth %s)\n", cl.URL(), w.Version, w.AuthMode)
