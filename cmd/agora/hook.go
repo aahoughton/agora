@@ -49,7 +49,7 @@ func runHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	fs.Usage = func() {
 		fmt.Fprint(stderr, `usage: agora hook stop [--agent NAME] [flags]
 
-A Stop hook for Claude Code and Codex (see agora client config --stop-hook).
+A Stop hook for Claude Code, Codex and Antigravity (see agora client config --stop-hook).
 It reads the hook's JSON on stdin and, while the agent is expected in an
 open conversation, tells the client to continue with the agent's status
 lines as the reason. It keeps holding a session while it makes progress
@@ -66,6 +66,7 @@ never traps a session.
 	resolveClient := config.ClientFlags(fs, config.WithNamespace|config.WithToken)
 	agentFlag := fs.String("agent", "", "your agent name (env "+config.EnvAgent+"; without one the hook does nothing)")
 	patience := fs.Int("patience", defaultPatience, "blocks in a row with no progress before the session may stop (1-20)")
+	contract := fs.String("client", "claude", "hook contract: claude (also Codex) or antigravity")
 	if err := fs.Parse(args[1:]); err != nil {
 		return min(flagError(stderr, err), exitError)
 	}
@@ -75,12 +76,15 @@ never traps a session.
 	if *patience < 1 || *patience > 20 {
 		return min(flagError(stderr, errors.New("--patience must be between 1 and 20")), exitError)
 	}
-	var in struct {
-		SessionID      string `json:"session_id"`
-		StopHookActive bool   `json:"stop_hook_active"`
+	if *contract != "claude" && *contract != "antigravity" {
+		return min(flagError(stderr, fmt.Errorf("unknown hook client %q", *contract)), exitError)
 	}
-	if err := json.NewDecoder(io.LimitReader(stdin, 1<<20)).Decode(&in); err != nil {
+	in, err := decodeHookInput(stdin, *contract)
+	if err != nil {
 		fmt.Fprintln(stderr, "agora hook stop: unreadable hook input:", err)
+		return exitOK
+	}
+	if !in.Hold {
 		return exitOK
 	}
 	agent := *agentFlag
@@ -102,6 +106,11 @@ never traps a session.
 		}
 	}
 	if statePath == "" && in.StopHookActive {
+		return exitOK
+	}
+	// Antigravity has no continuation guard of its own. Without persistent
+	// patience state, allowing the stop prevents an unbounded hook loop.
+	if in.NeedsState && statePath == "" {
 		return exitOK
 	}
 	cc, err := resolveClient(getenv)
@@ -158,7 +167,7 @@ never traps a session.
 		}
 		if err := writeHookState(statePath, st); err != nil {
 			fmt.Fprintln(stderr, "agora hook stop:", err)
-			if in.StopHookActive {
+			if in.StopHookActive || in.NeedsState {
 				return exitOK
 			}
 		}
@@ -168,13 +177,40 @@ never traps a session.
 		}
 	}
 	reason := wording.Default().Phrase(wording.StopHook, map[string]any{"Lines": strings.Join(lines, "\n")})
-	out, err := json.Marshal(map[string]string{"decision": "block", "reason": reason})
+	out, err := json.Marshal(map[string]string{"decision": in.Decision, "reason": reason})
 	if err != nil {
 		fmt.Fprintln(stderr, "agora hook stop:", err)
 		return exitOK
 	}
 	fmt.Fprintln(stdout, string(out))
 	return exitOK
+}
+
+type hookInput struct {
+	SessionID      string
+	StopHookActive bool
+	Hold           bool
+	NeedsState     bool
+	Decision       string
+}
+
+// decodeHookInput selects an explicit contract; payload fields never select it.
+func decodeHookInput(input io.Reader, contract string) (hookInput, error) {
+	decoder := json.NewDecoder(io.LimitReader(input, 1<<20))
+	if contract == "antigravity" {
+		var in struct {
+			ConversationID    string `json:"conversationId"`
+			TerminationReason string `json:"terminationReason"`
+		}
+		err := decoder.Decode(&in)
+		return hookInput{SessionID: in.ConversationID, Hold: in.TerminationReason == "NO_TOOL_CALL", NeedsState: true, Decision: "continue"}, err
+	}
+	var in struct {
+		SessionID      string `json:"session_id"`
+		StopHookActive bool   `json:"stop_hook_active"`
+	}
+	err := decoder.Decode(&in)
+	return hookInput{SessionID: in.SessionID, StopHookActive: in.StopHookActive, Hold: true, Decision: "block"}, err
 }
 
 // hookStateDir is $XDG_CACHE_HOME/agora/stop-hook, falling back to
