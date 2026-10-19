@@ -366,8 +366,11 @@ func parseTemplate(name, text string) (*template.Template, error) {
 	return template.New(name).Funcs(template.FuncMap{"json": quoteString}).Option("missingkey=error").Parse(text)
 }
 
+// shellSafe are the bytes shellQuote leaves unquoted.
+const shellSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-"
+
 func shellQuote(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
+	if s != "" && strings.Trim(s, shellSafe) == "" {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"

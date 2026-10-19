@@ -3,6 +3,7 @@ package profiles
 import (
 	"bytes"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -108,10 +109,32 @@ func TestJSONAppendRefusesSharedGroup(t *testing.T) {
 		`{"hooks":[{"type":"command","command":"say done"},{"type":"command","command":"agora hook stop --url old"}]}`,
 		`{"hooks":[{"type":"prompt","prompt":"check work"},{"type":"command","command":"agora hook stop --url old"}]}`,
 		`{"matcher":"custom","hooks":[{"type":"command","command":"agora hook stop --url old"}]}`,
+		`{"hooks":[{"type":"command","command":"agora hook stop; say done"}]}`,
+		`{"hooks":[{"type":"command","command":"agora hook stop --url old && say done"}]}`,
+		`{"hooks":[{"type":"command","command":"agora hook stop --url 'a b' | tee log"}]}`,
+		`{"hooks":[{"type":"command","command":"agora hook stop","hooks":[{"type":"command","command":"say done"}]}]}`,
 	} {
 		old := []byte(`{"hooks":{"Stop":[` + value + `]}}`)
 		if _, err := op.Edit(old, true); err == nil {
 			t.Fatalf("force accepted shared/customized group: %s", old)
+		}
+	}
+}
+
+func TestJSONAppendReplacesOwnHandler(t *testing.T) {
+	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "agora hook stop", Value: `{"hooks":[{"type":"command","command":"agora hook stop --url new","statusMessage":"agora"}]}`}
+	for _, command := range []string{
+		`agora hook stop`,
+		`agora hook stop --url old --namespace default`,
+		`agora hook stop --url 'http://h/?a=1&b=2' --namespace 'it'\''s'`,
+	} {
+		old := []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":` + strconv.Quote(command) + `,"timeout":5}]}]}}`)
+		got, err := op.Edit(old, true)
+		if err != nil {
+			t.Fatalf("%s: %v", command, err)
+		}
+		if !bytes.Contains(got, []byte(`"statusMessage":"agora"`)) || bytes.Contains(got, []byte(`"timeout"`)) || bytes.Count(got, []byte("agora hook stop")) != 1 {
+			t.Fatalf("%s: got %s", command, got)
 		}
 	}
 }
