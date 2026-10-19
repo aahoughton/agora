@@ -209,18 +209,20 @@ func ensureStrings(v *hujson.Value, path string, want any, old []byte) ([]byte, 
 	return v.Pack(), nil
 }
 
-// hookShape removes only our command's arguments from the ownership check.
-// Extra hooks or matcher settings mean the group belongs to the user.
+// hookShape reduces our own handler, an object whose command is ours and
+// that holds no nested values, to the prefix, so its arguments and other
+// fields (a status message, a timeout) are ours to replace. Extra hooks,
+// matcher settings, or a command that runs more than ours mean the group
+// belongs to the user.
 func hookShape(value any, prefix string) any {
 	switch v := value.(type) {
 	case map[string]any:
+		if command, ok := v["command"].(string); ok && ownCommand(command, prefix) && flat(v) {
+			return prefix
+		}
 		out := make(map[string]any, len(v))
 		for key, child := range v {
-			if command, ok := child.(string); key == "command" && ok && (command == prefix || strings.HasPrefix(command, prefix+" ")) {
-				out[key] = prefix
-			} else {
-				out[key] = hookShape(child, prefix)
-			}
+			out[key] = hookShape(child, prefix)
 		}
 		return out
 	case []any:
@@ -234,12 +236,25 @@ func hookShape(value any, prefix string) any {
 	}
 }
 
+func flat(m map[string]any) bool {
+	for _, child := range m {
+		switch child.(type) {
+		case map[string]any, []any:
+			return false
+		}
+	}
+	return true
+}
+
+// hasCommand reports whether value holds a command that starts with
+// prefix as a whole word, so "prefix; other" counts and "prefixed" does
+// not.
 func hasCommand(value any, prefix string) bool {
 	switch v := value.(type) {
 	case map[string]any:
 		for key, child := range v {
 			if key == "command" {
-				if command, ok := child.(string); ok && (command == prefix || strings.HasPrefix(command, prefix+" ")) {
+				if command, ok := child.(string); ok && startsCommand(command, prefix) {
 					return true
 				}
 			}
@@ -255,6 +270,50 @@ func hasCommand(value any, prefix string) bool {
 		}
 	}
 	return false
+}
+
+func startsCommand(command, prefix string) bool {
+	rest, ok := strings.CutPrefix(command, prefix)
+	if !ok {
+		return false
+	}
+	return rest == "" || !nameByte(rest[0])
+}
+
+func nameByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.'
+}
+
+// ownCommand reports whether command is prefix followed only by words as
+// shellQuote writes them, so nothing else runs with it.
+func ownCommand(command, prefix string) bool {
+	rest, ok := strings.CutPrefix(command, prefix)
+	if !ok {
+		return false
+	}
+	for rest != "" {
+		if rest[0] != ' ' {
+			return false
+		}
+		rest = strings.TrimLeft(rest, " ")
+		for rest != "" && rest[0] != ' ' {
+			switch {
+			case rest[0] == '\'':
+				end := strings.IndexByte(rest[1:], '\'')
+				if end < 0 {
+					return false
+				}
+				rest = rest[end+2:]
+			case strings.HasPrefix(rest, `\'`):
+				rest = rest[2:]
+			case strings.IndexByte(shellSafe, rest[0]) >= 0:
+				rest = rest[1:]
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func tableAt(root map[string]any, path []string) (any, bool, error) {

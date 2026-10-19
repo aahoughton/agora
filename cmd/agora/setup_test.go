@@ -88,6 +88,30 @@ func TestClientInstallSharedHookConflictPreventsAllWrites(t *testing.T) {
 	}
 }
 
+func TestClientInstallForceReplacesOwnHookFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
+	hookPath := filepath.Join(home, ".codex", "hooks.json")
+	before := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"agora hook stop --url old","timeout":5}]}]}}`
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookPath, []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := runCLI(t.Context(), "", "client", "install", "codex", "--stop-hook", "--force"); r.code != exitOK {
+		t.Fatalf("install: %+v", r)
+	}
+	got, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := string(got); !strings.Contains(s, `"statusMessage"`) || strings.Contains(s, "--url old") || strings.Contains(s, `"timeout"`) {
+		t.Fatalf("hook not replaced: %s", got)
+	}
+}
+
 func TestClientInstallApprovalsAreOptIn(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{"HOME": home}

@@ -29,7 +29,7 @@ tool_timeout_sec = {{.TimeoutSeconds}}
 
 ## install_stop_hook
 {"file":"@/hooks.json","op":"json-append","path":["hooks","Stop"],"identity":"agora hook stop","note":"Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.\nTrust this hook with /hooks in the Codex CLI."}
-{"hooks": [{"type": "command", "command": {{.CommandString}}}]}
+{"hooks": [{"type": "command", "command": {{.CommandString}}, "statusMessage": "agora: checking conversations"}]}
 
 ## approvals_note
 Codex approves agora's tools through default_tools_approval_mode in its MCP entry.

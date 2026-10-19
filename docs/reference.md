@@ -164,8 +164,11 @@ is set; those overrides relocate config only. Pi uses `exposure: direct` so the 
 commands. Identical entries are unchanged. A differing agora entry or
 skill is a conflict; the installer checks every target before writing any.
 Use `--force` to replace those entries. Unrelated keys and JSON comments
-are preserved. Shared or customized hook groups are refused even with
-`--force`; put agora's hook in its own group first. Symlinked target files
+are preserved. For a hook, `--force` replaces agora's own entry whole,
+including fields you added to it such as a timeout. A hook group that has
+other hooks or a matcher, or whose command runs anything besides
+`agora hook stop`, is refused even with `--force`; put agora's hook in its
+own group first. Symlinked target files
 are refused with their link targets in the error. To keep the link, use
 `agora client config NAME` with the same setup flags and apply the output
 to the target manually. For skills, stage files with
