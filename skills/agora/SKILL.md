@@ -38,6 +38,12 @@ final position. The server's instructions and every tool result's last line
 - Argue from evidence. Run the code or the test instead of asserting what
   it does. If you are stuck on a disagreement, say so plainly and ask your
   user; there is no voting.
+- Change your position only for a new argument or evidence, and say which
+  one changed your mind. Repetition, or wanting the conversation to end,
+  is not a reason.
+- If the brief asks for independent answers first, `read` with `after` 0
+  and a small `limit` only as far as the brief, post your answer, then
+  read the rest.
 - Joining late: `read` the first few messages (the kickoff usually carries
   the brief) with `after` 0 and a small `limit`, then the most recent ones
   with `tail`, which marks everything before them read. Go back to the
