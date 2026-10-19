@@ -42,9 +42,9 @@ func (n *Ref) Dump(src []byte, level int) {
 // cannot be in a name or a path, so "repo#12" and "a/b#12" are not
 // references, and the number must not run on into a letter. A "/" or "-"
 // right after a reference still separates, so "#3/#4" and "#3-#5" link
-// both. The text is
-// still source here, so "&#39;" (an entity) and "\#5" (an escape) are
-// skipped by the character before the "#".
+// both, also across emphasis as in "*#3*/#4". The text is still source
+// here, so "&#39;" (an entity) and "\#5" (an escape) are skipped by the
+// character before the "#".
 type refs struct{}
 
 func (refs) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
@@ -53,32 +53,48 @@ func (refs) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) 
 		return
 	}
 	src := reader.Source()
+	// texts in document order; nil where something other than text
+	// separates two of them (a block boundary, code, a link, a mention).
 	var texts []*ast.Text
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if n.Type() == ast.TypeBlock {
+			texts = append(texts, nil)
+			return ast.WalkContinue, nil
+		}
 		if !entering {
 			return ast.WalkContinue, nil
 		}
 		switch n := n.(type) {
 		case *ast.CodeSpan, *ast.Link, *ast.AutoLink, *Mention:
+			texts = append(texts, nil)
 			return ast.WalkSkipChildren, nil
 		case *ast.Text:
 			texts = append(texts, n)
 		}
 		return ast.WalkContinue, nil
 	})
+	afterRef := false
 	for _, t := range texts {
-		splitRefs(t, src, r)
+		if t == nil {
+			afterRef = false
+			continue
+		}
+		afterRef = splitRefs(t, src, r, afterRef) && !t.SoftLineBreak() && !t.HardLineBreak()
 	}
 }
 
 func digit(c byte) bool { return c >= '0' && c <= '9' }
 
-// splitRefs replaces t with text and Ref nodes.
-func splitRefs(t *ast.Text, src []byte, r Refs) {
+// splitRefs replaces t with text and Ref nodes. afterRef says a reference
+// directly precedes t; the result says t ends with one.
+func splitRefs(t *ast.Text, src []byte, r Refs, afterRef bool) bool {
 	seg := t.Segment
 	var nodes []ast.Node
 	from := seg.Start
 	lastEnd := -1
+	if afterRef {
+		lastEnd = seg.Start
+	}
 	for i := seg.Start; i < seg.Stop; i++ {
 		if src[i] != '#' {
 			continue
@@ -107,6 +123,7 @@ func splitRefs(t *ast.Text, src []byte, r Refs) {
 		from, i, lastEnd = end, end-1, end
 	}
 	splice(t, nodes, from)
+	return len(nodes) > 0 && from == seg.Stop
 }
 
 // refHTML renders a Ref as <a class="ref" href="...">.
