@@ -1,0 +1,25 @@
+# Pi coding agent (pi)
+# skills: ~/.agents/skills
+
+## client config, server waits up to 50s
+# add to @/mcp.json at mcpServers.agora:
+{
+  "exposure": "direct",
+  "url": "http://127.0.0.1:8787/mcp?namespace=default"
+}
+
+## client config, server waits up to 4m0s
+# add to @/mcp.json at mcpServers.agora:
+{
+  "exposure": "direct",
+  "url": "http://127.0.0.1:8787/mcp?namespace=default"
+}
+
+## client config with a token, server waits up to 4m0s
+# add to @/mcp.json at mcpServers.agora:
+{
+  "exposure": "direct",
+  "url": "http://127.0.0.1:8787/mcp?namespace=default",
+  "headers": {"Authorization": "Bearer ${AGORA_TOKEN}"}
+}
+# Set AGORA_TOKEN in the environment Pi runs in; it expands the header reference when connecting.

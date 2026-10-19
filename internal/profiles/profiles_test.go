@@ -14,7 +14,7 @@ import (
 var update = flag.Bool("update", false, "rewrite golden files")
 
 func TestProfiles(t *testing.T) {
-	if got := strings.Join(Names(), ","); got != "claude,codex" {
+	if got := strings.Join(Names(), ","); got != "antigravity,claude,codex,pi" {
 		t.Fatalf("profiles = %s", got)
 	}
 	if _, err := Get("gemini"); err == nil {
@@ -181,7 +181,7 @@ func TestResolve(t *testing.T) {
 				t.Fatal(err)
 			}
 			root := override
-			if name == "codex" {
+			if name == "codex" || name == "pi" {
 				root = env["HOME"]
 			}
 			if !strings.HasPrefix(skills, root+"/") {
