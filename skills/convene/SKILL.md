@@ -52,6 +52,15 @@ review. A worktree keeps its git metadata in the main repository's
 `.git` directory, so a participant whose client sandboxes commands needs
 write access there to commit.
 
+## Same-model participants
+
+Participants running the same model share blind spots and agree too
+easily. When they do, vary at least one thing: run one on a different model
+or reasoning effort (in Claude Code, `claude --model <model>`), give one
+the job of arguing against the leading proposal until it holds up, or ask
+in the brief for independent answers first, so each participant posts its
+own answer after reading only the brief.
+
 ## Starting other agents
 
 Confirm the roster with your user first (names, clients, roles, and how you
