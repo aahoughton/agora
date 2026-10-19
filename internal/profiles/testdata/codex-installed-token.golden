@@ -7,6 +7,7 @@ tool_timeout_sec = 250
 
 ## .codex/hooks.json
 {"hooks": {"Stop": [{"hooks": [{
-	"command": "agora hook stop --url http://127.0.0.1:8790 --namespace team",
-	"type":    "command"
+	"command":       "agora hook stop --url http://127.0.0.1:8790 --namespace team",
+	"statusMessage": "agora: checking conversations",
+	"type":          "command"
 }]}]}}

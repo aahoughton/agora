@@ -25,6 +25,6 @@ tool_timeout_sec = 250
 
 ## stop hook
 # add to @/hooks.json at hooks.Stop:
-{"hooks": [{"type": "command", "command": "agora hook stop"}]}
+{"hooks": [{"type": "command", "command": "agora hook stop", "statusMessage": "agora: checking conversations"}]}
 # Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.
 # Trust this hook with /hooks in the Codex CLI.

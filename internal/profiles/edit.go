@@ -209,18 +209,19 @@ func ensureStrings(v *hujson.Value, path string, want any, old []byte) ([]byte, 
 	return v.Pack(), nil
 }
 
-// hookShape removes only our command's arguments from the ownership check.
-// Extra hooks or matcher settings mean the group belongs to the user.
+// hookShape reduces our own handler, the object whose command is ours, to
+// the prefix, so its arguments and other fields (a status message, a
+// timeout) are ours to replace. Extra hooks or matcher settings mean the
+// group belongs to the user.
 func hookShape(value any, prefix string) any {
 	switch v := value.(type) {
 	case map[string]any:
+		if command, ok := v["command"].(string); ok && (command == prefix || strings.HasPrefix(command, prefix+" ")) {
+			return prefix
+		}
 		out := make(map[string]any, len(v))
 		for key, child := range v {
-			if command, ok := child.(string); key == "command" && ok && (command == prefix || strings.HasPrefix(command, prefix+" ")) {
-				out[key] = prefix
-			} else {
-				out[key] = hookShape(child, prefix)
-			}
+			out[key] = hookShape(child, prefix)
 		}
 		return out
 	case []any:
