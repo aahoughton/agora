@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -111,6 +112,40 @@ func TestJSONAppendRefusesSharedGroup(t *testing.T) {
 		old := []byte(`{"hooks":{"Stop":[` + value + `]}}`)
 		if _, err := op.Edit(old, true); err == nil {
 			t.Fatalf("force accepted shared/customized group: %s", old)
+		}
+	}
+}
+
+func TestEnsureStringsIsAdditive(t *testing.T) {
+	op := Operation{Op: "json-ensure-strings", Path: []string{"permissions", "allow"}, Value: `["new", "existing", "new", "last"]`}
+	old := []byte(`{
+ // preserve
+ "permissions": {"allow": ["unrelated", "existing", "unrelated",], "deny": ["secret"]}
+}`)
+	for _, force := range []bool{false, true} {
+		got, err := op.Edit(old, force)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(got, []byte("// preserve")) || !bytes.Contains(got, []byte(`"deny": ["secret"]`)) {
+			t.Fatalf("lost unrelated bytes: %s", got)
+		}
+		value, err := jsonValue(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		allow := value.(map[string]any)["permissions"].(map[string]any)["allow"]
+		if !reflect.DeepEqual(allow, []any{"unrelated", "existing", "unrelated", "new", "last"}) {
+			t.Fatalf("reordered permissions: %v", allow)
+		}
+		again, err := op.Edit(got, force)
+		if err != nil || !bytes.Equal(again, got) {
+			t.Fatalf("second install changed bytes: %s %v", again, err)
+		}
+	}
+	for _, old := range []string{`{"permissions":{"allow":null}}`, `{"permissions":{"allow":[true]}}`, `{"permissions":{"allow":"all"}}`} {
+		if _, err := op.Edit([]byte(old), true); err == nil {
+			t.Fatalf("accepted invalid array: %s", old)
 		}
 	}
 }

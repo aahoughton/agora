@@ -19,3 +19,6 @@ PI_CODING_AGENT_DIR
   "url": {{.MCPURLString}}{{if .TokenEnv}},
   "headers": {"Authorization": "Bearer ${ {{- .TokenEnv -}} }"}{{end}}
 }
+
+## approvals_note
+The Pi profile does not define an approval-file format.

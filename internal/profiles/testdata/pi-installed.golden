@@ -1,0 +1,4 @@
+## .pi/agent/mcp.json
+{"mcpServers": {
+	"agora": {"exposure": "direct", "url": "http://127.0.0.1:8790/mcp?namespace=team"}
+}}

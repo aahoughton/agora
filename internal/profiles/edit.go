@@ -19,7 +19,7 @@ import (
 // original bytes, including comments and formatting.
 func (o Operation) Edit(old []byte, force bool) ([]byte, error) {
 	switch o.Op {
-	case "json-set", "json-append", "command":
+	case "json-set", "json-append", "json-ensure-strings", "command":
 		return o.editJSON(old, force)
 	case "toml-table":
 		return o.editTOML(old, force)
@@ -91,6 +91,9 @@ func (o Operation) editJSON(old []byte, force bool) ([]byte, error) {
 	}
 	path := pointer(o.Path)
 	existing := v.Find(path)
+	if o.Op == "json-ensure-strings" {
+		return ensureStrings(&v, path, want, old)
+	}
 	if o.Op == "json-append" {
 		if existing == nil {
 			if err := patch(&v, path, []any{}); err != nil {
@@ -142,6 +145,64 @@ func (o Operation) editJSON(old []byte, force bool) ([]byte, error) {
 		return nil, err
 	}
 	// Format only a new document; patches retain surrounding source text.
+	if len(old) == 0 {
+		v.Format()
+	}
+	return v.Pack(), nil
+}
+
+// ensureStrings only adds absent strings. It never removes or reorders
+// existing entries, has no conflict state, and is independent of --force.
+func ensureStrings(v *hujson.Value, path string, want any, old []byte) ([]byte, error) {
+	values, ok := want.([]any)
+	if !ok {
+		return nil, errors.New("profile approvals must be a string array")
+	}
+	var desired []string
+	for _, value := range values {
+		s, ok := value.(string)
+		if !ok {
+			return nil, errors.New("profile approvals must be a string array")
+		}
+		desired = append(desired, s)
+	}
+	seen := map[string]bool{}
+	existing := v.Find(path)
+	if existing != nil {
+		array, ok := existing.Value.(*hujson.Array)
+		if !ok {
+			return nil, fmt.Errorf("%s must be a string array", path)
+		}
+		for _, item := range array.Elements {
+			value, err := jsonValue(item.Pack())
+			if err != nil {
+				return nil, err
+			}
+			s, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a string array", path)
+			}
+			seen[s] = true
+		}
+	}
+	changed := false
+	for _, s := range desired {
+		if seen[s] {
+			continue
+		}
+		if !changed && existing == nil {
+			if err := patch(v, path, []any{}); err != nil {
+				return nil, err
+			}
+		}
+		if err := patch(v, path+"/-", s); err != nil {
+			return nil, err
+		}
+		seen[s], changed = true, true
+	}
+	if !changed {
+		return old, nil
+	}
 	if len(old) == 0 {
 		v.Format()
 	}

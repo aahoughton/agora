@@ -104,7 +104,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "status":
 		return runStatus(ctx, args[1:], stdout, stderr, getenv)
 	case "client":
-		return runClient(args[1:], stdout, stderr, getenv)
+		return runClient(ctx, args[1:], stdout, stderr, getenv)
 	case "hook":
 		return runHook(ctx, args[1:], stdin, stdout, stderr, getenv)
 	case "tui":

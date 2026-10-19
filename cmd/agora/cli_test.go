@@ -464,7 +464,7 @@ func TestClientSkills(t *testing.T) {
 	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(dir, "agora", "SKILL.md")) || !strings.Contains(r.stdout, filepath.Join(dir, "convene", "SKILL.md")) {
 		t.Fatalf("first install = %+v", r)
 	}
-	if r := install(); r.code != exitOK || !strings.Contains(r.stdout, "up to date") {
+	if r := install(); r.code != exitOK || !strings.Contains(r.stdout, "unchanged") {
 		t.Fatalf("second install = %+v", r)
 	}
 
@@ -487,6 +487,9 @@ func TestClientSkills(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(edited); string(got) == "mine" {
 		t.Fatal("--force did not replace the file")
+	}
+	if got, err := os.ReadFile(edited + ".agora-bak"); err != nil || string(got) != "mine" {
+		t.Fatalf("skills backup: %s %v", got, err)
 	}
 
 	for _, args := range [][]string{{"client", "skills"}, {"client", "skills", "claude", "--dir", dir}, {"client", "skills", "gemini"}} {

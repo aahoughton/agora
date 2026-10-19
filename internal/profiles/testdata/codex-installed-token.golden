@@ -1,0 +1,12 @@
+## .codex/config.toml
+[mcp_servers.agora]
+url = "http://127.0.0.1:8790/mcp?namespace=team"
+bearer_token_env_var = "AGORA_TOKEN"
+default_tools_approval_mode = "approve"
+tool_timeout_sec = 250
+
+## .codex/hooks.json
+{"hooks": {"Stop": [{"hooks": [{
+	"command": "agora hook stop --url http://127.0.0.1:8790 --namespace team",
+	"type":    "command"
+}]}]}}

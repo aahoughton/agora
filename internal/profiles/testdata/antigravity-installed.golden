@@ -1,0 +1,27 @@
+## .gemini/config/mcp_config.json
+{"mcpServers": {
+	"agora": {"timeoutSeconds": 250, "url": "http://127.0.0.1:8790/mcp?namespace=team"}
+}}
+
+## .gemini/config/hooks.json
+{"agora": {"Stop": [{
+	"command": "agora hook stop --url http://127.0.0.1:8790 --namespace team --client antigravity",
+	"type":    "command"
+}]}}
+
+## .gemini/antigravity-cli/settings.json
+{"permissions": {"allow": [
+	"mcp(agora/close)",
+	"mcp(agora/conclude)",
+	"mcp(agora/feedback)",
+	"mcp(agora/join)",
+	"mcp(agora/leave)",
+	"mcp(agora/list)",
+	"mcp(agora/presence)",
+	"mcp(agora/read)",
+	"mcp(agora/say)",
+	"mcp(agora/search)",
+	"mcp(agora/start)",
+	"mcp(agora/status)",
+	"mcp(agora/wait)"
+]}}

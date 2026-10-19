@@ -26,7 +26,9 @@ var files embed.FS
 // Profile is one client's config root, skills directory and install recipes.
 type Profile struct {
 	Name, Description, SkillsDir, ConfigDir, HomeEnv, HookContract string
+	ApprovalsNote                                                  string
 	installs                                                       map[string]recipe
+	order                                                          []string
 }
 
 type recipe struct {
@@ -37,15 +39,16 @@ type recipe struct {
 // Operation is a rendered install operation. Command operations read File at
 // Path to check equality, then invoke Run (and Replace for a forced update).
 type Operation struct {
-	File            string   `json:"file"`
-	FileWhenHomeEnv string   `json:"file_when_home_env,omitempty"`
-	Op              string   `json:"op"`
-	Path            []string `json:"path"`
-	Identity        string   `json:"identity,omitempty"`
-	Note            string   `json:"note,omitempty"`
-	Run             []string `json:"run,omitempty"`
-	Replace         []string `json:"replace,omitempty"`
-	Value           string   `json:"-"`
+	File            string            `json:"file"`
+	FileWhenHomeEnv string            `json:"file_when_home_env,omitempty"`
+	Op              string            `json:"op"`
+	Path            []string          `json:"path"`
+	Identity        string            `json:"identity,omitempty"`
+	Note            string            `json:"note,omitempty"`
+	Run             []string          `json:"run,omitempty"`
+	Replace         []string          `json:"replace,omitempty"`
+	Value           string            `json:"-"`
+	CommandEnv      map[string]string `json:"-"`
 }
 
 var all = mustLoad(files)
@@ -97,7 +100,9 @@ func parseProfile(raw string) (*Profile, error) {
 			p.HomeEnv = s.Body
 		case "hook_contract":
 			p.HookContract = s.Body
-		case "install_mcp", "install_stop_hook":
+		case "approvals_note":
+			p.ApprovalsNote = s.Body
+		case "install_mcp", "install_stop_hook", "install_approvals":
 			meta, value, ok := strings.Cut(s.Body, "\n")
 			if !ok {
 				return nil, fmt.Errorf("%s needs metadata and a value", s.Key)
@@ -111,7 +116,7 @@ func parseProfile(raw string) (*Profile, error) {
 			if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
 				return nil, errors.New("trailing metadata")
 			}
-			if !slices.Contains([]string{"json-set", "json-append", "toml-table", "command"}, r.Op) {
+			if !slices.Contains([]string{"json-set", "json-append", "json-ensure-strings", "toml-table", "command"}, r.Op) {
 				return nil, fmt.Errorf("unknown op %q", r.Op)
 			}
 			if r.File == "" || len(r.Path) == 0 {
@@ -136,6 +141,7 @@ func parseProfile(raw string) (*Profile, error) {
 				}
 			}
 			p.installs[s.Key] = r
+			p.order = append(p.order, s.Key)
 		default:
 			return nil, fmt.Errorf("unknown key %q", s.Key)
 		}
@@ -174,7 +180,63 @@ func (p *Profile) ResolveOperation(op Operation, getenv func(string) string) (Op
 	}
 	var err error
 	op.File, err = p.Resolve(path, getenv)
+	if op.Op == "command" {
+		op.CommandEnv = map[string]string{"HOME": getenv("HOME")}
+		if p.HomeEnv != "" {
+			op.CommandEnv[p.HomeEnv] = getenv(p.HomeEnv)
+		}
+	}
 	return op, err
+}
+
+// Setup contains template inputs and selected optional sections. TokenEnv is
+// an environment variable name; no token value is accepted.
+type Setup struct {
+	MCPURL       string
+	MaxWait      time.Duration
+	TokenEnv     string
+	HookCommand  string
+	ApproveTools bool
+	ToolNames    []string
+}
+
+// Operations renders and resolves the selected sections in profile order.
+func (p *Profile) Operations(setup Setup, getenv func(string) string) ([]Operation, error) {
+	mcp, err := p.MCPOperation(setup.MCPURL, setup.MaxWait, setup.TokenEnv)
+	if err != nil {
+		return nil, err
+	}
+	selected := map[string]Operation{"install_mcp": mcp}
+	if setup.HookCommand != "" {
+		op, err := p.HookOperation(setup.HookCommand)
+		if err != nil {
+			return nil, err
+		}
+		selected["install_stop_hook"] = op
+	}
+	if setup.ApproveTools {
+		if _, ok := p.installs["install_approvals"]; !ok {
+			return nil, fmt.Errorf("%s has no separate tool approval setup: %s", p.Name, p.ApprovalsNote)
+		}
+		op, err := p.render("install_approvals", map[string]any{"ToolNames": setup.ToolNames})
+		if err != nil {
+			return nil, err
+		}
+		selected["install_approvals"] = op
+	}
+	var ops []Operation
+	for _, key := range p.order {
+		op, ok := selected[key]
+		if !ok {
+			continue
+		}
+		op, err = p.ResolveOperation(op, getenv)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, op)
+	}
+	return ops, nil
 }
 
 // Names lists the profiles, sorted.
@@ -301,7 +363,7 @@ func (o Operation) Instructions() string {
 }
 
 func parseTemplate(name, text string) (*template.Template, error) {
-	return template.New(name).Option("missingkey=error").Parse(text)
+	return template.New(name).Funcs(template.FuncMap{"json": quoteString}).Option("missingkey=error").Parse(text)
 }
 
 func shellQuote(s string) string {

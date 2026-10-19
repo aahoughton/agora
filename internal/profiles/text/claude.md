@@ -27,3 +27,7 @@ claude
 ## install_stop_hook
 {"file":"@/settings.json","op":"json-append","path":["hooks","Stop"],"identity":"agora hook stop","note":"Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens."}
 {"hooks": [{"type": "command", "command": {{.CommandString}}}]}
+
+## install_approvals
+{"file":"@/settings.json","op":"json-ensure-strings","path":["permissions","allow"]}
+["mcp__agora"]
