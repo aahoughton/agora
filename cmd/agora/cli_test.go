@@ -44,6 +44,10 @@ func runCLI(ctx context.Context, url string, args ...string) cliResult {
 		if k == "AGORA_URL" {
 			return url
 		}
+		switch k {
+		case "HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PI_CODING_AGENT_DIR":
+			return os.Getenv(k)
+		}
 		return ""
 	}
 	code := run(ctx, args, strings.NewReader(""), &out, &errOut, env)
@@ -495,6 +499,8 @@ func TestClientSkills(t *testing.T) {
 	// flags before or after the name.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
 	for _, args := range [][]string{{"client", "skills", "claude"}, {"client", "skills", "--force", "codex"}} {
 		if r := runCLI(t.Context(), "", args...); r.code != exitOK {
 			t.Fatalf("%v = %+v", args, r)
@@ -698,7 +704,7 @@ func TestAdminThroughTheServer(t *testing.T) {
 }
 
 func TestClientConfigNeverPrintsTheToken(t *testing.T) {
-	env := map[string]string{"AGORA_TOKEN": "agora_supersecret"}
+	env := map[string]string{"AGORA_TOKEN": "agora_supersecret", "HOME": t.TempDir()}
 	for _, profile := range []string{"claude", "codex"} {
 		r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "client", "config", profile, "--with-token", "--stop-hook")
 		if r.code != exitOK || strings.Contains(r.stdout, "supersecret") || !strings.Contains(r.stdout, "AGORA_TOKEN") {
@@ -952,5 +958,14 @@ func TestBootstrapRefusesAnOldDatabase(t *testing.T) {
 	}
 	if v, err := store.Inspect(t.Context(), path); err != nil || v != 1 {
 		t.Fatalf("schema now %d, %v", v, err)
+	}
+}
+
+func TestClientConfigUsesInjectedHome(t *testing.T) {
+	home, override := t.TempDir(), t.TempDir()
+	env := map[string]string{"HOME": home, "CODEX_HOME": override}
+	r := runCLIInput(t.Context(), "http://127.0.0.1:9000", "", env, "client", "config", "codex", "--stop-hook")
+	if r.code != exitOK || !strings.Contains(r.stdout, filepath.Join(override, "config.toml")) || !strings.Contains(r.stdout, filepath.Join(override, "hooks.json")) {
+		t.Fatalf("config override: %+v", r)
 	}
 }

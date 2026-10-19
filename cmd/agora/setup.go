@@ -37,7 +37,7 @@ func runClient(args []string, stdout, stderr io.Writer, getenv config.Getenv) in
 	case "config":
 		return runClientConfig(args[1:], stdout, stderr, getenv)
 	case "skills":
-		return runClientSkills(args[1:], stdout, stderr)
+		return runClientSkills(args[1:], stdout, stderr, getenv)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, clientUsage())
 		return exitOK
@@ -92,21 +92,31 @@ keeps a session from ending while it is expected in a conversation.
 	if *withToken {
 		tokenEnv = config.EnvToken
 	}
-	out, err := p.MCPConfig(mcpURL, *maxWait, tokenEnv)
+	op, err := p.MCPOperation(mcpURL, *maxWait, tokenEnv)
 	if err != nil {
 		fmt.Fprintln(stderr, "agora client config:", err)
 		return exitError
 	}
-	fmt.Fprint(stdout, out)
+	ops := []profiles.Operation{op}
 	if *stopHook {
 		// The hook reaches the same server and namespace as the MCP entry;
 		// the agent name and token still come from the environment.
-		hook, err := p.StopHook("agora hook stop --url " + shellWord(base) + " --namespace " + cc.Namespace)
+		hook, err := p.HookOperation("agora hook stop --url " + shellWord(base) + " --namespace " + shellWord(cc.Namespace))
 		if err != nil {
 			fmt.Fprintln(stderr, "agora client config:", err)
 			return exitError
 		}
-		fmt.Fprint(stdout, "\n"+hook)
+		ops = append(ops, hook)
+	}
+	for i := range ops {
+		ops[i], err = p.ResolveOperation(ops[i], getenv)
+		if err != nil {
+			fmt.Fprintln(stderr, "agora client config:", err)
+			return exitError
+		}
+	}
+	for _, op := range ops {
+		fmt.Fprint(stdout, op.Instructions())
 	}
 	return exitOK
 }
@@ -120,7 +130,7 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func runClientSkills(args []string, stdout, stderr io.Writer) int {
+func runClientSkills(args []string, stdout, stderr io.Writer, getenv config.Getenv) int {
 	fs := flag.NewFlagSet("client skills", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
@@ -152,7 +162,7 @@ write unless --force is given, and then writes nothing.
 		if err != nil {
 			return flagError(stderr, err)
 		}
-		if target, err = expandHome(p.SkillsDir); err != nil {
+		if target, err = p.Resolve(p.SkillsDir, getenv); err != nil {
 			fmt.Fprintln(stderr, "agora client skills:", err)
 			return exitError
 		}
@@ -171,19 +181,6 @@ func skillNames() []string {
 		names = append(names, e.Name())
 	}
 	return names
-}
-
-// expandHome replaces a leading ~ with the user's home directory.
-func expandHome(path string) (string, error) {
-	rest, ok := strings.CutPrefix(path, "~")
-	if !ok {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, rest), nil
 }
 
 // installSkills copies every file in src under dir. It checks all files

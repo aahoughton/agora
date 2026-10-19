@@ -1,15 +1,17 @@
-// Package profiles describes the agent clients agora knows how to set up:
-// how each one connects to the MCP endpoint, where it reads skills from,
-// and how it registers a Stop hook. Each client is one Markdown file under
-// text/, so adding a client means adding a file.
+// Package profiles describes client setup as data and applies a closed set
+// of install operations. Each client is one Markdown file under text/.
 package profiles
 
 import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/template"
@@ -21,26 +23,29 @@ import (
 //go:embed text/*.md
 var files embed.FS
 
-// keys are the sections every profile file must have.
-var keys = []string{"description", "skills_dir", "mcp_config", "stop_hook"}
-
-// clientRequestLimit is the per-call limit both supported clients apply to
-// an HTTP MCP tool call by default.
-const clientRequestLimit = 60 * time.Second
-
-// waitMargin is how much longer than the server's longest wait a client
-// should allow a tool call to run.
-const waitMargin = 10 * time.Second
-
-// Profile is one client.
+// Profile is one client's config root, skills directory and install recipes.
 type Profile struct {
-	Name        string
-	Description string
-	// SkillsDir is where the client reads user-level skills, with a
-	// leading ~ for the home directory.
-	SkillsDir string
-	mcpConfig *template.Template
-	stopHook  *template.Template
+	Name, Description, SkillsDir, ConfigDir, HomeEnv, HookContract string
+	installs                                                       map[string]recipe
+}
+
+type recipe struct {
+	Operation
+	value *template.Template
+}
+
+// Operation is a rendered install operation. Command operations read File at
+// Path to check equality, then invoke Run (and Replace for a forced update).
+type Operation struct {
+	File            string   `json:"file"`
+	FileWhenHomeEnv string   `json:"file_when_home_env,omitempty"`
+	Op              string   `json:"op"`
+	Path            []string `json:"path"`
+	Identity        string   `json:"identity,omitempty"`
+	Note            string   `json:"note,omitempty"`
+	Run             []string `json:"run,omitempty"`
+	Replace         []string `json:"replace,omitempty"`
+	Value           string   `json:"-"`
 }
 
 var all = mustLoad(files)
@@ -64,23 +69,112 @@ func load(fsys fs.FS) (map[string]*Profile, error) {
 		if err != nil {
 			return nil, err
 		}
-		name := strings.TrimSuffix(strings.TrimPrefix(path, "text/"), ".md")
-		ts, err := textfile.Templates(string(raw), keys)
+		p, err := parseProfile(string(raw))
 		if err != nil {
 			return nil, fmt.Errorf("profiles: %s: %w", path, err)
 		}
-		p := &Profile{Name: name, mcpConfig: ts["mcp_config"], stopHook: ts["stop_hook"]}
-		if p.Description, err = run(ts["description"], nil); err != nil {
-			return nil, fmt.Errorf("profiles: %s: %w", path, err)
-		}
-		p.Description = strings.TrimSpace(p.Description)
-		if p.SkillsDir, err = run(ts["skills_dir"], nil); err != nil {
-			return nil, fmt.Errorf("profiles: %s: %w", path, err)
-		}
-		p.SkillsDir = strings.TrimSpace(p.SkillsDir)
-		out[name] = p
+		p.Name = strings.TrimSuffix(strings.TrimPrefix(path, "text/"), ".md")
+		out[p.Name] = p
 	}
 	return out, nil
+}
+
+func parseProfile(raw string) (*Profile, error) {
+	secs, err := textfile.Sections(raw)
+	if err != nil {
+		return nil, err
+	}
+	p := &Profile{installs: map[string]recipe{}}
+	for _, s := range secs {
+		switch s.Key {
+		case "description":
+			p.Description = s.Body
+		case "skills_dir":
+			p.SkillsDir = s.Body
+		case "config_dir":
+			p.ConfigDir = s.Body
+		case "home_env":
+			p.HomeEnv = s.Body
+		case "hook_contract":
+			p.HookContract = s.Body
+		case "install_mcp", "install_stop_hook":
+			meta, value, ok := strings.Cut(s.Body, "\n")
+			if !ok {
+				return nil, fmt.Errorf("%s needs metadata and a value", s.Key)
+			}
+			var r recipe
+			dec := json.NewDecoder(strings.NewReader(meta))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&r.Operation); err != nil {
+				return nil, err
+			}
+			if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
+				return nil, errors.New("trailing metadata")
+			}
+			if !slices.Contains([]string{"json-set", "json-append", "toml-table", "command"}, r.Op) {
+				return nil, fmt.Errorf("unknown op %q", r.Op)
+			}
+			if r.File == "" || len(r.Path) == 0 {
+				return nil, errors.New("install needs file and path")
+			}
+			if r.Op == "json-append" && r.Identity == "" {
+				return nil, errors.New("json-append needs identity")
+			}
+			if r.Op == "command" && (len(r.Run) == 0 || len(r.Replace) == 0) {
+				return nil, errors.New("command needs run and replace argv")
+			}
+			if r.Op != "command" && (len(r.Run) != 0 || len(r.Replace) != 0) {
+				return nil, errors.New("argv requires command op")
+			}
+			r.value, err = parseTemplate(s.Key, value)
+			if err != nil {
+				return nil, err
+			}
+			for _, text := range append(append([]string{r.Note}, r.Run...), r.Replace...) {
+				if _, err := parseTemplate(s.Key, text); err != nil {
+					return nil, err
+				}
+			}
+			p.installs[s.Key] = r
+		default:
+			return nil, fmt.Errorf("unknown key %q", s.Key)
+		}
+	}
+	for _, required := range []struct{ key, value string }{{"description", p.Description}, {"skills_dir", p.SkillsDir}, {"config_dir", p.ConfigDir}} {
+		if required.value == "" {
+			return nil, fmt.Errorf("missing %s", required.key)
+		}
+	}
+	if !strings.HasPrefix(p.ConfigDir, "~/") {
+		return nil, errors.New("config_dir must start with ~/")
+	}
+	if _, ok := p.installs["install_mcp"]; !ok {
+		return nil, errors.New("missing install_mcp")
+	}
+	if p.HookContract != "" && !slices.Contains([]string{"claude", "antigravity"}, p.HookContract) {
+		return nil, fmt.Errorf("unknown hook contract %q", p.HookContract)
+	}
+	_, hook := p.installs["install_stop_hook"]
+	if hook != (p.HookContract != "") {
+		return nil, errors.New("stop hook and hook_contract must be declared together")
+	}
+	for _, r := range p.installs {
+		if r.FileWhenHomeEnv != "" && p.HomeEnv == "" {
+			return nil, errors.New("file_when_home_env requires home_env")
+		}
+	}
+	return p, nil
+}
+
+// ResolveOperation expands a recipe's file, including an explicit override.
+func (p *Profile) ResolveOperation(op Operation, getenv func(string) string) (Operation, error) {
+	path := op.File
+	if p.HomeEnv != "" && getenv(p.HomeEnv) != "" && op.FileWhenHomeEnv != "" {
+		path = op.FileWhenHomeEnv
+	}
+	var err error
+	op.File, err = p.Resolve(path, getenv)
+	return op, err
 }
 
 // Names lists the profiles, sorted.
@@ -102,40 +196,126 @@ func Get(name string) (*Profile, error) {
 	return p, nil
 }
 
-// MCPConfig renders the client's setup for the MCP endpoint mcpURL, on a
-// server whose longest MCP wait is maxWait. If tokenEnv is set, the client
-// is set up to send the token in that environment variable; the setup
-// never contains a token itself.
-func (p *Profile) MCPConfig(mcpURL string, maxWait time.Duration, tokenEnv string) (string, error) {
-	data := map[string]any{
-		"MCPURL": mcpURL, "MCPURLShell": shellQuote(mcpURL), "MCPURLString": quoteString(mcpURL),
-		"TimeoutMS": 0, "TimeoutSeconds": 0, "TokenEnv": tokenEnv, "TokenEnvString": quoteString(tokenEnv),
+// Resolve expands ~/ under HOME and @/ under the profile's config root.
+func (p *Profile) Resolve(path string, getenv func(string) string) (string, error) {
+	base, rest, ok := strings.Cut(path, "/")
+	if !ok || (base != "~" && base != "@") {
+		return "", fmt.Errorf("profile path must start with ~/ or @/: %q", path)
 	}
-	// Raise the client's limit only when the server's waits would hit it.
-	if need := maxWait + waitMargin; need > clientRequestLimit {
+	root := getenv("HOME")
+	if base == "@" {
+		root = getenv(p.HomeEnv)
+		if root == "" {
+			var err error
+			root, err = p.Resolve(p.ConfigDir, getenv)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("profile home must be absolute, got %q", root)
+	}
+	if slices.Contains(strings.Split(rest, "/"), "..") {
+		return "", errors.New("profile path escapes home")
+	}
+	return filepath.Join(root, filepath.FromSlash(rest)), nil
+}
+
+// MCPOperation renders setup without ever accepting a token value.
+func (p *Profile) MCPOperation(mcpURL string, maxWait time.Duration, tokenEnv string) (Operation, error) {
+	u, err := url.Parse(mcpURL)
+	if err != nil {
+		return Operation{}, err
+	}
+	ns := u.Query().Get("namespace")
+	u.RawQuery = ""
+	u.Path = strings.TrimSuffix(u.Path, "/mcp")
+	data := map[string]any{"MCPURLString": quoteString(mcpURL), "BaseURLString": quoteString(u.String()), "NamespaceString": quoteString(ns), "TimeoutMS": int64(0), "TimeoutSeconds": int64(0), "TokenEnv": tokenEnv, "TokenEnvString": quoteString(tokenEnv)}
+	if need := maxWait + 10*time.Second; need > 60*time.Second {
 		data["TimeoutMS"] = need.Milliseconds()
-		data["TimeoutSeconds"] = int((need + time.Second - 1) / time.Second)
+		data["TimeoutSeconds"] = int64((need + time.Second - 1) / time.Second)
 	}
-	return run(p.mcpConfig, data)
+	return p.render("install_mcp", data)
 }
 
-// StopHook renders the client's Stop hook entry running command.
-func (p *Profile) StopHook(command string) (string, error) {
-	return run(p.stopHook, map[string]any{"Command": command, "CommandString": quoteString(command)})
+// HookOperation renders the hook entry for a shell command.
+func (p *Profile) HookOperation(command string) (Operation, error) {
+	if p.HookContract == "antigravity" {
+		command += " --client antigravity"
+	}
+	return p.render("install_stop_hook", map[string]any{"CommandString": quoteString(command)})
 }
 
-// shellQuote quotes s as one POSIX shell word.
+func (p *Profile) render(key string, data map[string]any) (Operation, error) {
+	r, ok := p.installs[key]
+	if !ok {
+		return Operation{}, fmt.Errorf("%s has no supported stop hook", p.Name)
+	}
+	op := r.Operation
+	var err error
+	if op.Value, err = run(r.value, data); err != nil {
+		return Operation{}, err
+	}
+	data["ValueJSON"] = strings.TrimSpace(op.Value)
+	render := func(s string) (string, error) {
+		t, err := parseTemplate(key, s)
+		if err != nil {
+			return "", err
+		}
+		out, err := run(t, data)
+		return strings.TrimSpace(out), err
+	}
+	if op.Note, err = render(op.Note); err != nil {
+		return Operation{}, err
+	}
+	op.Run, op.Replace = slices.Clone(r.Run), slices.Clone(r.Replace)
+	for _, argv := range [][]string{op.Run, op.Replace} {
+		for i, s := range argv {
+			if argv[i], err = render(s); err != nil {
+				return Operation{}, err
+			}
+		}
+	}
+	return op, nil
+}
+
+// Instructions prints from the same rendered operation the installer uses.
+func (o Operation) Instructions() string {
+	var b strings.Builder
+	if o.Op == "command" {
+		for i, arg := range o.Run {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(shellQuote(arg))
+		}
+		b.WriteByte('\n')
+	} else {
+		fmt.Fprintf(&b, "# add to %s at %s:\n%s", o.File, strings.Join(o.Path, "."), o.Value)
+	}
+	if o.Note != "" {
+		fmt.Fprintf(&b, "# %s\n", strings.ReplaceAll(o.Note, "\n", "\n# "))
+	}
+	return b.String()
+}
+
+func parseTemplate(name, text string) (*template.Template, error) {
+	return template.New(name).Option("missingkey=error").Parse(text)
+}
+
 func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
+		return s
+	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// quoteString quotes s as a JSON string, which is also a valid TOML basic
-// string.
 func quoteString(s string) string {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(s) // a string always encodes
+	_ = enc.Encode(s)
 	return strings.TrimSuffix(b.String(), "\n")
 }
 

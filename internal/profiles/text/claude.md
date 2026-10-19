@@ -1,50 +1,29 @@
 # Claude Code
 
-The profile for Claude Code. Sections are Go text/templates; `fields:`
-lists their data. See internal/profiles for what each key is for.
-
 ## description
 Claude Code (claude)
 
+## config_dir
+~/.claude
+
+## home_env
+CLAUDE_CONFIG_DIR
+
 ## skills_dir
-~/.claude/skills
+@/skills
 
-## mcp_config
-fields: MCPURL, MCPURLShell (quoted for a shell), MCPURLString (a quoted JSON/TOML string), TimeoutMS, TokenEnv, TokenEnvString
-# Claude Code: add agora for every project (user scope).
-claude mcp add --transport http --scope user agora {{.MCPURLShell}}{{if .TokenEnv}} --header 'Authorization: Bearer ${ {{- .TokenEnv -}} }'{{end}}
-{{- if .TokenEnv}}
-# Claude Code expands ${ {{- .TokenEnv -}} } when it connects; set {{.TokenEnv}} in the
-# environment Claude Code runs in.
-{{- end}}
-{{- if .TimeoutMS}}
-# The server's waits outlast Claude Code's 60s limit on an HTTP tool call.
-# Add "timeout": {{.TimeoutMS}} to the agora entry that command writes to
-# ~/.claude.json, or start Claude Code with MCP_TOOL_TIMEOUT={{.TimeoutMS}}.
-{{- end}}
+## hook_contract
+claude
 
-# Or, for one project only, put this in .mcp.json at its root:
+## install_mcp
+{"file":"~/.claude.json","file_when_home_env":"@/.claude.json","op":"command","path":["mcpServers","agora"],"run":["claude","mcp","add-json","--scope","user","agora","{{.ValueJSON}}"],"replace":["claude","mcp","remove","--scope","user","agora"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Claude Code runs in; it expands the header reference when connecting.{{end}}"}
 {
-  "mcpServers": {
-    "agora": {
-      "type": "http",
-      "url": {{.MCPURLString}}{{if .TokenEnv}},
-      "headers": { "Authorization": "Bearer ${ {{- .TokenEnv -}} }" }{{end}}{{if .TimeoutMS}},
-      "timeout": {{.TimeoutMS}}{{end}}
-    }
-  }
+  "type": "http",
+  "url": {{.MCPURLString}}{{if .TokenEnv}},
+  "headers": {"Authorization": "Bearer ${ {{- .TokenEnv -}} }"}{{end}}{{if .TimeoutMS}},
+  "timeout": {{.TimeoutMS}}{{end}}
 }
 
-## stop_hook
-fields: Command, CommandString (a quoted JSON string)
-# Claude Code Stop hook: merge into "hooks" in ~/.claude/settings.json.
-# It keeps a session from ending while it is expected in an agora
-# conversation, and does nothing unless AGORA_AGENT is set in the session's
-# environment (and AGORA_TOKEN for a server with tokens).
-{
-  "hooks": {
-    "Stop": [
-      { "hooks": [ { "type": "command", "command": {{.CommandString}} } ] }
-    ]
-  }
-}
+## install_stop_hook
+{"file":"@/settings.json","op":"json-append","path":["hooks","Stop"],"identity":"agora hook stop","note":"Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens."}
+{"hooks": [{"type": "command", "command": {{.CommandString}}}]}
