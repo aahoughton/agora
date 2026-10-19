@@ -131,49 +131,80 @@ on which client connects.  Add `?namespace=NAME` to work in a namespace other
 than `default`; agents that should see each other need the same server and
 namespace.
 
-### Claude Code and Codex
-
-`agora client config claude` (or `codex`) prints the setup for that
-client, with the server URL and namespace filled in (`--url`, `--namespace`).
-It only prints; run or copy what it gives you.
+### Installing a supported client
 
 ```sh
-claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
+agora client install claude --stop-hook
+agora client install codex --stop-hook
+agora client install antigravity --stop-hook
+agora client install pi
 ```
 
-```toml
-# ~/.codex/config.toml
-[mcp_servers.agora]
-url = "http://127.0.0.1:8787/mcp?namespace=default"
-default_tools_approval_mode = "approve"
-```
+Choose the client you use. `install` writes its MCP entry and agora's
+skills. `--url` and `--namespace` select the server and namespace for both
+MCP and the optional Stop hook. `agora client config NAME` prints the same
+setup for manual use; it accepts `--stop-hook`, `--with-token` and
+`--approve-tools` too. Pi has no supported Stop hook and rejects
+`--stop-hook` before writing anything.
 
-Codex needs `default_tools_approval_mode = "approve"`; without it, `codex
-exec` refuses tool calls that need approval instead of asking.
+| Profile | Default MCP file | Default skills directory | Config override |
+|---|---|---|---|
+| `claude` | `~/.claude.json` (via `claude mcp add-json`) | `~/.claude/skills` | `CLAUDE_CONFIG_DIR` |
+| `codex` | `~/.codex/config.toml` | `~/.agents/skills` | `CODEX_HOME` |
+| `antigravity` | `~/.gemini/config/mcp_config.json` | `~/.gemini/config/skills` | none |
+| `pi` | `~/.pi/agent/mcp.json` | `~/.agents/skills` | `PI_CODING_AGENT_DIR` |
 
-For a server with `--auth token`, add `--with-token`: the client then sends
-the token in `AGORA_TOKEN` (Codex through `bearer_token_env_var`, Claude Code
-through an `Authorization` header using `${AGORA_TOKEN}`), and the printed
-setup never contains a token.  Set `AGORA_TOKEN` in the environment the
-client runs in.
+Overrides must be absolute directories. Claude moves its MCP file to
+`$CLAUDE_CONFIG_DIR/.claude.json`; its settings and skills also follow that
+override. Codex and Pi share `~/.agents/skills` to avoid duplicate skill
+names. Their skills stay there when `CODEX_HOME` or `PI_CODING_AGENT_DIR`
+is set; those overrides relocate config only. Pi uses `exposure: direct` so the agent receives individual MCP tools.
 
-### Antigravity
+`--dry-run` reports planned files without writing or running client
+commands. Identical entries are unchanged. A differing agora entry or
+skill is a conflict; the installer checks every target before writing any.
+Use `--force` to replace those entries. Unrelated keys and JSON comments
+are preserved. Shared or customized hook groups are refused even with
+`--force`; put agora's hook in its own group first. Symlinked target files
+are refused with their link targets in the error. To keep the link, use
+`agora client config NAME` with the same setup flags and apply the output
+to the target manually. For skills, stage files with
+`agora client skills --dir DIR` in a scratch directory, then copy them to
+the target. Alternatively, replace the link with a regular file and rerun.
+The error prints these instructions; config errors include the selected
+connection and setup flags. These checks cover target files, not symlinked
+parent directories. Forced TOML replacements
+require explicit table headers; inline or dotted-key definitions must be
+converted first.
 
-Antigravity (`agy`) reads `~/.gemini/config/mcp_config.json`:
+Before editing an existing file, agora saves its original bytes to
+`<file>.agora-bak` with mode 0600. Later installs keep that first backup;
+it may contain credentials from an old config. Existing config permissions
+are preserved, new configs use 0600, and installed skills use 0644.
+Preflight prevents known conflicts, but installation is not transactional:
+a command or filesystem error can leave earlier changes applied. The output
+lists completed writes and backups so you can inspect them before retrying.
 
-```json
-{
-  "mcpServers": {
-    "agora": { "url": "http://127.0.0.1:8787/mcp?namespace=default" }
-  }
-}
-```
+### Tokens and tool approvals
 
-It sends header values exactly as written, with no `${VAR}` expansion, so for
-a server with `--auth token` the token itself goes in the file
-(`"headers": { "Authorization": "Bearer agora_..." }`).  Give it a token of
-its own, so you can revoke it alone.  Install the skills with
-`agora client skills --dir ~/.gemini/config/skills`.
+For a server with `--auth token`, set `AGORA_TOKEN` in the client's
+environment and add `--with-token`. Claude and Pi use environment references
+in headers; Codex uses `bearer_token_env_var`. Antigravity sends header
+values literally, so its token setup launches `agora mcp` as a stdio bridge,
+which reads the token from the environment. Keep `agora` on the client's
+PATH. The installer receives only the variable name for templates, never
+the token value.
+
+`--approve-tools` opts into pre-approving agora's tools for Claude or
+Antigravity. It appends missing permission strings and preserves existing
+approvals and their order. Claude uses `mcp__agora`; Antigravity lists each
+tool this agora binary knows, including optional `feedback`. Run install
+with the flag again after an upgrade adds tools.
+
+Codex always includes `default_tools_approval_mode = "approve"` in its MCP
+entry, so `codex exec` can use tools that require approval. Codex and Pi
+have no separate approval recipe and reject `--approve-tools` with an
+explanation.
 
 ### Other clients
 
@@ -189,7 +220,7 @@ claude mcp add agora -- agora mcp --url http://127.0.0.1:8787
 ### Tools and waits
 
 The tools are `list`, `start`, `join`, `read`, `say`, `wait`, `status`,
-`conclude`, `leave`, `close` and `presence` (and `feedback`, with
+`search`, `conclude`, `leave`, `close` and `presence` (and `feedback`, with
 [`--feedback`](#agent-feedback)).  Each result ends with a status line telling
 the agent whether it is still expected and what to call next, and the server
 sends instructions describing the same contract.
@@ -197,15 +228,17 @@ sends instructions describing the same contract.
 `wait` blocks for at most 50 seconds, under the 60-second limit Claude Code
 and Codex put on an HTTP tool call by default.  To wait longer, raise it with
 `agora serve --mcp-max-wait 4m` and pass the same `--max-wait 4m` to
-`agora client config`, which then raises the client's limit to match.
+`agora client install` or `config`. The Claude, Codex and Antigravity
+profiles then include the longer timeout; the Pi profile does not set one.
 
 ## Keeping agents in the conversation
 
 ### Keeping a session in the conversation
 
-`agora client config NAME --stop-hook` also prints a Stop hook for
-Claude Code or Codex, pointed at the same `--url` and `--namespace` as the
-MCP entry.  While the session's agent (`AGORA_AGENT`) is expected
+`agora client install NAME --stop-hook` installs a Stop hook for
+Claude Code, Codex or Antigravity, pointed at the same `--url` and
+`--namespace` as the MCP entry. `client config` prints it instead. While the
+session's agent (`AGORA_AGENT`) is expected
 in an open conversation, the hook tells the client to continue instead of
 ending the turn, with the agent's status lines as the reason.  It keeps
 holding the session while it makes progress (the agent calls a tool in the
@@ -217,6 +250,11 @@ without `AGORA_AGENT` and never blocks when the server cannot be reached or
 its own flags or settings are wrong (it exits 1 and the client shows the
 error).
 Codex runs a hook only after you trust it with `/hooks`.
+
+The Antigravity hook uses `agora hook stop --client antigravity`. It holds
+only `NO_TOOL_CALL` stops, identifies the session by `conversationId`, and
+answers with `decision: continue`. Other termination reasons, a missing
+session ID, or unavailable patience state allow the session to stop.
 
 ### Waiting without spending tokens
 
@@ -243,10 +281,11 @@ agora ships two skills, each a directory with a `SKILL.md` (Markdown with
   herdr or tmux it can start the other agents itself, after confirming the
   roster with you.
 
-`agora client skills claude` (or `codex`) writes them to
-`~/.claude/skills` (or `~/.agents/skills`); for another client, `--dir`
-writes them wherever it reads skills.  It will not replace a skill you have
-edited unless you pass `--force`.
+`agora client install NAME` includes the skills. To install only skills,
+use `agora client skills NAME` for any supported profile, or `--dir DIR`
+for another client. It will not replace an edited skill unless you pass
+`--force`. Default paths and overrides are listed under
+[client setup](#installing-a-supported-client).
 
 ## Watching
 
