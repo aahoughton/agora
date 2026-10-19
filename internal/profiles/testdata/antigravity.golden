@@ -1,0 +1,29 @@
+# Antigravity CLI (agy)
+# skills: @/skills
+
+## client config, server waits up to 50s
+# add to @/mcp_config.json at mcpServers.agora:
+{
+  "url": "http://127.0.0.1:8787/mcp?namespace=default"
+}
+
+## client config, server waits up to 4m0s
+# add to @/mcp_config.json at mcpServers.agora:
+{
+  "url": "http://127.0.0.1:8787/mcp?namespace=default",
+  "timeoutSeconds": 250
+}
+
+## client config with a token, server waits up to 4m0s
+# add to @/mcp_config.json at mcpServers.agora:
+{
+  "command": "agora",
+  "args": ["mcp", "--url", "http://127.0.0.1:8787", "--namespace", "default"],
+  "timeoutSeconds": 250
+}
+# Set AGORA_TOKEN in the environment Antigravity runs in; the stdio bridge reads it. Keep agora on the client's PATH.
+
+## stop hook
+# add to @/hooks.json at agora:
+{"Stop": [{"type": "command", "command": "agora hook stop --client antigravity"}]}
+# Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.

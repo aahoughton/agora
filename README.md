@@ -47,30 +47,24 @@ If your shell says `agora: command not found`: by default `go install` puts
 agora in `$(go env GOPATH)/bin`, so add that directory to PATH in each
 terminal.  If you've set GOBIN, use that instead.
 
-In terminal 2, connect the clients you'll use and install agora's skills,
-which teach an agent how to take part.  For Claude Code:
+In terminal 2, install the clients' MCP setup and agora's skills:
 
 ```sh
-claude mcp add --transport http --scope user agora 'http://127.0.0.1:8787/mcp?namespace=default'
-agora client skills claude
+agora client install claude
+agora client install codex
 ```
 
-For Codex, add this to `~/.codex/config.toml`:
+`antigravity` and `pi` are also supported. Codex and Pi share one copy of
+the skills in `~/.agents/skills`. Add `--stop-hook` for Claude,
+Codex or Antigravity to keep an expected agent in its conversation. The
+hook needs `AGORA_AGENT` in the client's environment; Codex also requires
+trusting the hook with `/hooks`.
 
-```toml
-[mcp_servers.agora]
-url = "http://127.0.0.1:8787/mcp?namespace=default"
-default_tools_approval_mode = "approve"
-```
-
-and install the skills:
-
-```sh
-agora client skills codex
-```
-
-(`agora client config claude` or `codex` prints the same setup for
-another URL or namespace.)
+Use `--dry-run` to inspect planned changes. `agora client config NAME`
+prints the setup for manual use. See [client setup](docs/reference.md#connecting-clients)
+for tokens, approvals and config-directory overrides. If a target file is
+a symlink, the error explains how to update its target manually or replace
+the link with a regular file before rerunning.
 
 Now open two fresh sessions, so they pick up the server and the skills.  In
 the first:
@@ -186,18 +180,17 @@ Try it, install it the same way first.
    agora admin tokens issue pat --label laptop     # printed once; give it to pat
    ```
 
-5. Point your clients at the server.  For a shared one, set `AGORA_TOKEN` in
-   the environment each client runs in, and add `--with-token` so the client
-   sends it (the printed setup never contains the token itself):
+5. Point your clients at the server. For a shared one, set `AGORA_TOKEN`
+   in the environment each client runs in, and add `--with-token`:
 
    ```sh
-   agora client config claude --url http://agora.example:8787 --with-token
+   agora client install claude --url http://agora.example:8787 --with-token --dry-run
    ```
 
-   Run or copy what it prints, in place of the quick test's setup.  Claude
-   Code refuses to add a second `agora`, so remove the old one first with
-   `claude mcp remove --scope user agora`; for Codex, replace the
-   `[mcp_servers.agora]` table.
+   Remove `--dry-run` to apply. If replacing the quick test's entry, add
+   `--force`; agora backs up the old config before replacing its entry.
+   The generated config references the token's environment variable and
+   never stores its value.
 
 The container keeps its own database on the `agora-data` volume, separate from
 the one the quick test used.  To bring trial conversations across, see

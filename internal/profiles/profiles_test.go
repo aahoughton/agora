@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,62 +14,44 @@ import (
 var update = flag.Bool("update", false, "rewrite golden files")
 
 func TestProfiles(t *testing.T) {
-	if got := strings.Join(Names(), ","); got != "claude,codex" {
+	if got := strings.Join(Names(), ","); got != "antigravity,claude,codex,pi" {
 		t.Fatalf("profiles = %s", got)
 	}
-	if _, err := Get("gemini"); err == nil || !strings.Contains(err.Error(), "claude, codex") {
-		t.Fatalf("unknown profile err = %v", err)
+	if _, err := Get("gemini"); err == nil {
+		t.Fatal("unknown profile accepted")
 	}
-	const url = "http://127.0.0.1:8787/mcp?namespace=default"
 	for _, name := range Names() {
-		p, err := Get(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var b strings.Builder
-		b.WriteString("# " + p.Description + "\n# skills: " + p.SkillsDir + "\n\n")
-		for _, wait := range []time.Duration{50 * time.Second, 4 * time.Minute} {
-			out, err := p.MCPConfig(url, wait, "")
+		t.Run(name, func(t *testing.T) {
+			p, _ := Get(name)
+			var b strings.Builder
+			b.WriteString("# " + p.Description + "\n# skills: " + p.SkillsDir + "\n\n")
+			for _, wait := range []time.Duration{50 * time.Second, 4 * time.Minute} {
+				out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", wait, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.WriteString("## client config, server waits up to " + wait.String() + "\n" + out.Instructions() + "\n")
+			}
+			out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", 4*time.Minute, "AGORA_TOKEN")
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.WriteString("## client config, server waits up to " + wait.String() + "\n" + out + "\n")
-		}
-		out, err := p.MCPConfig(url, 4*time.Minute, "AGORA_TOKEN")
-		if err != nil {
-			t.Fatal(err)
-		}
-		b.WriteString("## client config with a token, server waits up to 4m0s\n" + out + "\n")
-		hook, err := p.StopHook("agora hook stop")
-		if err != nil {
-			t.Fatal(err)
-		}
-		b.WriteString("## stop hook\n" + hook)
-		golden(t, name, b.String())
-	}
-}
-
-func TestTimeoutsOnlyWhenNeeded(t *testing.T) {
-	p, err := Get("codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	short, _ := p.MCPConfig("u", 50*time.Second, "")
-	long, _ := p.MCPConfig("u", 4*time.Minute, "")
-	if strings.Contains(short, "tool_timeout_sec") || !strings.Contains(long, "tool_timeout_sec = 250") {
-		t.Fatalf("short:\n%s\nlong:\n%s", short, long)
-	}
-}
-
-func TestLoadRejectsBadProfiles(t *testing.T) {
-	_, err := load(fstest.MapFS{"text/x.md": {Data: []byte("## description\nx\n")}})
-	if err == nil || !strings.Contains(err.Error(), "missing skills_dir") {
-		t.Fatalf("err = %v", err)
+			b.WriteString("## client config with a token, server waits up to 4m0s\n" + out.Instructions() + "\n")
+			if p.HookContract != "" {
+				hook, err := p.HookOperation("agora hook stop")
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.WriteString("## stop hook\n" + hook.Instructions())
+			}
+			golden(t, name, b.String())
+		})
 	}
 }
 
 func golden(t *testing.T, name, got string) {
 	t.Helper()
+	got = strings.TrimRight(got, "\n") + "\n"
 	path := filepath.Join("testdata", name+".golden")
 	if *update {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
@@ -80,71 +61,136 @@ func golden(t *testing.T, name, got string) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%v (run go test ./internal/profiles -update)", err)
+		t.Fatal(err)
 	}
 	if got != string(want) {
-		t.Errorf("%s differs from %s (run go test ./internal/profiles -update and review the diff):\n%s", name, path, got)
+		t.Errorf("%s differs; run go test ./internal/profiles -update and review the diff\n%s", path, got)
 	}
 }
 
-// TestQuoting checks that a URL or command with quotes survives into each
-// printed setup unchanged: as one shell word, and as JSON or TOML strings.
+func TestTimeoutsOnlyWhenNeeded(t *testing.T) {
+	p, _ := Get("codex")
+	short, _ := p.MCPOperation("u", 50*time.Second, "")
+	long, _ := p.MCPOperation("u", 4*time.Minute, "")
+	if strings.Contains(short.Value, "tool_timeout_sec") || !strings.Contains(long.Value, "tool_timeout_sec = 250") {
+		t.Fatalf("short:\n%s\nlong:\n%s", short.Value, long.Value)
+	}
+}
+
+func TestLoadRejectsBadProfiles(t *testing.T) {
+	raw, err := files.ReadFile("text/claude.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, source := range map[string]string{
+		"missing":              "## description\nx\n",
+		"op":                   strings.Replace(string(raw), `"op":"command"`, `"op":"guess"`, 1),
+		"contract":             strings.Replace(string(raw), "## hook_contract\nclaude", "## hook_contract\ngeneric", 1),
+		"field":                strings.Replace(string(raw), `"file":`, `"typo":`, 1),
+		"section":              string(raw) + "\n## typo\nx\n",
+		"missing hook":         strings.Replace(string(raw), "## hook_contract\nclaude", "", 1),
+		"missing override env": strings.Replace(string(raw), "## home_env\nCLAUDE_CONFIG_DIR", "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := load(fstest.MapFS{"text/x.md": {Data: []byte(source)}}); err == nil {
+				t.Fatal("accepted invalid profile")
+			}
+		})
+	}
+}
+
 func TestQuoting(t *testing.T) {
-	const url = `http://h/m?x=';printf pwned;'"q\`
+	const url = `http://h/mcp?namespace=x&x=';printf%20pwned;'"q\`
 	const command = `agora hook stop --url "http://h/"`
 	for _, name := range Names() {
-		p, err := Get(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out, err := p.MCPConfig(url, 4*time.Minute, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var urls []string
-		for line := range strings.Lines(out) {
-			line = strings.TrimSpace(line)
-			switch {
-			case strings.HasPrefix(line, "claude mcp add "):
-				args := strings.TrimPrefix(line, "claude mcp add --transport http --scope user agora ")
-				got, err := exec.CommandContext(t.Context(), "sh", "-c", "printf '%s' "+args).Output()
-				if err != nil {
+		t.Run(name, func(t *testing.T) {
+			p, _ := Get(name)
+			op, err := p.MCPOperation(url, 4*time.Minute, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			if op.Op == "toml-table" {
+				for line := range strings.Lines(op.Value) {
+					if value, ok := strings.CutPrefix(strings.TrimSpace(line), "url = "); ok {
+						if err := json.Unmarshal([]byte(value), &got); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			} else {
+				var object map[string]any
+				if err := json.Unmarshal([]byte(op.Value), &object); err != nil {
 					t.Fatal(err)
 				}
-				urls = append(urls, string(got))
-			case strings.HasPrefix(line, `"url": `), strings.HasPrefix(line, "url = "):
-				raw := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(line, `"url": `), "url = "), ",")
-				var s string
-				if err := json.Unmarshal([]byte(raw), &s); err != nil {
-					t.Fatalf("%s: %q: %v", name, line, err)
+				got, _ = object["url"].(string)
+				if op.Op == "command" && op.Run[len(op.Run)-1] != strings.TrimSpace(op.Value) {
+					t.Fatal("argv changed JSON")
 				}
-				urls = append(urls, s)
 			}
-		}
-		if len(urls) == 0 {
-			t.Fatalf("%s: no URL found in:\n%s", name, out)
-		}
-		for _, u := range urls {
-			if u != url {
-				t.Errorf("%s: url = %q, want %q", name, u, url)
+			if got != url {
+				t.Fatalf("url = %q", got)
 			}
-		}
+			if p.HookContract == "" {
+				return
+			}
+			hook, err := p.HookOperation(command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := command
+			if p.HookContract == "antigravity" {
+				want += " --client antigravity"
+			}
+			value, err := jsonValue([]byte(hook.Value))
+			if err != nil || !hasCommand(value, want) {
+				t.Fatalf("hook = %s, %v", hook.Value, err)
+			}
+		})
+	}
+}
 
-		hook, err := p.StopHook(command)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var cfg struct {
-			Hooks struct {
-				Stop []struct{ Hooks []struct{ Command string } }
+func TestResolve(t *testing.T) {
+	for _, name := range Names() {
+		t.Run(name, func(t *testing.T) {
+			p, _ := Get(name)
+			env := map[string]string{"HOME": t.TempDir()}
+			getenv := func(key string) string { return env[key] }
+			op, _ := p.MCPOperation("http://h/mcp?namespace=default", time.Minute, "")
+			normal, err := p.ResolveOperation(op, getenv)
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
-		_, js, ok := strings.Cut(hook, "{")
-		if !ok {
-			t.Fatalf("%s: no JSON in hook:\n%s", name, hook)
-		}
-		if err := json.Unmarshal([]byte("{"+js), &cfg); err != nil || cfg.Hooks.Stop[0].Hooks[0].Command != command {
-			t.Errorf("%s: hook = %+v, %v\n%s", name, cfg, err, hook)
-		}
+			if !strings.HasPrefix(normal.File, env["HOME"]+"/") {
+				t.Fatal(normal.File)
+			}
+			if p.HomeEnv == "" {
+				return
+			}
+			override := t.TempDir()
+			env[p.HomeEnv] = override
+			got, err := p.ResolveOperation(op, getenv)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasPrefix(got.File, override+"/") {
+				t.Fatal(got.File)
+			}
+			skills, err := p.Resolve(p.SkillsDir, getenv)
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := override
+			if name == "codex" || name == "pi" {
+				root = env["HOME"]
+			}
+			if !strings.HasPrefix(skills, root+"/") {
+				t.Fatal(skills)
+			}
+			env[p.HomeEnv] = "relative"
+			if _, err := p.ResolveOperation(op, getenv); err == nil {
+				t.Fatal("accepted relative override")
+			}
+		})
 	}
 }

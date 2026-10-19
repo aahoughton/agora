@@ -25,7 +25,7 @@ internal/auth/      request -> principal (bearer tokens, session cookies), the p
 internal/ratelimit/ token buckets per key, bounded
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
-internal/profiles/  agent client profiles (claude, codex) for agora client, as Markdown files
+internal/profiles/  client profiles, config editing and install preflight for agora client
 internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/textfile/  the "## key" section format of the text files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
@@ -35,7 +35,7 @@ internal/tone/      name -> participant color, shared by the viewer and TUI
 internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
 themes/default/     the built-in viewer theme (templates, static files, tui/)
-skills/             agent skills (agora, convene), embedded and installed by agora client skills
+skills/             agent skills (agora, convene), embedded for client install and client skills
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method
@@ -70,6 +70,17 @@ to start if `tools.md` and the registered tools disagree.
 `internal/mcpserver/testdata/agent-text.golden` snapshots everything an agent
 sees; after a wording change, run `go test ./internal/mcpserver -update` and
 review the diff to that file alongside the change.
+
+Client profiles in `internal/profiles/text/` define config roots, skills
+paths and install recipes. Each install section starts with one JSON metadata
+line followed by a Go value template. `~/` resolves under HOME; `@/` under
+the profile config root, honoring `home_env`. `file_when_home_env` covers an
+explicit alternate path. Keep client-specific setup in this data; Go owns
+`json-set`, `json-append`, `json-ensure-strings`, `toml-table` and `command`.
+Hook contracts are explicit adapters. Templates receive the token's env
+variable name, never its value. After profile or rendering changes, run
+`go test ./internal/profiles -update` and review `testdata/*.golden`.
+Installer tests use temporary homes; never use real client configs.
 
 To see how a real agent responds to the wording, run
 `scripts/live-pair.sh codex|claude [output-dir]`. A scripted host asks a

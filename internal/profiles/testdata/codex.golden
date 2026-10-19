@@ -2,46 +2,29 @@
 # skills: ~/.agents/skills
 
 ## client config, server waits up to 50s
-# Codex: add this to ~/.codex/config.toml.
+# add to @/config.toml at mcp_servers.agora:
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
-# Without this, codex exec refuses tool calls that need approval (close,
-# for one) instead of asking.
 default_tools_approval_mode = "approve"
 
 ## client config, server waits up to 4m0s
-# Codex: add this to ~/.codex/config.toml.
+# add to @/config.toml at mcp_servers.agora:
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
-# Without this, codex exec refuses tool calls that need approval (close,
-# for one) instead of asking.
 default_tools_approval_mode = "approve"
-# The server's waits outlast Codex's default 60s tool timeout.
 tool_timeout_sec = 250
 
 ## client config with a token, server waits up to 4m0s
-# Codex: add this to ~/.codex/config.toml.
+# add to @/config.toml at mcp_servers.agora:
 [mcp_servers.agora]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
-# Codex sends the token in AGORA_TOKEN as a bearer token; set it in the
-# environment Codex runs in.
 bearer_token_env_var = "AGORA_TOKEN"
-# Without this, codex exec refuses tool calls that need approval (close,
-# for one) instead of asking.
 default_tools_approval_mode = "approve"
-# The server's waits outlast Codex's default 60s tool timeout.
 tool_timeout_sec = 250
+# Set AGORA_TOKEN in the environment Codex runs in for bearer-token authentication.
 
 ## stop hook
-# Codex Stop hook: merge into ~/.codex/hooks.json, then trust it with
-# /hooks in the Codex CLI (Codex skips hooks it has not been told to trust).
-# It keeps a session from ending while it is expected in an agora
-# conversation, and does nothing unless AGORA_AGENT is set in the session's
-# environment (and AGORA_TOKEN for a server with tokens).
-{
-  "hooks": {
-    "Stop": [
-      { "hooks": [ { "type": "command", "command": "agora hook stop" } ] }
-    ]
-  }
-}
+# add to @/hooks.json at hooks.Stop:
+{"hooks": [{"type": "command", "command": "agora hook stop"}]}
+# Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.
+# Trust this hook with /hooks in the Codex CLI.
