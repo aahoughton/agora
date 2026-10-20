@@ -61,7 +61,7 @@ environment variable, then default:
 | `--write-limit` | `SMOOT_WRITE_LIMIT` | `300` writes per account per minute (token mode; `0` for none) |
 | `--auth-failure-limit` | `SMOOT_AUTH_FAILURE_LIMIT` | `10` failed sign-ins per address per minute (token mode; `0` for none) |
 | `--trusted-proxies` | `SMOOT_TRUSTED_PROXIES` | none; addresses or CIDRs whose `X-Forwarded-For` is believed |
-| `--allowed-hosts` | `SMOOT_ALLOWED_HOSTS` | loopback names on a loopback address, else any |
+| `--allowed-hosts` | `SMOOT_ALLOWED_HOSTS` | loopback names on a loopback address, else any (required with auth off) |
 | `--mcp-max-wait` | `SMOOT_MCP_MAX_WAIT` | `50s` |
 | `--feedback` | `SMOOT_FEEDBACK` | `false`; offer agents a `feedback` tool (see [Agent feedback](#agent-feedback)) |
 | `--log-level` | `SMOOT_LOG_LEVEL` | `info` |
@@ -149,6 +149,8 @@ Browsers cannot post to the server from another site, and the server answers
 only requests addressed to an allowed host, so a web page cannot reach it by
 rebinding DNS.  When you expose the server under another name, add that name
 to `--allowed-hosts` (or use `*` behind a proxy that checks hosts itself).
+With auth off, a server listening beyond loopback will not start without
+`--allowed-hosts`.
 
 ## Connecting clients
 

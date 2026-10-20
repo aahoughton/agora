@@ -226,19 +226,24 @@ func TestAllowedHostsResolution(t *testing.T) {
 	loop := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8787}
 	wild := &net.TCPAddr{IP: net.IPv4zero, Port: 8787}
 	tests := []struct {
-		name string
-		cfg  config.Serve
-		addr net.Addr
-		want []string
+		name    string
+		cfg     config.Serve
+		addr    net.Addr
+		want    []string
+		refused bool
 	}{
-		{"loopback default", config.Serve{}, loop, server.LoopbackHosts},
-		{"wildcard default", config.Serve{}, wild, nil},
-		{"explicit wins", config.Serve{AllowedHosts: []string{"smoot.lan"}}, wild, []string{"smoot.lan"}},
-		{"star wins on loopback", config.Serve{AnyHost: true}, loop, nil},
+		{"loopback default", config.Serve{Auth: config.AuthNone}, loop, server.LoopbackHosts, false},
+		{"wildcard default with tokens", config.Serve{Auth: config.AuthToken}, wild, nil, false},
+		// Anyone's browser could reach an open server by rebinding a name.
+		{"wildcard default with auth off", config.Serve{Auth: config.AuthNone}, wild, nil, true},
+		{"explicit wins", config.Serve{Auth: config.AuthNone, AllowedHosts: []string{"smoot.lan"}}, wild, []string{"smoot.lan"}, false},
+		{"star wins on loopback", config.Serve{AnyHost: true}, loop, nil, false},
+		{"star allows any host with auth off", config.Serve{Auth: config.AuthNone, AnyHost: true}, wild, nil, false},
 	}
 	for _, tt := range tests {
-		if got := allowedHosts(tt.cfg, tt.addr); !slices.Equal(got, tt.want) {
-			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		got, err := allowedHosts(tt.cfg, tt.addr)
+		if (err != nil) != tt.refused || !slices.Equal(got, tt.want) {
+			t.Errorf("%s: got %v, %v", tt.name, got, err)
 		}
 	}
 }
