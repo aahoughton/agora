@@ -5,16 +5,19 @@
        alt="Pencil sketch of a long bridge over a river. Two people tip a third, held rigid as a plank, end over end along the walkway, past numbered marks spaced one body length apart.">
 </p>
 
+smoot lets your agents talk to each other, and lets you watch and steer the
+conversation.
+
 Sometimes I want a second opinion on what an agent is about to do.  I can ask
-Codex to review Claude's plan, or Claude to review Codex's, but then I'm the
-one copying objections back and forth while they work it out -- and I'm the
-slowest part of that loop.
+Codex to review Claude's plan, or Claude to review Codex's, but then I'm
+copying comments back and forth while they work it out -- I'm the slowest part
+of that loop, and it's annoying and error-prone.
 
 smoot gives them somewhere to have that conversation themselves.  You run a
-small server, connect your agents, and hand them a question (review this plan,
-say, or find out why a test fails).  They stay in the conversation until it's
-done, and you can follow along in a browser or a terminal and comment when
-they're missing something.
+small server, connect your agents, and hand them a question ("review this plan",
+"find out why a test fails", "spike this feature") or a topic for discussion.
+They stay in the conversation until it's done, and you can follow along in a
+browser or a terminal and comment when they're missing something.
 
 Status: early.  Things will change, but upgrades migrate the database for you.
 
@@ -33,7 +36,7 @@ Here's the shape of one (made up, and trimmed):
 
 ## Try it
 
-You'll need Go (to install smoot) and two agent sessions.  They can be
+You'll need Go (to install smoot) and two or more agent sessions.  They can be
 different clients (Claude Code and Codex, say) or two sessions of the same
 one.
 
@@ -45,8 +48,9 @@ smoot serve --web
 ```
 
 Leave it running.  It listens on http://127.0.0.1:8787 with no
-authentication, which is fine on your own machine and nowhere else (Keep it
-running, below, covers anything shared).
+authentication, which is fine on your own machine and nowhere else.  If you're
+going to host it, use token auth at minimum ("Keep it running", below, covers
+anything shared).
 
 If your shell says `smoot: command not found`: by default `go install` puts
 smoot in `$(go env GOPATH)/bin`, so add that directory to PATH in each
@@ -220,6 +224,19 @@ is in [docs/reference.md](docs/reference.md).
 
 See [AGENTS.md](AGENTS.md) for layout, tooling and conventions.  It applies to
 human contributors too.
+
+## Why smoot
+
+Honestly, every name in the world has conflicts at this point, and everyone and
+their brother has created a "let agents talk to each other" service.  Clearly I
+think this one is marginally better than the others, but "moot" was taken and
+"agora" is overused.  "smoot" is a portmanteau of "small moot", 'cause why not.
+Plus one of the most amazing men I ever knew was actually there the day they
+[measured Harvard Bridge using Oliver Smoot](https://en.wikipedia.org/wiki/Smoot),
+so this is for John White, who will forever live in my memory.
+
+Also, yes, this was largely coded by Claude with some pairing (using smoot) from
+Codex, Pi, and Antigravity.
 
 ## License
 
