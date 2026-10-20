@@ -22,7 +22,10 @@ const (
 	DefaultStaleAfter   = 10 * time.Minute
 	DefaultMaxWaiters   = 64
 	DefaultMaxWatchers  = 256
-	DefaultRecheckEvery = time.Minute
+	// DefaultMaxPerAccount caps one account's waits, and separately its
+	// followers, in one conversation.
+	DefaultMaxPerAccount = 16
+	DefaultRecheckEvery  = time.Minute
 )
 
 // Options configure a Service. Zero values select the defaults.
@@ -40,6 +43,10 @@ type Options struct {
 	MaxWaiters int
 	// MaxWatchers caps concurrent Follow calls (viewers) per conversation.
 	MaxWatchers int
+	// MaxPerAccount caps one account's concurrent waits in a conversation,
+	// and separately its Follow calls, so one account cannot take every
+	// slot. The anonymous principal (auth mode none) is not capped.
+	MaxPerAccount int
 	// Wording supplies the advice in standing lines.
 	Wording *wording.Wording
 	// WriteLimit caps the writes (start, join, say, observe, conclude,
@@ -98,11 +105,14 @@ func New(db *sql.DB, opts Options) *Service {
 	if opts.MaxWatchers == 0 {
 		opts.MaxWatchers = DefaultMaxWatchers
 	}
+	if opts.MaxPerAccount == 0 {
+		opts.MaxPerAccount = DefaultMaxPerAccount
+	}
 	if opts.RecheckEvery == 0 {
 		opts.RecheckEvery = DefaultRecheckEvery
 	}
 	s := &Service{db: db, opts: opts, writer: make(chan struct{}, 1), hub: hub{
-		subs: map[int64]chan struct{}{}, waiters: map[int64]int{}, watchers: map[int64]int{},
+		subs: map[int64]chan struct{}{}, waiters: newTally(), watchers: newTally(),
 	}}
 	if r, ok := opts.Policy.(*Roles); ok {
 		r.svc = s
@@ -245,46 +255,84 @@ func (s *Service) runWrite(ctx context.Context, p Principal, check func(querier)
 type hub struct {
 	mu       sync.Mutex
 	subs     map[int64]chan struct{}
-	waiters  map[int64]int
-	watchers map[int64]int
+	waiters  tally
+	watchers tally
 }
 
-// enter registers a waiter, refusing when max are already waiting.
-func (h *hub) enter(convID int64, maxWaiters int) bool {
-	return h.join(h.waiters, convID, maxWaiters)
+// tally counts places taken per conversation, and per account within one.
+type tally struct {
+	all       map[int64]int
+	byAccount map[accountSlot]int
+}
+
+type accountSlot struct{ conv, account int64 }
+
+func newTally() tally {
+	return tally{all: map[int64]int{}, byAccount: map[accountSlot]int{}}
+}
+
+// slots are the limits on a tally: per conversation, and per account in
+// one conversation.
+type slots struct{ max, perAccount int }
+
+// refusal says which limit refused a place: "" when none did.
+type refusal string
+
+const (
+	fullConversation refusal = "conversation"
+	fullAccount      refusal = "account"
+)
+
+// enter registers a waiter.
+func (h *hub) enter(convID int64, p Principal, s slots) refusal {
+	return h.join(&h.waiters, convID, p, s)
 }
 
 // leave unregisters a waiter.
-func (h *hub) leave(convID int64) { h.part(h.waiters, convID) }
+func (h *hub) leave(convID int64, p Principal) { h.part(&h.waiters, convID, p) }
 
-// watch registers a follower, refusing when max are already following.
-func (h *hub) watch(convID int64, maxWatchers int) bool {
-	return h.join(h.watchers, convID, maxWatchers)
+// watch registers a follower.
+func (h *hub) watch(convID int64, p Principal, s slots) refusal {
+	return h.join(&h.watchers, convID, p, s)
 }
 
 // unwatch unregisters a follower.
-func (h *hub) unwatch(convID int64) { h.part(h.watchers, convID) }
+func (h *hub) unwatch(convID int64, p Principal) { h.part(&h.watchers, convID, p) }
 
-func (h *hub) join(counts map[int64]int, convID int64, limit int) bool {
+// join takes a place unless the conversation or p's account in it is full.
+// The anonymous principal is counted only per conversation.
+func (h *hub) join(t *tally, convID int64, p Principal, s slots) refusal {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if counts[convID] >= limit {
-		return false
+	if t.all[convID] >= s.max {
+		return fullConversation
 	}
-	counts[convID]++
-	return true
+	key := accountSlot{convID, p.AccountID}
+	if !p.IsAnonymous() {
+		if t.byAccount[key] >= s.perAccount {
+			return fullAccount
+		}
+		t.byAccount[key]++
+	}
+	t.all[convID]++
+	return ""
 }
 
-// part decrements a count and drops the conversation's channel once nobody
+// part gives a place back and drops the conversation's channel once nobody
 // is waiting or following.
-func (h *hub) part(counts map[int64]int, convID int64) {
+func (h *hub) part(t *tally, convID int64, p Principal) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	counts[convID]--
-	if counts[convID] <= 0 {
-		delete(counts, convID)
+	if !p.IsAnonymous() {
+		key := accountSlot{convID, p.AccountID}
+		if t.byAccount[key]--; t.byAccount[key] <= 0 {
+			delete(t.byAccount, key)
+		}
 	}
-	if h.waiters[convID] == 0 && h.watchers[convID] == 0 {
+	if t.all[convID]--; t.all[convID] <= 0 {
+		delete(t.all, convID)
+	}
+	if h.waiters.all[convID] == 0 && h.watchers.all[convID] == 0 {
 		delete(h.subs, convID)
 	}
 }

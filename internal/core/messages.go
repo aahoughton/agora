@@ -486,8 +486,8 @@ func (s *Service) OpenViewer(ctx context.Context, p Principal, ns, name string) 
 	if err != nil {
 		return nil, err
 	}
-	if !s.hub.watch(c.id, s.opts.MaxWatchers) {
-		return nil, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+	if err := s.watch(c, p); err != nil {
+		return nil, err
 	}
 	return &Viewer{s: s, p: p, ns: ns, name: name, convID: c.id}, nil
 }
@@ -498,7 +498,18 @@ func (v *Viewer) Follow(ctx context.Context, after int64, timeout time.Duration)
 }
 
 // Close releases the viewer's slot.
-func (v *Viewer) Close() { v.once.Do(func() { v.s.hub.unwatch(v.convID) }) }
+func (v *Viewer) Close() { v.once.Do(func() { v.s.hub.unwatch(v.convID, v.p) }) }
+
+// watch takes a viewer slot on c for p.
+func (s *Service) watch(c *conv, p Principal) error {
+	switch s.hub.watch(c.id, p, slots{s.opts.MaxWatchers, s.opts.MaxPerAccount}) {
+	case fullConversation:
+		return errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", c.Name, s.opts.MaxWatchers)
+	case fullAccount:
+		return errorf(CodeTooManyWatchers, "your account already has %d viewers on conversation %q; retry later", s.opts.MaxPerAccount, c.Name)
+	}
+	return nil
+}
 
 func (s *Service) follow(ctx context.Context, p Principal, ns, name string, after int64, timeout time.Duration, takeSlot bool) (ReadResult, error) {
 	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
@@ -512,10 +523,10 @@ func (s *Service) follow(ctx context.Context, p Principal, ns, name string, afte
 		return ReadResult{}, err
 	}
 	if takeSlot {
-		if !s.hub.watch(c.id, s.opts.MaxWatchers) {
-			return ReadResult{}, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+		if err := s.watch(c, p); err != nil {
+			return ReadResult{}, err
 		}
-		defer s.hub.unwatch(c.id)
+		defer s.hub.unwatch(c.id, p)
 	}
 
 	deadline := time.NewTimer(timeout)

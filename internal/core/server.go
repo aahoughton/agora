@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"maps"
 	"time"
 )
 
@@ -116,13 +117,5 @@ func (s *Service) ServerActivity(ctx context.Context, p Principal, since time.Ti
 func (h *hub) counts() (waiters, watchers map[int64]int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	waiters = make(map[int64]int, len(h.waiters))
-	for id, n := range h.waiters {
-		waiters[id] = n
-	}
-	watchers = make(map[int64]int, len(h.watchers))
-	for id, n := range h.watchers {
-		watchers[id] = n
-	}
-	return waiters, watchers
+	return maps.Clone(h.waiters.all), maps.Clone(h.watchers.all)
 }

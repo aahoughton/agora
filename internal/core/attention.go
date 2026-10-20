@@ -224,7 +224,7 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	entered := false
 	defer func() {
 		if entered {
-			s.hub.leave(c.id)
+			s.hub.leave(c.id, p)
 		}
 	}()
 	err := s.visit(ctx, p, ns, name, wp.Agent, check, func(tx *wtx, cv *conv) error {
@@ -242,8 +242,11 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 		}
 		// Take the slot before recording the wait, so a refused wait
 		// changes nothing.
-		if !s.hub.enter(c.id, s.opts.MaxWaiters) {
+		switch s.hub.enter(c.id, p, slots{s.opts.MaxWaiters, s.opts.MaxPerAccount}) {
+		case fullConversation:
 			return errorf(CodeTooManyWaiters, "conversation %q already has %d waiters; retry later", name, s.opts.MaxWaiters)
+		case fullAccount:
+			return errorf(CodeTooManyWaiters, "your account already has %d waits in conversation %q; retry later", s.opts.MaxPerAccount, name)
 		}
 		entered = true
 		return s.touch(ctx, tx, c, wp.Agent, PresenceWaiting)

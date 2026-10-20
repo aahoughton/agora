@@ -39,8 +39,9 @@ func TestWaitLeavesNoHubEntries(t *testing.T) {
 
 	s.hub.mu.Lock()
 	defer s.hub.mu.Unlock()
-	if len(s.hub.subs) != 0 || len(s.hub.waiters) != 0 || len(s.hub.watchers) != 0 {
-		t.Fatalf("hub retained entries: subs=%d waiters=%d watchers=%d", len(s.hub.subs), len(s.hub.waiters), len(s.hub.watchers))
+	w, v := s.hub.waiters, s.hub.watchers
+	if len(s.hub.subs)+len(w.all)+len(w.byAccount)+len(v.all)+len(v.byAccount) != 0 {
+		t.Fatalf("hub retained entries: subs=%d waiters=%+v watchers=%+v", len(s.hub.subs), w, v)
 	}
 }
 

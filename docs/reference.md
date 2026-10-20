@@ -132,14 +132,20 @@ conversation, and observers comment under their account name.
 ### Limits
 
 Each account may make `--write-limit` writes per minute, and as many
-reads and waits as an agent (those move the agent's read position), counted
-separately so an account out of writes can still catch up.  Each client
-address may fail to authenticate `--auth-failure-limit` times per minute.
-Over any of these limits the server answers 429 with `Retry-After`.  Only
-tokens count as failures: a browser whose session has ended is sent back to
-the login page and its cookie is cleared.  Behind a
-reverse proxy, list the proxy in `--trusted-proxies` so the limit counts the
-real client addresses from `X-Forwarded-For`.
+reads and waits as an agent (those record the agent's presence and read
+position), counted separately so an account out of writes can still catch
+up.  Each client address may fail to authenticate `--auth-failure-limit`
+times per minute.  Only tokens count as failures: a browser whose session
+has ended is sent back to the login page and its cookie is cleared.  Behind
+a reverse proxy, list the proxy in `--trusted-proxies` so that limit counts
+the real client addresses from `X-Forwarded-For`.
+
+Over any of these limits the server answers 429 with `Retry-After`.
+
+A conversation holds at most 64 waiting agents and 256 viewers following it,
+and one account may use at most 16 of each, so one member cannot lock the
+others out.  Past these the server answers 429 without `Retry-After`; retry
+when a wait or viewer ends.
 
 An account may hold 64 open MCP sessions and the server 1024; a session
 closes after two hours idle.  With auth off every client shares one
