@@ -207,14 +207,12 @@ absolute path.
 // installTokenFile returns the absolute path of the token file a client
 // should read, refusing one that a client would refuse.
 func installTokenFile(flagFile string, getenv config.Getenv) (string, error) {
-	path, err := config.TokenFile(flagFile, getenv)
-	if err != nil {
-		return "", err
-	}
+	path := config.TokenFile(flagFile, getenv)
 	if path == "" {
 		return "", errors.New("no default token file without HOME: pass --token-file")
 	}
-	if path, err = filepath.Abs(path); err != nil {
+	path, err := filepath.Abs(path)
+	if err != nil {
 		return "", err
 	}
 	if _, err := config.ReadTokenFile(path); err != nil {

@@ -108,9 +108,9 @@ func ResolveToken(flagToken, flagFile string, getenv Getenv) (string, error) {
 	if f := getenv(EnvTokenFile); f != "" {
 		return ReadTokenFile(f)
 	}
-	path, err := DefaultTokenFile(getenv)
-	if err != nil || path == "" {
-		return "", err
+	path := DefaultTokenFile(getenv)
+	if path == "" {
+		return "", nil
 	}
 	tok, err := ReadTokenFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -122,25 +122,21 @@ func ResolveToken(flagToken, flagFile string, getenv Getenv) (string, error) {
 // TokenFile returns the token file a client would read without --token or
 // SMOOT_TOKEN: flagFile, else EnvTokenFile, else the default. It is empty
 // when there is no default because HOME is unset.
-func TokenFile(flagFile string, getenv Getenv) (string, error) {
-	if f := firstNonEmpty(flagFile, getenv(EnvTokenFile)); f != "" {
-		return f, nil
-	}
-	return DefaultTokenFile(getenv)
+func TokenFile(flagFile string, getenv Getenv) string {
+	return firstNonEmpty(flagFile, getenv(EnvTokenFile), DefaultTokenFile(getenv))
 }
 
 // DefaultTokenFile returns $XDG_CONFIG_HOME/smoot/token, falling back to
 // $HOME/.config/smoot/token, or "" when neither is set. A relative
-// XDG_CONFIG_HOME is ignored, as the XDG spec says; the default is optional,
-// so it never fails a command that needs no token.
-func DefaultTokenFile(getenv Getenv) (string, error) {
+// XDG_CONFIG_HOME is ignored, as the XDG spec says.
+func DefaultTokenFile(getenv Getenv) string {
 	if dir := getenv("XDG_CONFIG_HOME"); filepath.IsAbs(dir) {
-		return filepath.Join(dir, "smoot", "token"), nil
+		return filepath.Join(dir, "smoot", "token")
 	}
 	if home := getenv("HOME"); home != "" {
-		return filepath.Join(home, ".config", "smoot", "token"), nil
+		return filepath.Join(home, ".config", "smoot", "token")
 	}
-	return "", nil
+	return ""
 }
 
 // ReadTokenFile reads a token from path, refusing a file that group or
