@@ -210,51 +210,50 @@ type WaitParams struct {
 // concludes, or Timeout passes, then returns a Digest. A timeout is a normal
 // result with TimedOut set. While blocked the agent's presence is `waiting`.
 func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp WaitParams) (Digest, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Digest{}, err
-	}
-	if err := checkName("agent", wp.Agent); err != nil {
-		return Digest{}, err
-	}
-	if wp.Timeout < 0 {
-		return Digest{}, errorf(CodeInvalid, "timeout must not be negative")
-	}
-	if wp.After != nil && *wp.After < 0 {
-		return Digest{}, errorf(CodeInvalid, "after must not be negative")
-	}
-
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Digest{}, err
+	check := func() error {
+		if wp.Timeout < 0 {
+			return errorf(CodeInvalid, "timeout must not be negative")
+		}
+		if wp.After != nil && *wp.After < 0 {
+			return errorf(CodeInvalid, "after must not be negative")
+		}
+		return nil
 	}
 	var c *conv
 	var after int64
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		var err error
-		c, err = s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
+	entered := false
+	defer func() {
+		if entered {
+			s.hub.leave(c.id, p)
 		}
-		if err := s.checkOwner(ctx, tx, c, p, wp.Agent); err != nil {
-			return err
-		}
+	}()
+	err := s.visit(ctx, p, ns, name, wp.Agent, check, func(tx *wtx, cv *conv) error {
+		c = cv
 		pt, err := s.member(ctx, tx, c, wp.Agent)
 		if err != nil {
 			return err
 		}
 		after = pt.ReadSeq
 		if wp.After != nil {
+			if *wp.After > c.LastSeq {
+				return errorf(CodeInvalid, "after %d is past the last message (#%d)", *wp.After, c.LastSeq)
+			}
 			after = *wp.After
 		}
+		// Take the slot before recording the wait, so a refused wait
+		// changes nothing.
+		switch s.hub.enter(c.id, p, slots{s.opts.MaxWaiters, s.opts.MaxPerAccount}) {
+		case fullConversation:
+			return errorf(CodeTooManyWaiters, "conversation %q already has %d waiters; retry later", name, s.opts.MaxWaiters)
+		case fullAccount:
+			return errorf(CodeTooManyWaiters, "your account already has %d waits in conversation %q; retry later", s.opts.MaxPerAccount, name)
+		}
+		entered = true
 		return s.touch(ctx, tx, c, wp.Agent, PresenceWaiting)
 	})
 	if err != nil {
 		return Digest{}, err
 	}
-
-	if !s.hub.enter(c.id, s.opts.MaxWaiters) {
-		return Digest{}, errorf(CodeTooManyWaiters, "conversation %q already has %d waiters; retry later", name, s.opts.MaxWaiters)
-	}
-	defer s.hub.leave(c.id)
 
 	timeout := wp.Timeout
 	if c.End == EndTimebox && c.EndsAt != nil {

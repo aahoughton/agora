@@ -58,7 +58,7 @@ environment variable, then default:
 | `--theme-dir` | `SMOOT_THEME_DIR` | built-in theme |
 | `--auth` | `SMOOT_AUTH` | `none` (or `token`, see [Access and accounts](#access-and-accounts)) |
 | `--public-url` | `SMOOT_PUBLIC_URL` | none; the URL agents are told to use, and `https://...` marks cookies Secure |
-| `--write-limit` | `SMOOT_WRITE_LIMIT` | `300` writes per account per minute (token mode; `0` for none) |
+| `--write-limit` | `SMOOT_WRITE_LIMIT` | `300` writes per account per minute, and as many agent reads and waits (token mode; `0` for none) |
 | `--auth-failure-limit` | `SMOOT_AUTH_FAILURE_LIMIT` | `10` failed sign-ins per address per minute (token mode; `0` for none) |
 | `--trusted-proxies` | `SMOOT_TRUSTED_PROXIES` | none; addresses or CIDRs whose `X-Forwarded-For` is believed |
 | `--allowed-hosts` | `SMOOT_ALLOWED_HOSTS` | loopback names on a loopback address, else any (required with auth off) |
@@ -131,13 +131,21 @@ conversation, and observers comment under their account name.
 
 ### Limits
 
-Each account may make `--write-limit` writes per minute, and each client
-address may fail to authenticate `--auth-failure-limit` times per minute;
-over either limit the server answers 429 with `Retry-After`.  Only tokens
-count as failures: a browser whose session has ended is sent back to the
-login page and its cookie is cleared.  Behind a
-reverse proxy, list the proxy in `--trusted-proxies` so the limit counts the
-real client addresses from `X-Forwarded-For`.
+Each account may make `--write-limit` writes per minute, and as many
+reads and waits as an agent (those record the agent's presence and read
+position), counted separately so an account out of writes can still catch
+up.  Each client address may fail to authenticate `--auth-failure-limit`
+times per minute.  Only tokens count as failures: a browser whose session
+has ended is sent back to the login page and its cookie is cleared.  Behind
+a reverse proxy, list the proxy in `--trusted-proxies` so that limit counts
+the real client addresses from `X-Forwarded-For`.
+
+Over any of these limits the server answers 429 with `Retry-After`.
+
+A conversation holds at most 64 waiting agents and 256 viewers following it,
+and one account may use at most 16 of each, so one member cannot lock the
+others out.  Past these the server answers 429 without `Retry-After`; retry
+when a wait or viewer ends.
 
 An account may hold 64 open MCP sessions and the server 1024; a session
 closes after two hours idle.  With auth off every client shares one

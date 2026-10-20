@@ -54,30 +54,17 @@ func (s *Service) SubmitFeedback(ctx context.Context, p Principal, ns, name stri
 	if !s.opts.Feedback {
 		return FeedbackResult{}, errorf(CodeForbidden, "feedback is off on this server")
 	}
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return FeedbackResult{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return FeedbackResult{}, err
-	}
-	if err := checkName("agent", fp.Agent); err != nil {
-		return FeedbackResult{}, err
-	}
-	if strings.TrimSpace(fp.Body) == "" {
-		return FeedbackResult{}, errorf(CodeInvalid, "body is empty")
-	}
-	if len(fp.Body) > MaxFeedbackBytes {
-		return FeedbackResult{}, errorf(CodeMessageTooLarge, "body is %d bytes; the limit is %d", len(fp.Body), MaxFeedbackBytes)
-	}
 	var res FeedbackResult
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
+	check := func() error {
+		if strings.TrimSpace(fp.Body) == "" {
+			return errorf(CodeInvalid, "body is empty")
 		}
-		if err := s.checkOwner(ctx, tx, c, p, fp.Agent); err != nil {
-			return err
+		if len(fp.Body) > MaxFeedbackBytes {
+			return errorf(CodeMessageTooLarge, "body is %d bytes; the limit is %d", len(fp.Body), MaxFeedbackBytes)
 		}
+		return nil
+	}
+	err := s.act(ctx, p, ns, name, fp.Agent, check, func(tx *wtx, c *conv) error {
 		pt, err := s.participant(ctx, tx, c.id, fp.Agent)
 		if err != nil {
 			return err

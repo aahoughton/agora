@@ -193,6 +193,51 @@ func (s *Service) checkOwner(ctx context.Context, q querier, c *conv, p Principa
 	return nil
 }
 
+// act runs fn for p acting as agent in conversation name. In order, it
+// authorizes p to participate in ns, takes a write from p's allowance,
+// checks the agent's name, runs check (if any) for the caller's own
+// validation, and settles a due timebox; then, in a write transaction, it
+// loads the conversation and checks that p may act as agent there.
+func (s *Service) act(ctx context.Context, p Principal, ns, name, agent string, check func() error, fn func(tx *wtx, c *conv) error) error {
+	return s.actLimited(ctx, p, ns, name, agent, s.limitWrite, check, fn)
+}
+
+// visit is act for an agent's reads and waits, which draw on their own
+// allowance.
+func (s *Service) visit(ctx context.Context, p Principal, ns, name, agent string, check func() error, fn func(tx *wtx, c *conv) error) error {
+	return s.actLimited(ctx, p, ns, name, agent, s.limitVisit, check, fn)
+}
+
+func (s *Service) actLimited(ctx context.Context, p Principal, ns, name, agent string, limit func(Principal) error, check func() error, fn func(tx *wtx, c *conv) error) error {
+	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
+		return err
+	}
+	if err := limit(p); err != nil {
+		return err
+	}
+	if err := checkName("agent", agent); err != nil {
+		return err
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	if err := s.settle(ctx, ns, name); err != nil {
+		return err
+	}
+	return s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
+		c, err := s.loadConvTx(ctx, tx, ns, name)
+		if err != nil {
+			return err
+		}
+		if err := s.checkOwner(ctx, tx, c, p, agent); err != nil {
+			return err
+		}
+		return fn(tx, c)
+	})
+}
+
 // member returns the agent's row if they are active or concluded, and a
 // not_participant error otherwise.
 func (s *Service) member(ctx context.Context, q querier, c *conv, agent string) (*Participant, error) {
@@ -247,27 +292,8 @@ type JoinParams struct {
 // Join adds an agent to a conversation, or returns a left or dropped agent to
 // it.
 func (s *Service) Join(ctx context.Context, p Principal, ns, name string, jp JoinParams) (Standing, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Standing{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return Standing{}, err
-	}
-	if err := checkName("agent", jp.Agent); err != nil {
-		return Standing{}, err
-	}
 	var st Standing
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Standing{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, jp.Agent); err != nil {
-			return err
-		}
+	err := s.act(ctx, p, ns, name, jp.Agent, nil, func(tx *wtx, c *conv) error {
 		if err := openOrError(c); err != nil {
 			return err
 		}
@@ -317,30 +343,9 @@ type LeaveParams struct {
 // away. Leaving a concluded conversation changes nothing and returns the
 // standing; a final message with it is rejected.
 func (s *Service) Leave(ctx context.Context, p Principal, ns, name string, lp LeaveParams) (Standing, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Standing{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return Standing{}, err
-	}
-	if err := checkName("agent", lp.Agent); err != nil {
-		return Standing{}, err
-	}
-	if err := s.checkBody(lp.Body, true); err != nil {
-		return Standing{}, err
-	}
 	var st Standing
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Standing{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, lp.Agent); err != nil {
-			return err
-		}
+	check := func() error { return s.checkBody(lp.Body, true) }
+	err := s.act(ctx, p, ns, name, lp.Agent, check, func(tx *wtx, c *conv) error {
 		pt, err := s.member(ctx, tx, c, lp.Agent)
 		if err != nil {
 			return err
@@ -440,35 +445,19 @@ type PresenceParams struct {
 
 // SetPresence records what an agent is doing and when it will check back.
 func (s *Service) SetPresence(ctx context.Context, p Principal, ns, name string, pp PresenceParams) (Participant, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Participant{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return Participant{}, err
-	}
-	if err := checkName("agent", pp.Agent); err != nil {
-		return Participant{}, err
-	}
-	switch pp.Presence {
-	case PresenceWorking, PresenceWaiting, PresenceAway:
-	default:
-		return Participant{}, errorf(CodeInvalid, "invalid presence %q: want working, waiting or away", pp.Presence)
-	}
-	if len(pp.Note) > maxNoteBytes {
-		return Participant{}, errorf(CodeInvalid, "note is longer than %d bytes", maxNoteBytes)
-	}
 	var out Participant
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Participant{}, err
+	check := func() error {
+		switch pp.Presence {
+		case PresenceWorking, PresenceWaiting, PresenceAway:
+		default:
+			return errorf(CodeInvalid, "invalid presence %q: want working, waiting or away", pp.Presence)
+		}
+		if len(pp.Note) > maxNoteBytes {
+			return errorf(CodeInvalid, "note is longer than %d bytes", maxNoteBytes)
+		}
+		return nil
 	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, pp.Agent); err != nil {
-			return err
-		}
+	err := s.act(ctx, p, ns, name, pp.Agent, check, func(tx *wtx, c *conv) error {
 		if _, err := s.member(ctx, tx, c, pp.Agent); err != nil {
 			return err
 		}
@@ -498,30 +487,9 @@ type ConcludeParams struct {
 // Conclude records the agent's final position and marks them concluded.
 // Posting again later withdraws the conclusion.
 func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp ConcludeParams) (Standing, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Standing{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return Standing{}, err
-	}
-	if err := checkName("agent", cp.Agent); err != nil {
-		return Standing{}, err
-	}
-	if err := s.checkBody(cp.Body, false); err != nil {
-		return Standing{}, err
-	}
 	var st Standing
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Standing{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, cp.Agent); err != nil {
-			return err
-		}
+	check := func() error { return s.checkBody(cp.Body, false) }
+	err := s.act(ctx, p, ns, name, cp.Agent, check, func(tx *wtx, c *conv) error {
 		if err := openOrError(c); err != nil {
 			return err
 		}
@@ -558,30 +526,9 @@ type CloseParams struct {
 
 // Close concludes a conversation. Only its creator may close it.
 func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp CloseParams) (Standing, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Standing{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return Standing{}, err
-	}
-	if err := checkName("agent", cp.Agent); err != nil {
-		return Standing{}, err
-	}
-	if err := s.checkBody(cp.Body, true); err != nil {
-		return Standing{}, err
-	}
 	var st Standing
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Standing{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, cp.Agent); err != nil {
-			return err
-		}
+	check := func() error { return s.checkBody(cp.Body, true) }
+	err := s.act(ctx, p, ns, name, cp.Agent, check, func(tx *wtx, c *conv) error {
 		if err := openOrError(c); err != nil {
 			return err
 		}
@@ -602,6 +549,7 @@ func (s *Service) Close(ctx context.Context, p Principal, ns, name string, cp Cl
 		if err := s.concludeConv(ctx, tx, c, "closed by "+cp.Agent); err != nil {
 			return err
 		}
+		var err error
 		st, err = s.standing(ctx, tx, c, cp.Agent)
 		return err
 	})

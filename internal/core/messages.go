@@ -58,33 +58,17 @@ type Missed struct {
 // Say appends a message from a participant. A concluded participant who says
 // something withdraws their conclusion and becomes active again.
 func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayParams) (SayResult, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return SayResult{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return SayResult{}, err
-	}
-	if err := checkName("agent", sp.Agent); err != nil {
-		return SayResult{}, err
-	}
-	if err := s.checkBody(sp.Body, false); err != nil {
-		return SayResult{}, err
-	}
-	if len(sp.IdempotencyKey) > maxIdempotencyKey {
-		return SayResult{}, errorf(CodeInvalid, "idempotency_key is longer than %d bytes", maxIdempotencyKey)
-	}
 	var out SayResult
-	if err := s.settle(ctx, ns, name); err != nil {
-		return SayResult{}, err
+	check := func() error {
+		if err := s.checkBody(sp.Body, false); err != nil {
+			return err
+		}
+		if len(sp.IdempotencyKey) > maxIdempotencyKey {
+			return errorf(CodeInvalid, "idempotency_key is longer than %d bytes", maxIdempotencyKey)
+		}
+		return nil
 	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, sp.Agent); err != nil {
-			return err
-		}
+	err := s.act(ctx, p, ns, name, sp.Agent, check, func(tx *wtx, c *conv) error {
 		// A retry of a post that went through returns it, before any check
 		// that the first post itself would now fail (expected_last_seq).
 		if sp.IdempotencyKey != "" {
@@ -309,70 +293,62 @@ type ReadResult struct {
 func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp ReadParams) (ReadResult, error) {
 	// Reading as an agent moves its read position, so it takes the right to
 	// participate; reading without one is a plain read.
-	action := ActionRead
 	if rp.Agent != "" {
-		action = ActionParticipate
+		return s.readAs(ctx, p, ns, name, rp)
 	}
-	if err := s.authorize(ctx, p, ns, action); err != nil {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
 		return ReadResult{}, err
 	}
-	if rp.Agent != "" {
-		if err := checkName("agent", rp.Agent); err != nil {
+	if err := rp.check(); err != nil {
+		return ReadResult{}, err
+	}
+	c, err := s.loadConvRead(ctx, ns, name)
+	if err != nil {
+		return ReadResult{}, err
+	}
+	var after int64
+	if rp.After != nil {
+		after = *rp.After
+	}
+	if rp.Tail > 0 {
+		tailAfter, err := s.tailStart(ctx, s.db, c, rp.Tail, "")
+		if err != nil {
 			return ReadResult{}, err
 		}
+		after = max(after, tailAfter)
 	}
+	out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
+	out, _ = capBytes(out, 0, rp.MaxBytes)
+	markMessages(p, out.Messages)
+	return out, err
+}
+
+// check validates rp and fills in its default limit.
+func (rp *ReadParams) check() error {
 	switch {
 	case rp.Limit == 0:
 		rp.Limit = DefaultReadLimit
 	case rp.Limit < 0 || rp.Limit > MaxReadLimit:
-		return ReadResult{}, errorf(CodeInvalid, "limit must be between 1 and %d", MaxReadLimit)
+		return errorf(CodeInvalid, "limit must be between 1 and %d", MaxReadLimit)
 	}
 	if rp.After != nil && *rp.After < 0 {
-		return ReadResult{}, errorf(CodeInvalid, "after must not be negative")
+		return errorf(CodeInvalid, "after must not be negative")
 	}
 	switch {
 	case rp.Tail < 0 || rp.Tail > MaxReadLimit:
-		return ReadResult{}, errorf(CodeInvalid, "tail must be between 1 and %d", MaxReadLimit)
+		return errorf(CodeInvalid, "tail must be between 1 and %d", MaxReadLimit)
 	case rp.Tail > 0 && rp.After != nil:
-		return ReadResult{}, errorf(CodeInvalid, "use tail or after, not both")
+		return errorf(CodeInvalid, "use tail or after, not both")
 	case rp.Tail > 0:
 		rp.Limit = rp.Tail
 	}
+	return nil
+}
 
-	if rp.Agent == "" {
-		c, err := s.loadConvRead(ctx, ns, name)
-		if err != nil {
-			return ReadResult{}, err
-		}
-		var after int64
-		if rp.After != nil {
-			after = *rp.After
-		}
-		if rp.Tail > 0 {
-			tailAfter, err := s.tailStart(ctx, s.db, c, rp.Tail, "")
-			if err != nil {
-				return ReadResult{}, err
-			}
-			after = max(after, tailAfter)
-		}
-		out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
-		out, _ = capBytes(out, 0, rp.MaxBytes)
-		markMessages(p, out.Messages)
-		return out, err
-	}
-
+// readAs is Read as an agent, which moves its read position.
+func (s *Service) readAs(ctx context.Context, p Principal, ns, name string, rp ReadParams) (ReadResult, error) {
 	var out ReadResult
-	if err := s.settle(ctx, ns, name); err != nil {
-		return ReadResult{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, rp.Agent); err != nil {
-			return err
-		}
+	err := s.visit(ctx, p, ns, name, rp.Agent, rp.check, func(tx *wtx, c *conv) error {
 		pt, err := s.member(ctx, tx, c, rp.Agent)
 		if err != nil {
 			return err
@@ -510,8 +486,8 @@ func (s *Service) OpenViewer(ctx context.Context, p Principal, ns, name string) 
 	if err != nil {
 		return nil, err
 	}
-	if !s.hub.watch(c.id, s.opts.MaxWatchers) {
-		return nil, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+	if err := s.watch(c, p); err != nil {
+		return nil, err
 	}
 	return &Viewer{s: s, p: p, ns: ns, name: name, convID: c.id}, nil
 }
@@ -522,7 +498,18 @@ func (v *Viewer) Follow(ctx context.Context, after int64, timeout time.Duration)
 }
 
 // Close releases the viewer's slot.
-func (v *Viewer) Close() { v.once.Do(func() { v.s.hub.unwatch(v.convID) }) }
+func (v *Viewer) Close() { v.once.Do(func() { v.s.hub.unwatch(v.convID, v.p) }) }
+
+// watch takes a viewer slot on c for p.
+func (s *Service) watch(c *conv, p Principal) error {
+	switch s.hub.watch(c.id, p, slots{s.opts.MaxWatchers, s.opts.MaxPerAccount}) {
+	case fullConversation:
+		return errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", c.Name, s.opts.MaxWatchers)
+	case fullAccount:
+		return errorf(CodeTooManyWatchers, "your account already has %d viewers on conversation %q; retry later", s.opts.MaxPerAccount, c.Name)
+	}
+	return nil
+}
 
 func (s *Service) follow(ctx context.Context, p Principal, ns, name string, after int64, timeout time.Duration, takeSlot bool) (ReadResult, error) {
 	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
@@ -536,10 +523,10 @@ func (s *Service) follow(ctx context.Context, p Principal, ns, name string, afte
 		return ReadResult{}, err
 	}
 	if takeSlot {
-		if !s.hub.watch(c.id, s.opts.MaxWatchers) {
-			return ReadResult{}, errorf(CodeTooManyWatchers, "conversation %q already has %d viewers; retry later", name, s.opts.MaxWatchers)
+		if err := s.watch(c, p); err != nil {
+			return ReadResult{}, err
 		}
-		defer s.hub.unwatch(c.id)
+		defer s.hub.unwatch(c.id, p)
 	}
 
 	deadline := time.NewTimer(timeout)

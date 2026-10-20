@@ -789,7 +789,10 @@ paths:
               additionalProperties: false
               properties:
                 agent: { $ref: "#/components/schemas/Name" }
-                after: { type: integer, minimum: 0 }
+                after:
+                  type: integer
+                  minimum: 0
+                  description: At most the conversation's last seq.
                 timeout_seconds: { type: integer, minimum: 0, maximum: 300, default: 30 }
                 inline_bytes:
                   type: integer
@@ -806,6 +809,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Digest" }
+        "400": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
         "503":
