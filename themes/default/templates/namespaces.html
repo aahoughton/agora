@@ -4,7 +4,7 @@
 {{- range .Namespaces}}
   <li><a class="namespace-card" href="/n/{{.Name}}"><span class="avatar {{tone .Name}}" aria-hidden="true">{{initials .Name}}</span><span class="row-main"><span class="row-name">{{.Name}}</span><span class="namespace-meta">
     {{- if .Conversations}}{{.Conversations}} {{if eq .Conversations 1}}conversation{{else}}conversations{{end}}
-    {{- if .Open}} · {{.Open}} open{{end}} · <time datetime="{{ts .LastAt}}" title="{{ts .LastAt}}">{{ago .LastAt}}</time>
+    {{- if .Open}} · {{.Open}} open{{end}} <time datetime="{{ts .LastAt}}" title="{{ts .LastAt}}">{{ago .LastAt}}</time>
     {{- else}}empty{{end}}</span></span></a></li>
 {{- end}}
 </ul>

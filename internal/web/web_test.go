@@ -680,6 +680,36 @@ func TestConversationListPagesAndFilters(t *testing.T) {
 	}
 }
 
+func TestEmptyConversationListSaysWhatIsHidden(t *testing.T) {
+	e := newEnv(t, web.Options{})
+	ctx, p := t.Context(), core.Anonymous()
+	empty := func(path string) string {
+		t.Helper()
+		_, body := e.get(path)
+		m := regexp.MustCompile(`<p class="empty">([^<]*)</p>`).FindStringSubmatch(body)
+		if m == nil {
+			t.Fatalf("%s: no empty message", path)
+		}
+		return m[1]
+	}
+	if got := empty("/n/default"); !strings.HasPrefix(got, "No conversations yet") {
+		t.Errorf("new namespace = %q", got)
+	}
+	if _, err := e.svc.Start(ctx, p, "default", core.StartParams{Name: "done", Agent: "alice", Join: true, End: core.EndAgreement}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Conclude(ctx, p, "default", "done", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := empty("/n/default?open=1"); !strings.HasPrefix(got, "No open conversations") {
+		t.Errorf("all concluded, open only = %q", got)
+	}
+	e.advance(core.DefaultArchiveAfter + time.Hour)
+	if got := empty("/n/default"); !strings.HasPrefix(got, "Everything here is archived") {
+		t.Errorf("all archived = %q", got)
+	}
+}
+
 func TestEarlierMessages(t *testing.T) {
 	e := newEnv(t, web.Options{ShownMessages: 3})
 	ctx, p := t.Context(), core.Anonymous()
