@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/config"
 	"github.com/aahoughton/smoot/internal/core"
 	"github.com/aahoughton/smoot/internal/wording"
 )
@@ -124,13 +125,18 @@ const (
 )
 
 // baseURL is the server URL as the client reached it, for the shell-wait
-// recipe in the instructions.
+// recipe in the instructions, or "" if the Host holds characters that
+// could end the recipe's quotes.
 func baseURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return scheme + "://" + r.Host
+	u := scheme + "://" + r.Host
+	if !config.ShellSafeURL(u) {
+		return ""
+	}
+	return u
 }
 
 type tools struct {

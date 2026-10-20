@@ -68,9 +68,16 @@ const (
 	AuthToken AuthMode = "token"
 )
 
-// urlSafe are the characters a public URL may use: none a shell treats
-// specially, since agents are given it in a command.
+// urlSafe are the characters a public URL may use. Agents are given it in
+// a shell command, single-quoted (brackets, for IPv6 hosts, are glob
+// characters), and none of these ends a quote.
 const urlSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/%[]"
+
+// ShellSafeURL reports whether s uses only urlSafe characters, so it can
+// go single-quoted in a command given to an agent.
+func ShellSafeURL(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return !strings.ContainsRune(urlSafe, r) })
+}
 
 // Serve holds the settings for `smoot serve`.
 type Serve struct {
@@ -213,7 +220,7 @@ HTML viewer. Each flag also reads the environment variable it names.
 		u, err := url.Parse(cfg.PublicURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
 			u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
-			strings.ContainsFunc(cfg.PublicURL, func(r rune) bool { return !strings.ContainsRune(urlSafe, r) }) {
+			!ShellSafeURL(cfg.PublicURL) {
 			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port][/path]", cfg.PublicURL)
 		}
 	}

@@ -388,7 +388,7 @@ func TestInstructionsNameTheServerAndNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cs.Close() })
-	want := "smoot wait <conversation> --agent <name> --namespace team-blue --url " + srv.URL
+	want := "smoot wait <conversation> --agent <name> --namespace team-blue --url '" + srv.URL + "'"
 	if got := cs.InitializeResult().Instructions; !strings.Contains(got, want) {
 		t.Fatalf("instructions lack %q:\n%s", want, got)
 	}
@@ -744,9 +744,9 @@ func TestBodiesCannotForgeWithOtherLineBreaks(t *testing.T) {
 func TestInstructionsUseThePublicURL(t *testing.T) {
 	svc := newService(t)
 	for _, tc := range []struct{ public, want string }{
-		{"https://smoot.example", "--url https://smoot.example"},
-		{"https://smoot.example/", "--url https://smoot.example"},
-		{"", "--url http://127.0.0.1:"},
+		{"https://smoot.example", "--url 'https://smoot.example'"},
+		{"https://smoot.example/", "--url 'https://smoot.example'"},
+		{"", "--url 'http://127.0.0.1:"},
 	} {
 		srv := httptest.NewServer(mcpserver.Handler(svc, auth.None{}, mcpserver.Options{URL: tc.public}))
 		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
@@ -832,5 +832,36 @@ func TestAnonymousSessionsShareOnlyTheServerCap(t *testing.T) {
 	}
 	if err := open(); err == nil {
 		t.Fatal("a session past the server cap was allowed")
+	}
+}
+
+type setHost struct {
+	host string
+	rt   http.RoundTripper
+}
+
+func (s setHost) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Host = s.host
+	return s.rt.RoundTrip(r)
+}
+
+// TestInstructionsLeaveOutAnUnsafeHost: without a public URL the wait
+// recipe names the Host the client sent, which an agent runs in a shell;
+// one with characters a shell treats specially is left out. (The SDK
+// refuses most non-loopback names on a loopback listener; this one passes.)
+func TestInstructionsLeaveOutAnUnsafeHost(t *testing.T) {
+	srv := httptest.NewServer(mcpserver.Handler(newService(t), auth.None{}, mcpserver.Options{}))
+	t.Cleanup(srv.Close)
+	httpc := &http.Client{Transport: setHost{host: "localhost:1;id", rt: http.DefaultTransport}}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
+		&mcp.StreamableClientTransport{Endpoint: srv.URL, HTTPClient: httpc}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	got := cs.InitializeResult().Instructions
+	if strings.Contains(got, ";id") || !strings.HasSuffix(got, "--namespace default") {
+		t.Fatalf("instructions name an unsafe host:\n%s", got)
 	}
 }
