@@ -105,6 +105,19 @@ rotate by issuing a new one, then revoking the old.  If the last server admin
 loses its token, `smoot db recover --db PATH --name NAME` issues a new one;
 like `db bootstrap`, it works on the database file and needs access to it.
 
+Commands that send a token take it from `--token`, then `--token-file`,
+then `SMOOT_TOKEN`, then `SMOOT_TOKEN_FILE`, then the default token file,
+`$XDG_CONFIG_HOME/smoot/token` (or `~/.config/smoot/token`).  A token file
+holds the token on one line and must be readable only by you (`chmod 600`);
+smoot refuses one that isn't.  A file you name has to exist; a missing default
+file just means no token.  The file is the way to go for apps launched from
+the Dock or Finder, which never see your shell's environment.
+
+```sh
+(umask 077; mkdir -p ~/.config/smoot && pbpaste > ~/.config/smoot/token)
+chmod 600 ~/.config/smoot/token   # umask covers a new file; this covers an existing one
+```
+
 In token mode an agent name belongs to the account that first used it in a
 conversation, and observers comment under their account name.
 
@@ -198,6 +211,25 @@ which reads the token from the environment. Keep `smoot` on the client's
 PATH. The installer receives only the variable name for templates, never
 the token value.
 
+Desktop apps launched from the Dock or Finder don't see your shell's
+environment, so `SMOOT_TOKEN` won't reach them.  For those, put the token in
+a [token file](#tokens-and-roles) and use `--with-token-file` instead:
+
+```sh
+smoot client install claude --with-token-file --stop-hook --agent claude-desk
+smoot client install codex --with-token-file --stop-hook --agent codex-desk
+```
+
+The client then launches `smoot mcp` as a stdio bridge with `--token-file`,
+and the Stop hook gets `--token-file` too.  Both name the token file
+(`--token-file`, `SMOOT_TOKEN_FILE` or the default) and the smoot binary by
+absolute path, since those apps get a minimal PATH.  The binary is
+`--smoot-path`, or `smoot` on your PATH.  A path inside mise's installs
+directory changes with every upgrade, so install refuses it; pass the mise
+shim (usually `~/.local/share/mise/shims/smoot`) instead.  Install checks the
+token file the same way the client will and refuses one that isn't there or
+that others can read.  Pi has no stdio entry and rejects `--with-token-file`.
+
 `--approve-tools` opts into pre-approving smoot's tools for Claude or
 Antigravity. It appends missing permission strings and preserves existing
 approvals and their order. Claude uses `mcp__smoot`; Antigravity lists each
@@ -213,8 +245,8 @@ explanation.
 
 Other clients send `Authorization: Bearer <token>` to a server with tokens.
 For clients that only launch stdio servers, `smoot mcp` relays stdio to the
-server (`--url`, `--namespace`, or `SMOOT_URL`, `SMOOT_NAMESPACE`, and
-`SMOOT_TOKEN`):
+server (`--url`, `--namespace`, or `SMOOT_URL`, `SMOOT_NAMESPACE`, and the
+token from `SMOOT_TOKEN` or a [token file](#tokens-and-roles)):
 
 ```sh
 claude mcp add smoot -- smoot mcp --url http://127.0.0.1:8787
@@ -240,8 +272,10 @@ profiles then include the longer timeout; the Pi profile does not set one.
 
 `smoot client install NAME --stop-hook` installs a Stop hook for
 Claude Code, Codex or Antigravity, pointed at the same `--url` and
-`--namespace` as the MCP entry. `client config` prints it instead. While the
-session's agent (`SMOOT_AGENT`) is expected
+`--namespace` as the MCP entry. `client config` prints it instead. Add
+`--agent NAME` to write the agent name into the hook, for a client that
+always uses one name and can't set `SMOOT_AGENT`. While the
+session's agent (`SMOOT_AGENT` or `--agent`) is expected
 in an open conversation, the hook tells the client to continue instead of
 ending the turn, with the agent's status lines as the reason.  It keeps
 holding the session while it makes progress (the agent calls a tool in the
@@ -249,7 +283,7 @@ conversation, such as `wait`, or a message arrives), and lets it stop after
 three blocks in a row with no progress (`smoot hook stop --patience N`
 changes the count).  It keeps that count per client session under
 `$XDG_CACHE_HOME/smoot/stop-hook` (default `~/.cache`).  It does nothing
-without `SMOOT_AGENT` and never blocks when the server cannot be reached or
+without an agent name and never blocks when the server cannot be reached or
 its own flags or settings are wrong (it exits 1 and the client shows the
 error).
 Codex runs a hook only after you trust it with `/hooks`.

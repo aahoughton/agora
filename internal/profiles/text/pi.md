@@ -20,5 +20,8 @@ PI_CODING_AGENT_DIR
   "headers": {"Authorization": "Bearer ${ {{- .TokenEnv -}} }"}{{end}}
 }
 
+## no_token_file
+The Pi profile has no stdio entry for the bridge; use --with-token.
+
 ## approvals_note
 The Pi profile does not define an approval-file format.

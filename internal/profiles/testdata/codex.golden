@@ -23,8 +23,17 @@ default_tools_approval_mode = "approve"
 tool_timeout_sec = 250
 # Set SMOOT_TOKEN in the environment Codex runs in for bearer-token authentication.
 
+## client config with a token file, server waits up to 4m0s
+# add to @/config.toml at mcp_servers.smoot:
+[mcp_servers.smoot]
+command = "/home/u/bin/smoot"
+args = ["mcp", "--url", "http://127.0.0.1:8787", "--namespace", "default", "--token-file", "/home/u/.config/smoot/token"]
+default_tools_approval_mode = "approve"
+tool_timeout_sec = 250
+# Codex launches smoot as a stdio bridge that reads the token from /home/u/.config/smoot/token.
+
 ## stop hook
 # add to @/hooks.json at hooks.Stop:
 {"hooks": [{"type": "command", "command": "smoot hook stop", "statusMessage": "smoot: checking conversations"}]}
-# Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.
+# Keeps a session in its expected smoot conversations. Does nothing without an agent name, from --agent or SMOOT_AGENT in the client's environment. A server with tokens also needs SMOOT_TOKEN there or --token-file.
 # Trust this hook with /hooks in the Codex CLI.

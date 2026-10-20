@@ -48,6 +48,36 @@ func TestJSONAppendIdentity(t *testing.T) {
 	}
 }
 
+func TestHookIdentityMatchesProgramPath(t *testing.T) {
+	for _, tt := range []struct {
+		command     string
+		starts, own bool
+	}{
+		{"smoot hook stop --url u", true, true},
+		{"/opt/bin/smoot hook stop --url u", true, true},
+		{"'/Users/a b/smoot' hook stop --url u", true, true},
+		{`'/x/o'\''neil/bin/smoot' hook stop --url u`, true, true},
+		{"/opt/bin/smooth hook stop", false, false},
+		{"/opt/bin/smoot hook stop; rm -rf x", true, false},
+		{"/opt/bin/echo;/opt/bin/smoot hook stop --url old", false, false},
+		{"/opt/bin/echo&&/opt/bin/smoot hook stop", false, false},
+		{"'/unterminated hook stop", false, false},
+		{"echo smoot hook stop", false, false},
+	} {
+		if got := startsCommand(tt.command, "smoot hook stop"); got != tt.starts {
+			t.Errorf("startsCommand(%q) = %v", tt.command, got)
+		}
+		if got := ownCommand(tt.command, "smoot hook stop"); got != tt.own {
+			t.Errorf("ownCommand(%q) = %v", tt.command, got)
+		}
+	}
+	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "smoot hook stop", Value: `{"hooks":[{"type":"command","command":"/opt/bin/smoot hook stop --token-file /t"}]}`}
+	got, err := op.Edit([]byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"smoot hook stop --url old"}]}]}}`), true)
+	if err != nil || bytes.Contains(got, []byte("--url old")) || !bytes.Contains(got, []byte("--token-file /t")) {
+		t.Fatalf("path hook did not replace the bare one: %s, %v", got, err)
+	}
+}
+
 func TestJSONSetPreservesUnrelatedBytes(t *testing.T) {
 	op := Operation{Op: "json-set", Path: []string{"mcpServers", "smoot"}, Value: `{"url":"new"}`}
 	old := []byte("{\n // keep\n \"mcpServers\": {\"other\": {\"url\": \"old\"},},\n \"tail\": true, // keep too\n}\n")

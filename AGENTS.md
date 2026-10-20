@@ -78,7 +78,7 @@ the profile config root, honoring `home_env`. `file_when_home_env` covers an
 explicit alternate path. Keep client-specific setup in this data; Go owns
 `json-set`, `json-append`, `json-ensure-strings`, `toml-table` and `command`.
 Hook contracts are explicit adapters. Templates receive the token's env
-variable name, never its value. After profile or rendering changes, run
+variable name or token file path, never its value. After profile or rendering changes, run
 `go test ./internal/profiles -update` and review `testdata/*.golden`.
 Installer tests use temporary homes; never use real client configs.
 

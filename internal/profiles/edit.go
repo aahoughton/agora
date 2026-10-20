@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"reflect"
 	"slices"
 	"strconv"
@@ -273,7 +274,7 @@ func hasCommand(value any, prefix string) bool {
 }
 
 func startsCommand(command, prefix string) bool {
-	rest, ok := strings.CutPrefix(command, prefix)
+	rest, ok := strings.CutPrefix(programBase(command), prefix)
 	if !ok {
 		return false
 	}
@@ -284,10 +285,43 @@ func nameByte(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.'
 }
 
+// programBase rewrites a command whose program is a path, bare or quoted
+// as shellQuote writes it, to start with the path's base name, so
+// "/opt/bin/smoot hook stop" matches the identity "smoot hook stop".
+func programBase(command string) string {
+	var word strings.Builder
+	rest := command
+	for rest != "" && rest[0] != ' ' {
+		switch {
+		case rest[0] == '\'':
+			end := strings.IndexByte(rest[1:], '\'')
+			if end < 0 {
+				return command
+			}
+			word.WriteString(rest[1 : end+1])
+			rest = rest[end+2:]
+		case strings.HasPrefix(rest, `\'`):
+			word.WriteByte('\'')
+			rest = rest[2:]
+		case strings.IndexByte(shellSafe, rest[0]) >= 0:
+			word.WriteByte(rest[0])
+			rest = rest[1:]
+		default:
+			// Anything else (such as ; or &) could run another command, so
+			// the command is not reduced and cannot match smoot's own.
+			return command
+		}
+	}
+	if !strings.Contains(word.String(), "/") {
+		return command
+	}
+	return path.Base(word.String()) + rest
+}
+
 // ownCommand reports whether command is prefix followed only by words as
 // shellQuote writes them, so nothing else runs with it.
 func ownCommand(command, prefix string) bool {
-	rest, ok := strings.CutPrefix(command, prefix)
+	rest, ok := strings.CutPrefix(programBase(command), prefix)
 	if !ok {
 		return false
 	}

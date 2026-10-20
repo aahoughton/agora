@@ -1,0 +1,13 @@
+## .codex/config.toml
+[mcp_servers.smoot]
+command = "/home/u/bin/smoot"
+args = ["mcp", "--url", "http://127.0.0.1:8790", "--namespace", "team", "--token-file", "/home/u/.config/smoot/token"]
+default_tools_approval_mode = "approve"
+tool_timeout_sec = 250
+
+## .codex/hooks.json
+{"hooks": {"Stop": [{"hooks": [{
+	"command":       "/home/u/bin/smoot hook stop --url http://127.0.0.1:8790 --namespace team --token-file /home/u/.config/smoot/token --agent codex-desk",
+	"statusMessage": "smoot: checking conversations",
+	"type":          "command"
+}]}]}}

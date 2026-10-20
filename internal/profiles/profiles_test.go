@@ -26,17 +26,28 @@ func TestProfiles(t *testing.T) {
 			var b strings.Builder
 			b.WriteString("# " + p.Description + "\n# skills: " + p.SkillsDir + "\n\n")
 			for _, wait := range []time.Duration{50 * time.Second, 4 * time.Minute} {
-				out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", wait, "")
+				out, err := p.MCPOperation(Setup{MCPURL: "http://127.0.0.1:8787/mcp?namespace=default", MaxWait: wait})
 				if err != nil {
 					t.Fatal(err)
 				}
 				b.WriteString("## client config, server waits up to " + wait.String() + "\n" + out.Instructions() + "\n")
 			}
-			out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", 4*time.Minute, "SMOOT_TOKEN")
+			out, err := p.MCPOperation(Setup{MCPURL: "http://127.0.0.1:8787/mcp?namespace=default", MaxWait: 4 * time.Minute, TokenEnv: "SMOOT_TOKEN"})
 			if err != nil {
 				t.Fatal(err)
 			}
 			b.WriteString("## client config with a token, server waits up to 4m0s\n" + out.Instructions() + "\n")
+			out, err = p.MCPOperation(Setup{MCPURL: "http://127.0.0.1:8787/mcp?namespace=default", MaxWait: 4 * time.Minute, TokenFile: "/home/u/.config/smoot/token", SmootPath: "/home/u/bin/smoot"})
+			if p.NoTokenFile != "" {
+				if err == nil || !strings.Contains(err.Error(), "no token file setup") {
+					t.Fatalf("token file accepted: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.WriteString("## client config with a token file, server waits up to 4m0s\n" + out.Instructions() + "\n")
+			}
 			if p.HookContract != "" {
 				hook, err := p.HookOperation("smoot hook stop")
 				if err != nil {
@@ -70,8 +81,8 @@ func golden(t *testing.T, name, got string) {
 
 func TestTimeoutsOnlyWhenNeeded(t *testing.T) {
 	p, _ := Get("codex")
-	short, _ := p.MCPOperation("u", 50*time.Second, "")
-	long, _ := p.MCPOperation("u", 4*time.Minute, "")
+	short, _ := p.MCPOperation(Setup{MCPURL: "u", MaxWait: 50 * time.Second})
+	long, _ := p.MCPOperation(Setup{MCPURL: "u", MaxWait: 4 * time.Minute})
 	if strings.Contains(short.Value, "tool_timeout_sec") || !strings.Contains(long.Value, "tool_timeout_sec = 250") {
 		t.Fatalf("short:\n%s\nlong:\n%s", short.Value, long.Value)
 	}
@@ -105,7 +116,7 @@ func TestQuoting(t *testing.T) {
 	for _, name := range Names() {
 		t.Run(name, func(t *testing.T) {
 			p, _ := Get(name)
-			op, err := p.MCPOperation(url, 4*time.Minute, "")
+			op, err := p.MCPOperation(Setup{MCPURL: url, MaxWait: 4 * time.Minute})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -156,7 +167,7 @@ func TestResolve(t *testing.T) {
 			p, _ := Get(name)
 			env := map[string]string{"HOME": t.TempDir()}
 			getenv := func(key string) string { return env[key] }
-			op, _ := p.MCPOperation("http://h/mcp?namespace=default", time.Minute, "")
+			op, _ := p.MCPOperation(Setup{MCPURL: "http://h/mcp?namespace=default", MaxWait: time.Minute})
 			normal, err := p.ResolveOperation(op, getenv)
 			if err != nil {
 				t.Fatal(err)
