@@ -174,10 +174,13 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	var viewer http.Handler
 	if cfg.Web {
 		// Browsers sign in with a session cookie; the API and MCP take
-		// bearer tokens only.
+		// bearer tokens only. A rejected cookie is not counted as a failed
+		// sign-in: the server issued it, it cannot be guessed, and a tab
+		// left open on an ended session keeps sending it. Tokens pasted at
+		// the login page are counted there.
 		viewerAuth := authn
 		if cfg.Auth == config.AuthToken {
-			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Failures: failures, Activity: activity}
+			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Activity: activity}
 		}
 		viewer, err = web.Handler(svc, viewerAuth, web.Options{
 			ThemeDir: cfg.ThemeDir, Logger: logger, Version: version,

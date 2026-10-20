@@ -338,3 +338,23 @@ func TestRateLimitedSignInsSayWhenToRetry(t *testing.T) {
 		t.Fatalf("fifth sign-in = %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
 	}
 }
+
+func TestEndedSessionsAreClearedAndSentToSignIn(t *testing.T) {
+	e := newTokenEnv(t, web.Options{})
+	e.postRaw("/login", url.Values{"token": {e.token}})
+	if err := e.svc.EndSession(t.Context(), e.sessionCookie().Value); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, e.url+"/n/default", nil)
+	resp, err := e.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login?") {
+		t.Fatalf("ended session = %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if e.sessionCookie() != nil {
+		t.Fatalf("ended session's cookie was kept: %v", resp.Header.Values("Set-Cookie"))
+	}
+}

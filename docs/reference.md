@@ -133,7 +133,9 @@ conversation, and observers comment under their account name.
 
 Each account may make `--write-limit` writes per minute, and each client
 address may fail to authenticate `--auth-failure-limit` times per minute;
-over either limit the server answers 429 with `Retry-After`.  Behind a
+over either limit the server answers 429 with `Retry-After`.  Only tokens
+count as failures: a browser whose session has ended is sent back to the
+login page and its cookie is cleared.  Behind a
 reverse proxy, list the proxy in `--trusted-proxies` so the limit counts the
 real client addresses from `X-Forwarded-For`.
 
