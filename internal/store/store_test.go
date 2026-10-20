@@ -19,7 +19,7 @@ func closeOnCleanup(t *testing.T, db *sql.DB) {
 }
 
 func TestOpenCreatesAndMigrates(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "dir", "agora.db")
+	path := filepath.Join(t.TempDir(), "nested", "dir", "smoot.db")
 	db, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestOpenCreatesAndMigrates(t *testing.T) {
 }
 
 func TestOpenIsIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	for range 2 {
 		db, err := Open(t.Context(), path)
 		if err != nil {
@@ -76,7 +76,7 @@ func TestOpenIsIdempotent(t *testing.T) {
 }
 
 func TestOpenSettings(t *testing.T) {
-	db, err := Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestOpenSettings(t *testing.T) {
 }
 
 func TestOpenRejectsNewerSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestOpenRejectsBadPaths(t *testing.T) {
 // TestMigratesAVersionOneDatabase upgrades a database written by the first
 // schema and checks that its rows survive with NULL accounts.
 func TestMigratesAVersionOneDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	ms, err := loadMigrations()
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestOpenExistingRefusesMissingFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "missing.db")); !os.IsNotExist(err) {
 		t.Fatalf("a file was created: %v", err)
 	}
-	path := filepath.Join(dir, "agora.db")
+	path := filepath.Join(dir, "smoot.db")
 	db, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +198,7 @@ func TestOpenExistingRefusesMissingFiles(t *testing.T) {
 }
 
 func TestSnapshotBeforeMigrating(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	ms, err := loadMigrations()
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestSnapshotBeforeMigrating(t *testing.T) {
 	if matches, _ := filepath.Glob(path + ".pre-v*"); len(matches) != 1 {
 		t.Fatalf("snapshots = %v", matches)
 	}
-	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".agora-snapshot-*")); len(left) != 0 {
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".smoot-snapshot-*")); len(left) != 0 {
 		t.Fatalf("temporary snapshot files left: %v", left)
 	}
 	fresh := filepath.Join(t.TempDir(), "fresh.db")
@@ -262,7 +262,7 @@ func TestSnapshotBeforeMigrating(t *testing.T) {
 
 // A second upgrade from the same version keeps the first snapshot.
 func TestSnapshotNeverReplacesAnother(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	if err := os.WriteFile(path+".pre-v1", []byte("earlier"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestNewDatabaseIsPrivate(t *testing.T) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(dir, "agora.db")
+	path := filepath.Join(dir, "smoot.db")
 	db, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -312,7 +312,7 @@ func TestNewDatabaseIsPrivate(t *testing.T) {
 }
 
 func TestReadableDatabaseIsReported(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)

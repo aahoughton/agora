@@ -13,16 +13,16 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
-const adminUsage = `usage: agora admin <command> [flags]
+const adminUsage = `usage: smoot admin <command> [flags]
 
-Through a running server (--url or AGORA_URL), with a token (--token or
-AGORA_TOKEN). To create the first server admin, or recover one, use agora
-db bootstrap or agora db recover.
+Through a running server (--url or SMOOT_URL), with a token (--token or
+SMOOT_TOKEN). To create the first server admin, or recover one, use smoot
+db bootstrap or smoot db recover.
 
   status [--json]                   who is using the server: recent callers,
                                     open MCP sessions, waiting agents, viewers
@@ -38,13 +38,13 @@ db bootstrap or agora db recover.
   members remove NAMESPACE ACCOUNT
   namespaces create NAME
   feedback list [--in NS[/CONVERSATION]] [--since TIME] [--limit N]
-                                    agents' notes on agora (serve --feedback),
+                                    agents' notes on smoot (serve --feedback),
                                     newest first; TIME is RFC 3339 or an age
                                     such as 24h
   feedback show ID                  one note in full, with its conversation
 
 A new token is printed once; store it where the client reads it
-(AGORA_TOKEN). Server admins manage accounts and namespaces; an account
+(SMOOT_TOKEN). Server admins manage accounts and namespaces; an account
 manages its own tokens; namespace admins manage their members.
 `
 
@@ -62,7 +62,7 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer, gete
 		fmt.Fprint(stdout, adminUsage)
 		return exitOK
 	default:
-		fmt.Fprintf(stderr, "agora admin: unknown command %q\n\n%s", args[0], adminUsage)
+		fmt.Fprintf(stderr, "smoot admin: unknown command %q\n\n%s", args[0], adminUsage)
 		return exitUsage
 	}
 }
@@ -230,13 +230,13 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	cmd, ok := commands[group+" "+verb]
 	if !ok {
-		fmt.Fprintf(stderr, "agora admin: unknown command %q\n\n%s", group+" "+verb, adminUsage)
+		fmt.Fprintf(stderr, "smoot admin: unknown command %q\n\n%s", group+" "+verb, adminUsage)
 		return exitUsage
 	}
 	fs := flag.NewFlagSet("admin "+group+" "+verb, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "usage: agora admin %s %s %s\n\n", group, verb, strings.TrimSpace(cmd.usage+" [flags]"))
+		fmt.Fprintf(stderr, "usage: smoot admin %s %s %s\n\n", group, verb, strings.TrimSpace(cmd.usage+" [flags]"))
 		fs.PrintDefaults()
 	}
 	resolveClient := config.ClientFlags(fs, config.WithToken)
@@ -271,7 +271,7 @@ func runAdminRemote(ctx context.Context, args []string, stdout, stderr io.Writer
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := run(ctx, cl, positional, stdout); err != nil {
-		fmt.Fprintln(stderr, "agora admin:", err)
+		fmt.Fprintln(stderr, "smoot admin:", err)
 		return exitError
 	}
 	return exitOK
@@ -387,7 +387,7 @@ func runAdminStatus(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs := flag.NewFlagSet("admin status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `usage: agora admin status [--json] [flags]
+		fmt.Fprint(stderr, `usage: smoot admin status [--json] [flags]
 
 Shows who is using the server: recent callers, open MCP sessions, waiting
 agents and viewers.
@@ -415,7 +415,7 @@ agents and viewers.
 	defer cancel()
 	st, err := cl.ServerStatus(ctx)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora admin:", err)
+		fmt.Fprintln(stderr, "smoot admin:", err)
 		return exitError
 	}
 	if *asJSON {

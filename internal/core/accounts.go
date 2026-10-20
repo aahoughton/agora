@@ -16,10 +16,10 @@ import (
 // token is revoked or expires, or at its own expiry.
 
 // TokenPrefix starts every token, so a leaked one is recognizable.
-const TokenPrefix = "agora_"
+const TokenPrefix = "smoot_"
 
 // SessionPrefix starts every browser session secret.
-const SessionPrefix = "agoras_"
+const SessionPrefix = "smoots_"
 
 // DefaultSessionTTL is how long a browser session lasts.
 const DefaultSessionTTL = 30 * 24 * time.Hour
@@ -104,7 +104,7 @@ func unauthorized(msg string) error { return errorf(CodeUnauthorized, "%s", msg)
 // AuthenticateToken returns the principal for a token secret.
 func (s *Service) AuthenticateToken(ctx context.Context, secret string) (Principal, error) {
 	if !strings.HasPrefix(secret, TokenPrefix) {
-		return Principal{}, unauthorized("not an agora token")
+		return Principal{}, unauthorized("not a smoot token")
 	}
 	var id, account int64
 	var lastUsed sql.NullInt64
@@ -132,7 +132,7 @@ func (s *Service) AuthenticateToken(ctx context.Context, secret string) (Princip
 // AuthenticateSession returns the principal for a browser session secret.
 func (s *Service) AuthenticateSession(ctx context.Context, secret string) (Principal, error) {
 	if !strings.HasPrefix(secret, SessionPrefix) {
-		return Principal{}, unauthorized("not an agora session")
+		return Principal{}, unauthorized("not a smoot session")
 	}
 	var id, account int64
 	hash := hashSecret(secret)
@@ -627,7 +627,7 @@ func (s *Service) ListMemberships(ctx context.Context, p Principal, ns string) (
 }
 
 // Bootstrap creates the first account, a server admin, and its first token.
-// It refuses if any account exists. It is for `agora db bootstrap`,
+// It refuses if any account exists. It is for `smoot db bootstrap`,
 // which runs against the database directly.
 func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, error) {
 	var t IssuedToken
@@ -637,7 +637,7 @@ func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, erro
 			return err
 		}
 		if n > 0 {
-			return errorf(CodeAccountExists, "accounts already exist; use agora admin with a server admin's token, or agora db recover")
+			return errorf(CodeAccountExists, "accounts already exist; use smoot admin with a server admin's token, or smoot db recover")
 		}
 		a, err := s.insertAccount(ctx, tx, name, true)
 		if err != nil {
@@ -650,7 +650,7 @@ func (s *Service) Bootstrap(ctx context.Context, name string) (IssuedToken, erro
 }
 
 // Recover re-enables an account, makes it a server admin and issues it a
-// new token. It is for `agora db recover`, which runs against the
+// new token. It is for `smoot db recover`, which runs against the
 // database directly, for when no usable server admin token is left.
 func (s *Service) Recover(ctx context.Context, name string) (IssuedToken, error) {
 	var t IssuedToken

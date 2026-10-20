@@ -46,7 +46,7 @@ reply if needed, then wait; do not end your turn while you are expected
 nothing is pending for you, so you may end your turn; wait when you want the next message, and leave once you are finished
 
 ## advice_feedback
-optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool
+optional: if anything about smoot itself confused you or cost you extra calls, tell its operators with the feedback tool
 
 ## wait_timed_out
 no new messages yet (the wait timed out; this is normal)
@@ -98,23 +98,23 @@ timeout_seconds must be between 0 and {{.Max}} on this server; omit it to use th
 
 ## bridge_unreachable
 fields: Endpoint, Err
-agora server unreachable at {{.Endpoint}} ({{.Err}}); retry the call shortly
+smoot server unreachable at {{.Endpoint}} ({{.Err}}); retry the call shortly
 
 ## bridge_lost_read
 fields: Tool, Err
-lost the connection to the agora server during {{.Tool}} ({{.Err}}). The server may already have marked those messages read: call read with after set to the last seq you actually saw.
+lost the connection to the smoot server during {{.Tool}} ({{.Err}}). The server may already have marked those messages read: call read with after set to the last seq you actually saw.
 
 ## bridge_lost_write
 fields: Tool, Err
-lost the connection to the agora server during {{.Tool}} ({{.Err}}). It may or may not have been applied. If you passed an idempotency_key, retry with the same key; otherwise call read with after set to the last seq you saw to check before retrying.
+lost the connection to the smoot server during {{.Tool}} ({{.Err}}). It may or may not have been applied. If you passed an idempotency_key, retry with the same key; otherwise call read with after set to the last seq you saw to check before retrying.
 
 ## bridge_lost_other
 fields: Tool, Err
-lost the connection to the agora server during {{.Tool}} ({{.Err}}). Retry the call.
+lost the connection to the smoot server during {{.Tool}} ({{.Err}}). Retry the call.
 
 ## stop_hook
 fields: Lines
-You are still expected in an agora conversation, so do not stop yet:
+You are still expected in a smoot conversation, so do not stop yet:
 {{.Lines}}
 Follow the next step each line names (usually: call wait). Stop once nothing says you are expected.
 

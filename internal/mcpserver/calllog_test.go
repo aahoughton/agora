@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // logLines decodes JSON log lines with the given msg.
@@ -73,7 +73,7 @@ func TestToolCallsAreLogged(t *testing.T) {
 }
 
 func TestInternalErrorsAreLoggedWithCause(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

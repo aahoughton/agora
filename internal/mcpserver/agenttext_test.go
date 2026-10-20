@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/agent-text.golden")

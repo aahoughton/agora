@@ -1,6 +1,6 @@
 ## .pi/agent/mcp.json
-{"mcpServers": {"agora": {
+{"mcpServers": {"smoot": {
 	"exposure": "direct",
-	"headers":  {"Authorization": "Bearer ${AGORA_TOKEN}"},
+	"headers":  {"Authorization": "Bearer ${SMOOT_TOKEN}"},
 	"url":      "http://127.0.0.1:8790/mcp?namespace=team"
 }}}

@@ -9,7 +9,7 @@ import (
 // Migration 8 rebuilds messages as a rowid table and indexes every message
 // but system lines, then keeps the index current as messages are added.
 func TestSearchMigrationKeepsMessagesAndIndexesThem(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agora.db")
+	path := filepath.Join(t.TempDir(), "smoot.db")
 	db, err := OpenAt(t.Context(), path, 7)
 	if err != nil {
 		t.Fatal(err)

@@ -10,7 +10,7 @@ import (
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 
-	"github.com/aahoughton/agora/internal/markdown"
+	"github.com/aahoughton/smoot/internal/markdown"
 )
 
 // minWidth is the narrowest column a body is wrapped to.

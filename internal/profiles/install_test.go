@@ -14,14 +14,14 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/aahoughton/agora/internal/wording"
-	"github.com/aahoughton/agora/skills"
+	"github.com/aahoughton/smoot/internal/wording"
+	"github.com/aahoughton/smoot/skills"
 )
 
 // The external client fixture exercises argv execution and config side effects.
 // Real client acceptance is checked separately in the spike's smoke runs.
 func TestClientCommandHelper(_ *testing.T) {
-	if os.Getenv("AGORA_INSTALL_TEST_HELPER") != "1" {
+	if os.Getenv("SMOOT_INSTALL_TEST_HELPER") != "1" {
 		return
 	}
 	// Claude treats a present-but-empty override differently from an unset one.
@@ -36,7 +36,7 @@ func TestClientCommandHelper(_ *testing.T) {
 		os.Exit(2)
 	}
 	args = args[1:]
-	if args[0] != "mcp" || args[2] != "--scope" || args[3] != "user" || args[4] != "agora" {
+	if args[0] != "mcp" || args[2] != "--scope" || args[3] != "user" || args[4] != "smoot" {
 		os.Exit(3)
 	}
 	path := filepath.Join(os.Getenv("HOME"), ".claude.json")
@@ -56,16 +56,16 @@ func TestClientCommandHelper(_ *testing.T) {
 	}
 	switch args[1] {
 	case "remove":
-		delete(servers, "agora")
+		delete(servers, "smoot")
 	case "add-json":
-		if _, ok := servers["agora"]; ok {
+		if _, ok := servers["smoot"]; ok {
 			os.Exit(5)
 		}
 		var entry any
 		if len(args) != 6 || json.Unmarshal([]byte(args[5]), &entry) != nil {
 			os.Exit(6)
 		}
-		servers["agora"] = entry
+		servers["smoot"] = entry
 	default:
 		os.Exit(7)
 	}
@@ -91,7 +91,7 @@ func clientFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("AGORA_INSTALL_TEST_HELPER", "1")
+	t.Setenv("SMOOT_INSTALL_TEST_HELPER", "1")
 }
 
 func isolatedHome(t *testing.T) string {
@@ -104,7 +104,7 @@ func isolatedHome(t *testing.T) string {
 			t.Setenv(p.HomeEnv, "")
 		}
 	}
-	t.Setenv("AGORA_TOKEN", "synthetic-secret-must-not-appear")
+	t.Setenv("SMOOT_TOKEN", "synthetic-secret-must-not-appear")
 	return home
 }
 
@@ -112,7 +112,7 @@ func operations(t *testing.T, p *Profile, url, token string) ([]Operation, strin
 	t.Helper()
 	setup := Setup{MCPURL: url, MaxWait: 4 * time.Minute, TokenEnv: token, ApproveTools: p.Name == "claude" || p.Name == "antigravity", ToolNames: wording.Default().Tools()}
 	if p.HookContract != "" {
-		setup.HookCommand = "agora hook stop --url http://127.0.0.1:8790 --namespace team"
+		setup.HookCommand = "smoot hook stop --url http://127.0.0.1:8790 --namespace team"
 	}
 	ops, err := p.Operations(setup, os.Getenv)
 	if err != nil {
@@ -148,7 +148,7 @@ func tree(t *testing.T, dir string) map[string]string {
 func TestInstallProfiles(t *testing.T) {
 	clientFixture(t)
 	for _, name := range Names() {
-		for _, token := range []string{"", "AGORA_TOKEN"} {
+		for _, token := range []string{"", "SMOOT_TOKEN"} {
 			t.Run(name+"/"+token, func(t *testing.T) {
 				home := isolatedHome(t)
 				p, _ := Get(name)
@@ -177,7 +177,7 @@ func TestInstallProfiles(t *testing.T) {
 					t.Fatal("second install changed bytes")
 				}
 				for path, raw := range first {
-					if strings.Contains(raw, os.Getenv("AGORA_TOKEN")) {
+					if strings.Contains(raw, os.Getenv("SMOOT_TOKEN")) {
 						t.Fatalf("token leaked to %s", path)
 					}
 				}
@@ -196,7 +196,7 @@ func TestInstallProfiles(t *testing.T) {
 					suffix = "-token"
 				}
 				golden(t, name+"-installed"+suffix, config.String())
-				for _, skill := range []string{"agora", "convene"} {
+				for _, skill := range []string{"smoot", "convene"} {
 					if _, err := os.Stat(filepath.Join(dir, skill, "SKILL.md")); err != nil {
 						t.Fatal(err)
 					}
@@ -215,12 +215,12 @@ func TestInstallProfiles(t *testing.T) {
 				if err := plan.Apply(t.Context(), false, &bytes.Buffer{}); err != nil {
 					t.Fatal(err)
 				}
-				backup, err := os.ReadFile(ops[0].File + ".agora-bak")
+				backup, err := os.ReadFile(ops[0].File + ".smoot-bak")
 				rel, _ := filepath.Rel(home, ops[0].File)
 				if err != nil || string(backup) != first[rel] {
 					t.Fatalf("backup: %s, %v", backup, err)
 				}
-				info, err := os.Stat(ops[0].File + ".agora-bak")
+				info, err := os.Stat(ops[0].File + ".smoot-bak")
 				if err != nil || info.Mode().Perm() != 0o600 {
 					t.Fatalf("backup permissions: %v, %v", info, err)
 				}
@@ -288,7 +288,7 @@ func TestInstallSkillConflictPreventsConfigWrites(t *testing.T) {
 			home := isolatedHome(t)
 			p, _ := Get(name)
 			ops, dir := operations(t, p, "http://h/mcp?namespace=default", "")
-			path := filepath.Join(dir, "agora", "SKILL.md")
+			path := filepath.Join(dir, "smoot", "SKILL.md")
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -349,7 +349,7 @@ func TestInstallPreservesFirstBackup(t *testing.T) {
 		if err := plan.Apply(t.Context(), false, &bytes.Buffer{}); err != nil {
 			t.Fatal(err)
 		}
-		backup, err := os.ReadFile(ops[0].File + ".agora-bak")
+		backup, err := os.ReadFile(ops[0].File + ".smoot-bak")
 		if err != nil || !bytes.Equal(backup, original) {
 			t.Fatalf("%s lost original backup: %s %v", ns, backup, err)
 		}
@@ -375,18 +375,18 @@ func TestInstallCombinesOperationsAndPreservesModes(t *testing.T) {
 	if err := plan.Apply(t.Context(), false, &out); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(out.String(), "wrote "+path+"\n") != 1 || strings.Count(out.String(), "backup "+path+".agora-bak") != 1 {
+	if strings.Count(out.String(), "wrote "+path+"\n") != 1 || strings.Count(out.String(), "backup "+path+".smoot-bak") != 1 {
 		t.Fatalf("multiple writes: %s", &out)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil || !bytes.Contains(got, []byte(`"hook"`)) || !bytes.Contains(got, []byte(`"allow"`)) {
 		t.Fatalf("lost operation: %s %v", got, err)
 	}
-	backup, err := os.ReadFile(path + ".agora-bak")
+	backup, err := os.ReadFile(path + ".smoot-bak")
 	if err != nil || !bytes.Equal(backup, original) {
 		t.Fatalf("backup not pre-install bytes: %s %v", backup, err)
 	}
-	for name, mode := range map[string]fs.FileMode{path: 0o640, path + ".agora-bak": 0o600, filepath.Join(home, "skills", "test", "SKILL.md"): 0o644} {
+	for name, mode := range map[string]fs.FileMode{path: 0o640, path + ".smoot-bak": 0o600, filepath.Join(home, "skills", "test", "SKILL.md"): 0o644} {
 		info, err := os.Stat(name)
 		if err != nil || info.Mode().Perm() != mode {
 			t.Fatalf("%s mode: %v %v", name, info, err)
@@ -404,7 +404,7 @@ func TestInstallSymlinkRefusal(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	op := Operation{File: link, Op: "json-set", Path: []string{"agora"}, Value: `{}`}
+	op := Operation{File: link, Op: "json-set", Path: []string{"smoot"}, Value: `{}`}
 	if _, err := Prepare([]Operation{op}, fstest.MapFS{}, filepath.Join(home, "skills"), true); err == nil || !strings.Contains(err.Error(), link+" -> "+target) {
 		t.Fatalf("symlink error: %v", err)
 	}

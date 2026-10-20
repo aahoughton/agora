@@ -13,8 +13,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aahoughton/agora/internal/textfile"
-	"github.com/aahoughton/agora/internal/tone"
+	"github.com/aahoughton/smoot/internal/textfile"
+	"github.com/aahoughton/smoot/internal/tone"
 )
 
 // Text keys. LoadSkin requires exactly these sections in tui/text.md.

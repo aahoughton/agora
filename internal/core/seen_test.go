@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // A post records how far its author had read, and Unseen names the

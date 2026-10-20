@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestReadAsAgentNeedsAnAgent(t *testing.T) {

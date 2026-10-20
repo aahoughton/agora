@@ -32,13 +32,13 @@ func TestProfiles(t *testing.T) {
 				}
 				b.WriteString("## client config, server waits up to " + wait.String() + "\n" + out.Instructions() + "\n")
 			}
-			out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", 4*time.Minute, "AGORA_TOKEN")
+			out, err := p.MCPOperation("http://127.0.0.1:8787/mcp?namespace=default", 4*time.Minute, "SMOOT_TOKEN")
 			if err != nil {
 				t.Fatal(err)
 			}
 			b.WriteString("## client config with a token, server waits up to 4m0s\n" + out.Instructions() + "\n")
 			if p.HookContract != "" {
-				hook, err := p.HookOperation("agora hook stop")
+				hook, err := p.HookOperation("smoot hook stop")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -101,7 +101,7 @@ func TestLoadRejectsBadProfiles(t *testing.T) {
 
 func TestQuoting(t *testing.T) {
 	const url = `http://h/mcp?namespace=x&x=';printf%20pwned;'"q\`
-	const command = `agora hook stop --url "http://h/"`
+	const command = `smoot hook stop --url "http://h/"`
 	for _, name := range Names() {
 		t.Run(name, func(t *testing.T) {
 			p, _ := Get(name)

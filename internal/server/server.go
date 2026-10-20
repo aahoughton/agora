@@ -1,4 +1,4 @@
-// Package server assembles the HTTP handler for `agora serve`.
+// Package server assembles the HTTP handler for `smoot serve`.
 package server
 
 import (
@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
 )
 
 // Deps are what the handler serves.

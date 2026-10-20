@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aahoughton/agora/internal/markdown"
+	"github.com/aahoughton/smoot/internal/markdown"
 )
 
 func plain(lines []string) string {

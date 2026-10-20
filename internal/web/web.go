@@ -20,12 +20,12 @@ import (
 	"text/template/parse"
 	"time"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/markdown"
-	"github.com/aahoughton/agora/internal/tone"
-	"github.com/aahoughton/agora/themes"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/markdown"
+	"github.com/aahoughton/smoot/internal/tone"
+	"github.com/aahoughton/smoot/themes"
 )
 
 // TemplateAPI is the version of the data contract between this package and
@@ -128,7 +128,7 @@ type viewer struct {
 	static http.Handler
 }
 
-const observerCookie = "agora_observer"
+const observerCookie = "smoot_observer"
 
 // Handler returns the viewer. It fails if the theme is incomplete or its
 // templates do not parse.
@@ -595,7 +595,7 @@ func (v *viewer) observe(w http.ResponseWriter, r *http.Request) {
 }
 
 // backgroundHeader marks a comment posted by the page's script.
-const backgroundHeader = "X-Agora-Background"
+const backgroundHeader = "X-Smoot-Background"
 
 // DefaultStreamHeartbeat bounds each server-side wait in the event stream;
 // fresh conversation state is sent between waits.

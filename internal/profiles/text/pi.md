@@ -13,7 +13,7 @@ PI_CODING_AGENT_DIR
 ~/.agents/skills
 
 ## install_mcp
-{"file":"@/mcp.json","op":"json-set","path":["mcpServers","agora"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Pi runs in; it expands the header reference when connecting.{{end}}"}
+{"file":"@/mcp.json","op":"json-set","path":["mcpServers","smoot"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Pi runs in; it expands the header reference when connecting.{{end}}"}
 {
   "exposure": "direct",
   "url": {{.MCPURLString}}{{if .TokenEnv}},

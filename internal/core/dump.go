@@ -28,7 +28,7 @@ import (
 
 // DumpFormat and DumpVersion identify the dump format.
 const (
-	DumpFormat  = "agora-dump"
+	DumpFormat  = "smoot-dump"
 	DumpVersion = 1
 )
 
@@ -293,7 +293,7 @@ func ReadDumpHeader(r *bufio.Reader, latestSchema int) (DumpHeader, error) {
 	}
 	var h DumpHeader
 	if err := json.Unmarshal(line, &h); err != nil || h.Format != DumpFormat {
-		return DumpHeader{}, errors.New("load: not an agora dump")
+		return DumpHeader{}, errors.New("load: not a smoot dump")
 	}
 	if h.Version != DumpVersion {
 		return DumpHeader{}, fmt.Errorf("load: dump format version %d; this build reads version %d", h.Version, DumpVersion)
@@ -358,12 +358,12 @@ func (s *Service) Backup(ctx context.Context, p Principal, send func(size int64,
 	if file == "" {
 		return errors.New("backup: the database has no file")
 	}
-	dir, err := os.MkdirTemp(filepath.Dir(file), ".agora-backup-")
+	dir, err := os.MkdirTemp(filepath.Dir(file), ".smoot-backup-")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	copyPath := filepath.Join(dir, "agora.db")
+	copyPath := filepath.Join(dir, "smoot.db")
 	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", copyPath); err != nil {
 		return fmt.Errorf("backup: %w", err)
 	}

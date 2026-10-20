@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // Accounts, tokens and memberships. Every call is authorized in core: server
@@ -187,7 +187,7 @@ func (h *handler) backup(w http.ResponseWriter, r *http.Request, p core.Principa
 	defer lift()
 	err := h.svc.Backup(r.Context(), p, func(size int64, body io.Reader) error {
 		w.Header().Set("Content-Type", "application/vnd.sqlite3")
-		w.Header().Set("Content-Disposition", `attachment; filename="agora.db"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="smoot.db"`)
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.Header().Set("Cache-Control", "no-store")
 		_, err := io.Copy(out, body)

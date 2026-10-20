@@ -8,11 +8,11 @@ import (
 
 // Environment variables for client commands.
 const (
-	EnvURL       = "AGORA_URL"
-	EnvNamespace = "AGORA_NAMESPACE"
-	EnvAgent     = "AGORA_AGENT"
-	EnvObserver  = "AGORA_OBSERVER"
-	EnvToken     = "AGORA_TOKEN"
+	EnvURL       = "SMOOT_URL"
+	EnvNamespace = "SMOOT_NAMESPACE"
+	EnvAgent     = "SMOOT_AGENT"
+	EnvObserver  = "SMOOT_OBSERVER"
+	EnvToken     = "SMOOT_TOKEN"
 )
 
 // DefaultURL is where client commands look for the server.

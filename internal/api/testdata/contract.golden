@@ -78,7 +78,7 @@
   "expires_at": "2030-01-02T04:04:05Z",
   "id": 2,
   "label": "laptop",
-  "secret": "agora_<secret>"
+  "secret": "smoot_<secret>"
 }
 
 ## GET /v1/accounts/pat/tokens -> OK
@@ -568,7 +568,7 @@
 {
   "conversation": "design",
   "expected": false,
-  "line": "design: open; you: left; unread: 0; next: join (you left; rejoin to take part; optional: if anything about agora itself confused you or cost you extra calls, tell its operators with the feedback tool)",
+  "line": "design: open; you: left; unread: 0; next: join (you left; rejoin to take part; optional: if anything about smoot itself confused you or cost you extra calls, tell its operators with the feedback tool)",
   "namespace": "default",
   "next": "join",
   "replies_to_you": 0,
@@ -678,7 +678,7 @@
   ],
   "last_message": {
     "at": "2030-01-02T03:04:05Z",
-    "author": "agora",
+    "author": "smoot",
     "conversation": "led",
     "kind": "system",
     "namespace": "copy",

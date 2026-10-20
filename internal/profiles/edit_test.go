@@ -9,12 +9,12 @@ import (
 )
 
 func TestJSONAppendIdentity(t *testing.T) {
-	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "agora hook stop", Value: `{"hooks":[{"type":"command","command":"agora hook stop --url new"}]}`}
+	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "smoot hook stop", Value: `{"hooks":[{"type":"command","command":"smoot hook stop --url new"}]}`}
 	old := []byte(`{
  // preserve
  "hooks":{"Stop":[
- {"hooks":[{"type":"command","command":"agora hook stopping"}]},
- {"hooks":[{"type":"command","command":"agora hook stop --url old"}]},
+ {"hooks":[{"type":"command","command":"smoot hook stopping"}]},
+ {"hooks":[{"type":"command","command":"smoot hook stop --url old"}]},
  {"hooks":[{"type":"command","command":"echo other"}]}
  ]}
 }`)
@@ -25,7 +25,7 @@ func TestJSONAppendIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"// preserve", "agora hook stopping", "echo other", "agora hook stop --url new"} {
+	for _, want := range []string{"// preserve", "smoot hook stopping", "echo other", "smoot hook stop --url new"} {
 		if !bytes.Contains(got, []byte(want)) {
 			t.Fatalf("lost %q: %s", want, got)
 		}
@@ -37,7 +37,7 @@ func TestJSONAppendIdentity(t *testing.T) {
 	if err != nil || !bytes.Equal(got, twice) {
 		t.Fatalf("not idempotent: %s %v", twice, err)
 	}
-	duplicate := bytes.Replace(got, []byte("agora hook stopping"), []byte("agora hook stop --url duplicate"), 1)
+	duplicate := bytes.Replace(got, []byte("smoot hook stopping"), []byte("smoot hook stop --url duplicate"), 1)
 	if _, err := op.Edit(duplicate, true); err == nil {
 		t.Fatal("duplicate identity accepted")
 	}
@@ -49,7 +49,7 @@ func TestJSONAppendIdentity(t *testing.T) {
 }
 
 func TestJSONSetPreservesUnrelatedBytes(t *testing.T) {
-	op := Operation{Op: "json-set", Path: []string{"mcpServers", "agora"}, Value: `{"url":"new"}`}
+	op := Operation{Op: "json-set", Path: []string{"mcpServers", "smoot"}, Value: `{"url":"new"}`}
 	old := []byte("{\n // keep\n \"mcpServers\": {\"other\": {\"url\": \"old\"},},\n \"tail\": true, // keep too\n}\n")
 	got, err := op.Edit(old, false)
 	if err != nil {
@@ -63,12 +63,12 @@ func TestJSONSetPreservesUnrelatedBytes(t *testing.T) {
 }
 
 func TestTOMLTableEdits(t *testing.T) {
-	op := Operation{Op: "toml-table", Path: []string{"mcp_servers", "agora"}, Value: "[mcp_servers.agora]\nurl = \"new\"\n"}
+	op := Operation{Op: "toml-table", Path: []string{"mcp_servers", "smoot"}, Value: "[mcp_servers.smoot]\nurl = \"new\"\n"}
 	for name, old := range map[string]string{
-		"explicit":  "# before\n[mcp_servers.agora]\nurl = \"old\"\n\n# preserve next\n[other]\nx = 1\n",
-		"quoted":    "[mcp_servers.\"agora\"]\nurl = \"old\"\n# preserve next\n[other]\nx = 1\n",
-		"multiline": "[mcp_servers.agora]\nurl = '''\n[misleading]\n'''\n# preserve next\n[other]\nx = 1\n",
-		"subtable":  "[mcp_servers.agora]\nurl = \"old\"\n[mcp_servers.agora.headers]\nx = \"y\"\n# preserve next\n[other]\nx = 1\n",
+		"explicit":  "# before\n[mcp_servers.smoot]\nurl = \"old\"\n\n# preserve next\n[other]\nx = 1\n",
+		"quoted":    "[mcp_servers.\"smoot\"]\nurl = \"old\"\n# preserve next\n[other]\nx = 1\n",
+		"multiline": "[mcp_servers.smoot]\nurl = '''\n[misleading]\n'''\n# preserve next\n[other]\nx = 1\n",
+		"subtable":  "[mcp_servers.smoot]\nurl = \"old\"\n[mcp_servers.smoot.headers]\nx = \"y\"\n# preserve next\n[other]\nx = 1\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := op.Edit([]byte(old), false); err == nil {
@@ -87,16 +87,16 @@ func TestTOMLTableEdits(t *testing.T) {
 			}
 		})
 	}
-	for _, old := range []string{"mcp_servers.agora = {url = \"old\"}\n", "[mcp_servers]\nagora.url = \"old\"\n", "mcp_servers = 42\n"} {
+	for _, old := range []string{"mcp_servers.smoot = {url = \"old\"}\n", "[mcp_servers]\nsmoot.url = \"old\"\n", "mcp_servers = 42\n"} {
 		if _, err := op.Edit([]byte(old), true); err == nil {
 			t.Fatalf("accepted unsupported layout %q", old)
 		}
 	}
-	same := []byte("[mcp_servers.\"agora\"] # comment\nurl='new'\n")
+	same := []byte("[mcp_servers.\"smoot\"] # comment\nurl='new'\n")
 	if got, err := op.Edit(same, false); err != nil || !bytes.Equal(got, same) {
 		t.Fatalf("equivalent table changed: %s %v", got, err)
 	}
-	old := []byte("[other]\ntext = '''\n[mcp_servers.agora]\n'''\n")
+	old := []byte("[other]\ntext = '''\n[mcp_servers.smoot]\n'''\n")
 	got, err := op.Edit(old, false)
 	if err != nil || !strings.HasPrefix(string(got), string(old)) {
 		t.Fatalf("string mistaken for table: %s %v", got, err)
@@ -104,15 +104,15 @@ func TestTOMLTableEdits(t *testing.T) {
 }
 
 func TestJSONAppendRefusesSharedGroup(t *testing.T) {
-	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "agora hook stop", Value: `{"hooks":[{"type":"command","command":"agora hook stop --url new"}]}`}
+	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "smoot hook stop", Value: `{"hooks":[{"type":"command","command":"smoot hook stop --url new"}]}`}
 	for _, value := range []string{
-		`{"hooks":[{"type":"command","command":"say done"},{"type":"command","command":"agora hook stop --url old"}]}`,
-		`{"hooks":[{"type":"prompt","prompt":"check work"},{"type":"command","command":"agora hook stop --url old"}]}`,
-		`{"matcher":"custom","hooks":[{"type":"command","command":"agora hook stop --url old"}]}`,
-		`{"hooks":[{"type":"command","command":"agora hook stop; say done"}]}`,
-		`{"hooks":[{"type":"command","command":"agora hook stop --url old && say done"}]}`,
-		`{"hooks":[{"type":"command","command":"agora hook stop --url 'a b' | tee log"}]}`,
-		`{"hooks":[{"type":"command","command":"agora hook stop","hooks":[{"type":"command","command":"say done"}]}]}`,
+		`{"hooks":[{"type":"command","command":"say done"},{"type":"command","command":"smoot hook stop --url old"}]}`,
+		`{"hooks":[{"type":"prompt","prompt":"check work"},{"type":"command","command":"smoot hook stop --url old"}]}`,
+		`{"matcher":"custom","hooks":[{"type":"command","command":"smoot hook stop --url old"}]}`,
+		`{"hooks":[{"type":"command","command":"smoot hook stop; say done"}]}`,
+		`{"hooks":[{"type":"command","command":"smoot hook stop --url old && say done"}]}`,
+		`{"hooks":[{"type":"command","command":"smoot hook stop --url 'a b' | tee log"}]}`,
+		`{"hooks":[{"type":"command","command":"smoot hook stop","hooks":[{"type":"command","command":"say done"}]}]}`,
 	} {
 		old := []byte(`{"hooks":{"Stop":[` + value + `]}}`)
 		if _, err := op.Edit(old, true); err == nil {
@@ -122,18 +122,18 @@ func TestJSONAppendRefusesSharedGroup(t *testing.T) {
 }
 
 func TestJSONAppendReplacesOwnHandler(t *testing.T) {
-	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "agora hook stop", Value: `{"hooks":[{"type":"command","command":"agora hook stop --url new","statusMessage":"agora"}]}`}
+	op := Operation{Op: "json-append", Path: []string{"hooks", "Stop"}, Identity: "smoot hook stop", Value: `{"hooks":[{"type":"command","command":"smoot hook stop --url new","statusMessage":"smoot"}]}`}
 	for _, command := range []string{
-		`agora hook stop`,
-		`agora hook stop --url old --namespace default`,
-		`agora hook stop --url 'http://h/?a=1&b=2' --namespace 'it'\''s'`,
+		`smoot hook stop`,
+		`smoot hook stop --url old --namespace default`,
+		`smoot hook stop --url 'http://h/?a=1&b=2' --namespace 'it'\''s'`,
 	} {
 		old := []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":` + strconv.Quote(command) + `,"timeout":5}]}]}}`)
 		got, err := op.Edit(old, true)
 		if err != nil {
 			t.Fatalf("%s: %v", command, err)
 		}
-		if !bytes.Contains(got, []byte(`"statusMessage":"agora"`)) || bytes.Contains(got, []byte(`"timeout"`)) || bytes.Count(got, []byte("agora hook stop")) != 1 {
+		if !bytes.Contains(got, []byte(`"statusMessage":"smoot"`)) || bytes.Contains(got, []byte(`"timeout"`)) || bytes.Count(got, []byte("smoot hook stop")) != 1 {
 			t.Fatalf("%s: got %s", command, got)
 		}
 	}

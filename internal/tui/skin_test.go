@@ -8,7 +8,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/aahoughton/agora/themes"
+	"github.com/aahoughton/smoot/themes"
 )
 
 func defaultSkin(t *testing.T) *Skin {

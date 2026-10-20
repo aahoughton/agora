@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/ratelimit"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/ratelimit"
 )
 
 // Failures limits failed authentications per client address: a token or

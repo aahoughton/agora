@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 func TestWaitLeavesNoHubEntries(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestWaitLeavesNoHubEntries(t *testing.T) {
 }
 
 func TestReadsStayWithinTheLoadedSnapshot(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestReadsStayWithinTheLoadedSnapshot(t *testing.T) {
 // Inline delivery re-checks access inside its own transaction: a token
 // revoked after the wait's last check does not receive the message.
 func TestInlineDeliveryRechecksAccess(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

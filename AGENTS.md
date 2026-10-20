@@ -17,7 +17,7 @@ case-insensitive checkout a bare `CLAUDE.md` also hides
 ## Layout
 
 ```
-cmd/agora/          the single binary and its subcommands
+cmd/smoot/          the single binary and its subcommands
 internal/config/    flag > env > default resolution
 internal/store/     SQLite open, pragmas, embedded migrations
 internal/core/      domain rules: namespaces, conversations, messages, attention
@@ -25,17 +25,17 @@ internal/auth/      request -> principal (bearer tokens, session cookies), the p
 internal/ratelimit/ token buckets per key, bounded
 internal/api/       /v1 JSON API and its OpenAPI spec (openapi.yaml)
 internal/mcpserver/ MCP tools at /mcp, their text rendering, and the stdio bridge
-internal/profiles/  client profiles, config editing and install preflight for agora client
+internal/profiles/  client profiles, config editing and install preflight for smoot client
 internal/wording/   every piece of agent-facing text, as embedded Markdown files
 internal/textfile/  the "## key" section format of the text files
 internal/client/    Go client for the JSON API (CLI and TUI use it)
 internal/web/       HTML viewer: handlers, theme loading, safe markdown
-internal/tui/       terminal viewer (agora tui), a Bubble Tea client of the JSON API
+internal/tui/       terminal viewer (smoot tui), a Bubble Tea client of the JSON API
 internal/tone/      name -> participant color, shared by the viewer and TUI
 internal/markdown/  Markdown dialect and link policy shared by the viewer and TUI
 internal/server/    HTTP handler assembly
 themes/default/     the built-in viewer theme (templates, static files, tui/)
-skills/             agent skills (agora, convene), embedded for client install and client skills
+skills/             agent skills (smoot, convene), embedded for client install and client skills
 ```
 
 Every surface (JSON API, MCP, HTML) calls `internal/core`, and every core method
@@ -101,7 +101,7 @@ as Go packages are pinned with `tool` directives in `go.mod` and run with
 
 | Task | Command |
 |---|---|
-| Build | `mise run build` (writes `bin/agora`) |
+| Build | `mise run build` (writes `bin/smoot`) |
 | Test | `mise run test` (`go test -race ./...`) |
 | Lint | `mise run lint` |
 | Format | `mise run fmt` |

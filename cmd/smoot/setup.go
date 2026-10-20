@@ -11,23 +11,23 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/profiles"
-	"github.com/aahoughton/agora/internal/wording"
-	"github.com/aahoughton/agora/skills"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/profiles"
+	"github.com/aahoughton/smoot/internal/wording"
+	"github.com/aahoughton/smoot/skills"
 )
 
 func clientUsage() string {
-	return fmt.Sprintf(`usage: agora client <command> [args]
+	return fmt.Sprintf(`usage: smoot client <command> [args]
 
-Set up an agent client (%s) to use agora.
+Set up an agent client (%s) to use smoot.
 
   config NAME [--stop-hook] [--with-token] [--approve-tools]
                                              print the client setup
   install NAME [--stop-hook] [--with-token] [--approve-tools] [--dry-run] [--force]
                                              install config and skills
-  skills (NAME | --dir DIR) [--force]         install agora's skills where it reads them
+  skills (NAME | --dir DIR) [--force]         install smoot's skills where it reads them
 `, strings.Join(profiles.Names(), ", "))
 }
 
@@ -47,12 +47,12 @@ func runClient(ctx context.Context, args []string, stdout, stderr io.Writer, get
 		fmt.Fprint(stdout, clientUsage())
 		return exitOK
 	default:
-		fmt.Fprintf(stderr, "agora client: unknown command %q\n\n%s", args[0], clientUsage())
+		fmt.Fprintf(stderr, "smoot client: unknown command %q\n\n%s", args[0], clientUsage())
 		return exitUsage
 	}
 }
 
-// clientNames lists the clients agora has a profile for.
+// clientNames lists the clients smoot has a profile for.
 func clientNames() string { return strings.Join(profiles.Names(), ", ") }
 
 func runClientSetup(ctx context.Context, args []string, stdout, stderr io.Writer, getenv config.Getenv, install bool) int {
@@ -63,7 +63,7 @@ func runClientSetup(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs := flag.NewFlagSet("client "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, `usage: agora client %s NAME [flags]
+		fmt.Fprintf(stderr, `usage: smoot client %s NAME [flags]
 
 Set up agent client NAME (%s) for this server's MCP endpoint.
 config prints the setup; install writes config and skills.
@@ -78,7 +78,7 @@ from ending while it is expected in a conversation.
 	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
 	stopHook := fs.Bool("stop-hook", false, "include a Stop hook")
 	withToken := fs.Bool("with-token", false, "set the client up to send the token in "+config.EnvToken+", for a server with --auth token (the token itself is never printed)")
-	approveTools := fs.Bool("approve-tools", false, "pre-approve agora's tools using the profile's approval setup")
+	approveTools := fs.Bool("approve-tools", false, "pre-approve smoot's tools using the profile's approval setup")
 	var dryRun, force bool
 	if install {
 		fs.BoolVar(&dryRun, "dry-run", false, "report changes without writing")
@@ -111,14 +111,14 @@ from ending while it is expected in a conversation.
 	}
 	setup := profiles.Setup{MCPURL: mcpURL, MaxWait: *maxWait, TokenEnv: tokenEnv, ApproveTools: *approveTools}
 	if *stopHook {
-		setup.HookCommand = "agora hook stop --url " + shellWord(base) + " --namespace " + shellWord(cc.Namespace)
+		setup.HookCommand = "smoot hook stop --url " + shellWord(base) + " --namespace " + shellWord(cc.Namespace)
 	}
 	if *approveTools {
 		setup.ToolNames = wording.Default().Tools()
 	}
 	ops, err := p.Operations(setup, getenv)
 	if err != nil {
-		fmt.Fprintln(stderr, "agora client "+action+":", err)
+		fmt.Fprintln(stderr, "smoot client "+action+":", err)
 		return exitError
 	}
 	if !install {
@@ -136,7 +136,7 @@ from ending while it is expected in a conversation.
 		err = plan.Apply(ctx, dryRun, stdout)
 	}
 	if err != nil {
-		preview := []string{"agora", "client", "config", name, "--url", cc.URL, "--namespace", cc.Namespace, "--max-wait", strings.ReplaceAll(maxWait.String(), "µ", "u")}
+		preview := []string{"smoot", "client", "config", name, "--url", cc.URL, "--namespace", cc.Namespace, "--max-wait", strings.ReplaceAll(maxWait.String(), "µ", "u")}
 		for _, option := range []struct {
 			flag    string
 			enabled bool
@@ -167,12 +167,12 @@ func runClientSkills(ctx context.Context, args []string, stdout, stderr io.Write
 	fs := flag.NewFlagSet("client skills", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, `usage: agora client skills (NAME | --dir DIR) [--force]
+		fmt.Fprintf(stderr, `usage: smoot client skills (NAME | --dir DIR) [--force]
 
-Writes agora's skills (%s) where agent client NAME (%s)
+Writes smoot's skills (%s) where agent client NAME (%s)
 reads them, or into DIR for any other client, and lists each file it
 writes. Identical files are unchanged. Conflicts prevent all writes unless
---force is given; replacements keep the first .agora-bak backup.
+--force is given; replacements keep the first .smoot-bak backup.
 
 `, strings.Join(skillNames(), ", "), clientNames())
 		fs.PrintDefaults()
@@ -196,7 +196,7 @@ writes. Identical files are unchanged. Conflicts prevent all writes unless
 			return flagError(stderr, err)
 		}
 		if target, err = p.Resolve(p.SkillsDir, getenv); err != nil {
-			fmt.Fprintln(stderr, "agora client skills:", err)
+			fmt.Fprintln(stderr, "smoot client skills:", err)
 			return exitError
 		}
 	}
@@ -215,14 +215,14 @@ writes. Identical files are unchanged. Conflicts prevent all writes unless
 }
 
 func clientInstallError(out io.Writer, action string, err error, preview string) int {
-	fmt.Fprintln(out, "agora client "+action+":", err)
+	fmt.Fprintln(out, "smoot client "+action+":", err)
 	var link *profiles.SymlinkError
 	if errors.As(err, &link) {
 		if preview != "" {
 			fmt.Fprintln(out, "for config, run in the same environment:", preview)
 			fmt.Fprintln(out, "then apply the printed setup to the link target directly.")
 		}
-		fmt.Fprintln(out, "for skills, use 'agora client skills --dir DIR' with a scratch directory, then copy the files to the target.")
+		fmt.Fprintln(out, "for skills, use 'smoot client skills --dir DIR' with a scratch directory, then copy the files to the target.")
 		fmt.Fprintln(out, "or replace the link with a regular file and rerun.")
 	}
 	return exitError

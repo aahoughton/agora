@@ -129,7 +129,7 @@ func Prepare(ops []Operation, skills fs.FS, skillDir string, force bool) (*Plan,
 	}
 	for _, c := range plan.changes {
 		if c.exists && !bytes.Equal(c.old, c.data) {
-			if _, err := readChange(c.path + ".agora-bak"); err != nil {
+			if _, err := readChange(c.path + ".smoot-bak"); err != nil {
 				problems = append(problems, err)
 			}
 		}
@@ -191,7 +191,7 @@ func (p *Plan) Apply(ctx context.Context, dryRun bool, out io.Writer) error {
 			return err
 		}
 		if c.exists {
-			created, err := keepBackup(c.path+".agora-bak", c.old)
+			created, err := keepBackup(c.path+".smoot-bak", c.old)
 			if err != nil {
 				return err
 			}
@@ -199,7 +199,7 @@ func (p *Plan) Apply(ctx context.Context, dryRun bool, out io.Writer) error {
 			if created {
 				action = "backup"
 			}
-			fmt.Fprintln(out, action, c.path+".agora-bak", "(may contain credentials)")
+			fmt.Fprintln(out, action, c.path+".smoot-bak", "(may contain credentials)")
 		}
 		if c.command != nil {
 			if c.replace {
@@ -268,7 +268,7 @@ func runArgv(ctx context.Context, argv []string, overrides map[string]string) er
 }
 
 func writeFile(path string, data []byte, mode fs.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".agora-install-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".smoot-install-*")
 	if err != nil {
 		return err
 	}

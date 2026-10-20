@@ -65,11 +65,11 @@ func TestUserAgent(t *testing.T) {
 	if err := c.Health(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	c.SetUserAgent("agora-tui")
+	c.SetUserAgent("smoot-tui")
 	if err := c.Health(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0] != DefaultUserAgent || got[1] != "agora-tui" {
+	if len(got) != 2 || got[0] != DefaultUserAgent || got[1] != "smoot-tui" {
 		t.Fatalf("user agents = %q", got)
 	}
 }
@@ -85,7 +85,7 @@ func TestRedirectsStayOnTheServer(t *testing.T) {
 		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
 	}))
 	t.Cleanup(redirect.Close)
-	c, err := New(redirect.URL, "agora_secret")
+	c, err := New(redirect.URL, "smoot_secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,9 +96,9 @@ func TestRedirectsStayOnTheServer(t *testing.T) {
 
 func TestDumpChecksItArrivedWhole(t *testing.T) {
 	bodies := map[string]string{
-		"no end": `{"format":"agora-dump","version":1,"schema":2,"created_at":"x"}` + "\n" +
+		"no end": `{"format":"smoot-dump","version":1,"schema":2,"created_at":"x"}` + "\n" +
 			`{"table":"namespaces","row":{"id":1,"name":"default","created_at":1}}` + "\n",
-		"wrong count": `{"format":"agora-dump","version":1,"schema":2,"created_at":"x"}` + "\n" + `{"end":true,"rows":3}` + "\n",
+		"wrong count": `{"format":"smoot-dump","version":1,"schema":2,"created_at":"x"}` + "\n" + `{"end":true,"rows":3}` + "\n",
 		"not a dump":  "<html>oops</html>\n",
 	}
 	for name, body := range bodies {

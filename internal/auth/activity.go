@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // Activity remembers who has called the server since it started and which

@@ -14,8 +14,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 const sessionHeader = "Mcp-Session-Id"
@@ -286,7 +286,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		}
 	}
 	if status == http.StatusUnauthorized {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="agora"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="smoot"`)
 	}
 	writeError(w, status, code, msg)
 }

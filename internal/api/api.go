@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
 )
 
 // Wait timeout bounds, in seconds.
@@ -227,7 +227,7 @@ func (h *handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	body.Error.Code = ce.Code
 	body.Error.Message = ce.Message
 	if ce.Code == core.CodeUnauthorized {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="agora"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="smoot"`)
 	}
 	if ce.RetryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(ce.RetryAfter.Seconds())))

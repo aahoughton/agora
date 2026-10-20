@@ -3,7 +3,7 @@ package core_test
 import (
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestIdempotencyKeyCoversTheReplyTarget(t *testing.T) {

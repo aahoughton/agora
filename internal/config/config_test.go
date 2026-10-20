@@ -20,7 +20,7 @@ func TestParseServeDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Serve{
-		DB:         "/home/u/.local/share/agora/agora.db",
+		DB:         "/home/u/.local/share/smoot/smoot.db",
 		Addr:       DefaultAddr,
 		Web:        false,
 		Auth:       AuthNone,
@@ -41,7 +41,7 @@ func TestParseServeXDGDataHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DB != "/xdg/agora/agora.db" {
+	if cfg.DB != "/xdg/smoot/smoot.db" {
 		t.Fatalf("DB = %q", cfg.DB)
 	}
 }
@@ -61,11 +61,11 @@ func TestParseServeNoHome(t *testing.T) {
 }
 
 func TestParseServeNoHomeButEnvDB(t *testing.T) {
-	cfg, err := ParseServe(nil, env(map[string]string{EnvDB: "/data/agora.db"}), io.Discard)
+	cfg, err := ParseServe(nil, env(map[string]string{EnvDB: "/data/smoot.db"}), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DB != "/data/agora.db" {
+	if cfg.DB != "/data/smoot.db" {
 		t.Fatalf("DB = %q", cfg.DB)
 	}
 }
@@ -116,8 +116,8 @@ func TestParseServeErrors(t *testing.T) {
 		want string
 	}{
 		{"bad web", []string{"--web=maybe"}, nil, "invalid boolean value"},
-		{"bad web env", nil, map[string]string{EnvWeb: "yes please"}, "invalid AGORA_WEB value"},
-		{"bad feedback env", nil, map[string]string{EnvFeedback: "sure"}, "invalid AGORA_FEEDBACK value"},
+		{"bad web env", nil, map[string]string{EnvWeb: "yes please"}, "invalid SMOOT_WEB value"},
+		{"bad feedback env", nil, map[string]string{EnvFeedback: "sure"}, "invalid SMOOT_FEEDBACK value"},
 		{"unknown auth", []string{"--auth", "ldap"}, nil, `unknown auth mode "ldap"`},
 		{"email not yet", []string{"--auth", "email"}, nil, "not implemented yet"},
 		{"stray arg", []string{"extra"}, nil, "unexpected argument"},
@@ -127,11 +127,11 @@ func TestParseServeErrors(t *testing.T) {
 		{"bad log level", []string{"--log-level", "loud"}, nil, "invalid log-level"},
 		{"log level offset", nil, map[string]string{EnvLogLevel: "info+2"}, "invalid log-level"},
 		{"bad log format", []string{"--log-format", "xml"}, nil, "invalid log-format"},
-		{"bad public url", []string{"--public-url", "agora.example"}, nil, "invalid public-url"},
-		{"public url with credentials", []string{"--public-url", "https://u:p@agora.example"}, nil, "invalid public-url"},
-		{"public url with a query", []string{"--public-url", "https://agora.example/?x=1"}, nil, "invalid public-url"},
-		{"public url with a fragment", []string{"--public-url", "https://agora.example/#x"}, nil, "invalid public-url"},
-		{"public url with shell characters", []string{"--public-url", "https://agora.example/a&b"}, nil, "invalid public-url"},
+		{"bad public url", []string{"--public-url", "smoot.example"}, nil, "invalid public-url"},
+		{"public url with credentials", []string{"--public-url", "https://u:p@smoot.example"}, nil, "invalid public-url"},
+		{"public url with a query", []string{"--public-url", "https://smoot.example/?x=1"}, nil, "invalid public-url"},
+		{"public url with a fragment", []string{"--public-url", "https://smoot.example/#x"}, nil, "invalid public-url"},
+		{"public url with shell characters", []string{"--public-url", "https://smoot.example/a&b"}, nil, "invalid public-url"},
 		{"bad write limit", []string{"--write-limit", "lots"}, nil, "invalid write-limit"},
 		{"negative failure limit", nil, map[string]string{EnvAuthFailureLimit: "-1"}, "invalid auth-failure-limit"},
 		{"bad proxy", []string{"--trusted-proxies", "10.0.0.0/8,proxy.lan"}, nil, "invalid trusted-proxies entry"},
@@ -160,7 +160,7 @@ func TestParseServeAllowedHosts(t *testing.T) {
 	}{
 		{nil, "", nil, false, false},
 		{[]string{"--allowed-hosts", "*"}, "", nil, true, false},
-		{nil, "agora.lan, localhost", []string{"agora.lan", "localhost"}, false, false},
+		{nil, "smoot.lan, localhost", []string{"smoot.lan", "localhost"}, false, false},
 		{[]string{"--allowed-hosts", "a.example"}, "b.example", []string{"a.example"}, false, false},
 		{[]string{"--allowed-hosts", "a,*"}, "", nil, false, true},
 		{[]string{"--allowed-hosts", "a,,b"}, "", nil, false, true},
@@ -238,7 +238,7 @@ func TestParseServeRateLimits(t *testing.T) {
 }
 
 func TestParseServeAcceptsPublicURLs(t *testing.T) {
-	for _, u := range []string{"https://agora.example", "http://agora.example:8787/agora/", "https://[::1]:8443"} {
+	for _, u := range []string{"https://smoot.example", "http://smoot.example:8787/smoot/", "https://[::1]:8443"} {
 		cfg, err := ParseServe([]string{"--db", "/x.db", "--public-url", u}, env(nil), io.Discard)
 		if err != nil || cfg.PublicURL != u {
 			t.Errorf("--public-url %q: %v, got %q", u, err, cfg.PublicURL)

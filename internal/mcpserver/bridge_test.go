@@ -13,11 +13,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/mcpserver"
-	"github.com/aahoughton/agora/internal/store"
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/mcpserver"
+	"github.com/aahoughton/smoot/internal/store"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // serveAt serves the MCP handler on addr ("" picks a free port) and returns
@@ -113,7 +113,7 @@ func TestBridgeFailsFastWhenServerIsDown(t *testing.T) {
 }
 
 func TestBridgeSendsTheToken(t *testing.T) {
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestBridgeKeepsTheTokenOnItsServer(t *testing.T) {
 	t.Cleanup(redirect.Close)
 
 	local, _ := mcp.NewInMemoryTransports()
-	if err := mcpserver.Bridge(t.Context(), redirect.URL+"/mcp", "agora_secret", local, "test", slog.New(slog.DiscardHandler)); err == nil {
+	if err := mcpserver.Bridge(t.Context(), redirect.URL+"/mcp", "smoot_secret", local, "test", slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("bridge followed a redirect to another server")
 	}
 	select {

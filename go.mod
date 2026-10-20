@@ -1,4 +1,4 @@
-module github.com/aahoughton/agora
+module github.com/aahoughton/smoot
 
 go 1.27.2
 

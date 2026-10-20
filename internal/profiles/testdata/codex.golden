@@ -2,29 +2,29 @@
 # skills: ~/.agents/skills
 
 ## client config, server waits up to 50s
-# add to @/config.toml at mcp_servers.agora:
-[mcp_servers.agora]
+# add to @/config.toml at mcp_servers.smoot:
+[mcp_servers.smoot]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
 default_tools_approval_mode = "approve"
 
 ## client config, server waits up to 4m0s
-# add to @/config.toml at mcp_servers.agora:
-[mcp_servers.agora]
+# add to @/config.toml at mcp_servers.smoot:
+[mcp_servers.smoot]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
 default_tools_approval_mode = "approve"
 tool_timeout_sec = 250
 
 ## client config with a token, server waits up to 4m0s
-# add to @/config.toml at mcp_servers.agora:
-[mcp_servers.agora]
+# add to @/config.toml at mcp_servers.smoot:
+[mcp_servers.smoot]
 url = "http://127.0.0.1:8787/mcp?namespace=default"
-bearer_token_env_var = "AGORA_TOKEN"
+bearer_token_env_var = "SMOOT_TOKEN"
 default_tools_approval_mode = "approve"
 tool_timeout_sec = 250
-# Set AGORA_TOKEN in the environment Codex runs in for bearer-token authentication.
+# Set SMOOT_TOKEN in the environment Codex runs in for bearer-token authentication.
 
 ## stop hook
 # add to @/hooks.json at hooks.Stop:
-{"hooks": [{"type": "command", "command": "agora hook stop", "statusMessage": "agora: checking conversations"}]}
-# Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.
+{"hooks": [{"type": "command", "command": "smoot hook stop", "statusMessage": "smoot: checking conversations"}]}
+# Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.
 # Trust this hook with /hooks in the Codex CLI.

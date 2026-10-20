@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/web"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/web"
 )
 
 // seedRuns starts "runs", whose messages are, by seq:

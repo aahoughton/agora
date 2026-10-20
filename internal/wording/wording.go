@@ -1,4 +1,4 @@
-// Package wording holds every piece of text agora shows to agents: the MCP
+// Package wording holds every piece of text smoot shows to agents: the MCP
 // server instructions, tool and parameter descriptions, and the short phrases
 // in status lines and tool results. The text lives in Markdown files under
 // text/, embedded in the binary, so wording can be reviewed and changed
@@ -19,7 +19,7 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/aahoughton/agora/internal/textfile"
+	"github.com/aahoughton/smoot/internal/textfile"
 )
 
 //go:embed text/*.md

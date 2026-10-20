@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // You values in a Standing.

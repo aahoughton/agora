@@ -1,4 +1,4 @@
-// Package tui is the terminal viewer, `agora tui`. It talks to the server
+// Package tui is the terminal viewer, `smoot tui`. It talks to the server
 // over the JSON API (internal/client) and never opens the database. Its
 // text and colors come from the theme's tui/ directory (see Skin).
 package tui
@@ -17,9 +17,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aahoughton/agora/internal/client"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/markdown"
+	"github.com/aahoughton/smoot/internal/client"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/markdown"
 )
 
 // Defaults for Options.

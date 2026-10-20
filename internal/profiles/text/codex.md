@@ -16,8 +16,8 @@ CODEX_HOME
 claude
 
 ## install_mcp
-{"file":"@/config.toml","op":"toml-table","path":["mcp_servers","agora"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Codex runs in for bearer-token authentication.{{end}}"}
-[mcp_servers.agora]
+{"file":"@/config.toml","op":"toml-table","path":["mcp_servers","smoot"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Codex runs in for bearer-token authentication.{{end}}"}
+[mcp_servers.smoot]
 url = {{.MCPURLString}}
 {{- if .TokenEnv}}
 bearer_token_env_var = {{.TokenEnvString}}
@@ -28,8 +28,8 @@ tool_timeout_sec = {{.TimeoutSeconds}}
 {{- end}}
 
 ## install_stop_hook
-{"file":"@/hooks.json","op":"json-append","path":["hooks","Stop"],"identity":"agora hook stop","note":"Keeps a session in its expected agora conversations. Does nothing unless AGORA_AGENT is set in the client's environment; set AGORA_TOKEN there too for a server with tokens.\nTrust this hook with /hooks in the Codex CLI."}
-{"hooks": [{"type": "command", "command": {{.CommandString}}, "statusMessage": "agora: checking conversations"}]}
+{"file":"@/hooks.json","op":"json-append","path":["hooks","Stop"],"identity":"smoot hook stop","note":"Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.\nTrust this hook with /hooks in the Codex CLI."}
+{"hooks": [{"type": "command", "command": {{.CommandString}}, "statusMessage": "smoot: checking conversations"}]}
 
 ## approvals_note
-Codex approves agora's tools through default_tools_approval_mode in its MCP entry.
+Codex approves smoot's tools through default_tools_approval_mode in its MCP entry.

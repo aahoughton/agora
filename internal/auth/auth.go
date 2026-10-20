@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aahoughton/agora/internal/config"
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/config"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // Authenticator identifies the caller of a request. It returns an error
@@ -35,14 +35,14 @@ func (b Bearer) Authenticate(r *http.Request) (core.Principal, error) {
 	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 		return core.Principal{}, &core.Error{
 			Code:    core.CodeUnauthorized,
-			Message: "send Authorization: Bearer <token> (agora clients read --token or AGORA_TOKEN)",
+			Message: "send Authorization: Bearer <token> (smoot clients read --token or SMOOT_TOKEN)",
 		}
 	}
 	return b.Service.AuthenticateToken(r.Context(), strings.TrimSpace(token))
 }
 
 // SessionCookie holds a browser session secret in auth mode token.
-const SessionCookie = "agora_session"
+const SessionCookie = "smoot_session"
 
 // Session authenticates the HTML viewer's session cookie. Browsers get the
 // cookie by pasting a token at the viewer's login page; the JSON API and

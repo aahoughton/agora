@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 // tokenFixture is a token-mode service with a bootstrapped server admin.

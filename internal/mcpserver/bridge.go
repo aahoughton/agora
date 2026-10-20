@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/aahoughton/agora/internal/wording"
+	"github.com/aahoughton/smoot/internal/wording"
 )
 
 // Bridge serves MCP on local (normally stdio) by relaying to the server's
@@ -30,7 +30,7 @@ func Bridge(ctx context.Context, endpoint, token string, local mcp.Transport, ve
 		return err
 	}
 	init := sess.InitializeResult()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "agora", Version: init.ServerInfo.Version}, &mcp.ServerOptions{
+	srv := mcp.NewServer(&mcp.Implementation{Name: "smoot", Version: init.ServerInfo.Version}, &mcp.ServerOptions{
 		Instructions: init.Instructions,
 		Logger:       quiet(logger),
 		Capabilities: &mcp.ServerCapabilities{},
@@ -61,7 +61,7 @@ func (r *remote) session(ctx context.Context) (*mcp.ClientSession, error) {
 	if r.sess != nil {
 		return r.sess, nil
 	}
-	c := mcp.NewClient(&mcp.Implementation{Name: "agora-bridge", Version: r.version}, nil)
+	c := mcp.NewClient(&mcp.Implementation{Name: "smoot-bridge", Version: r.version}, nil)
 	t := &mcp.StreamableClientTransport{Endpoint: r.endpoint}
 	if r.token != "" {
 		u, err := url.Parse(r.endpoint)

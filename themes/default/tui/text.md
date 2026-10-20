@@ -1,13 +1,13 @@
 # TUI text
 
-Every piece of text `agora tui` shows, and the symbols its layout is drawn
+Every piece of text `smoot tui` shows, and the symbols its layout is drawn
 with. Each `## key` section is a Go text/template; a first line starting
 with `fields:` lists the data it receives. Keys are fixed by the code: the
 TUI refuses to start if one is missing or unknown. Each `glyph_` key must be
 one character cell wide.
 
 ## brand
-agora
+smoot
 
 ## namespaces_title
 Namespaces

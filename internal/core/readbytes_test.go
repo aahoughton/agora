@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aahoughton/agora/internal/core"
+	"github.com/aahoughton/smoot/internal/core"
 )
 
 func TestReadsCanBeBoundedByBytes(t *testing.T) {

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aahoughton/agora/internal/api"
-	"github.com/aahoughton/agora/internal/auth"
-	"github.com/aahoughton/agora/internal/core"
-	"github.com/aahoughton/agora/internal/store"
+	"github.com/aahoughton/smoot/internal/api"
+	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/core"
+	"github.com/aahoughton/smoot/internal/store"
 )
 
 // A dump holds a read transaction while it streams. A client that stops
@@ -21,7 +21,7 @@ import (
 // its write-ahead log, which then grows with every write on the server.
 func TestStalledDumpReleasesTheDatabase(t *testing.T) {
 	ctx := t.Context()
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "agora.db"))
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "smoot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
--- Agent feedback on agora itself: at most one note per agent per
+-- Agent feedback on smoot itself: at most one note per agent per
 -- conversation, which a later submit replaces. Only server admins read it.
 -- seen_seq is the agent's read position when the note was last written.
 CREATE TABLE feedback (

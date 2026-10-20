@@ -138,7 +138,7 @@ func (o Operation) editJSON(old []byte, force bool) ([]byte, error) {
 			return nil, fmt.Errorf("%s differs; pass --force to replace", path)
 		}
 		if o.Op == "json-append" && !reflect.DeepEqual(hookShape(got, o.Identity), hookShape(want, o.Identity)) {
-			return nil, fmt.Errorf("%s is a shared or customized hook group; put agora's hook in its own group before replacing", path)
+			return nil, fmt.Errorf("%s is a shared or customized hook group; put smoot's hook in its own group before replacing", path)
 		}
 	}
 	if err := patch(&v, path, want); err != nil {
