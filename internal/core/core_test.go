@@ -1036,11 +1036,24 @@ func TestWaitersAreCapped(t *testing.T) {
 	}
 	_, err := f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a3", Timeout: time.Second})
 	wantCode(t, err, core.CodeTooManyWaiters)
+	if got := participant(t, f.get(t, "c"), "a3").Presence; got == core.PresenceWaiting {
+		t.Fatal("a refused wait marked a3 waiting")
+	}
 	cancel()
 	wg.Wait()
 
 	// Slots are released when waits end.
 	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a3"}))
+}
+
+func TestWaitAfterPastTheLog(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "a")
+	last := f.get(t, "c").LastSeq
+	_, err := f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a", After: new(last + 1), Timeout: time.Minute})
+	wantCode(t, err, core.CodeInvalid)
+	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a", After: new(last)}))
 }
 
 func TestStandingOf(t *testing.T) {

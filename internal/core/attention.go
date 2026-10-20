@@ -221,6 +221,12 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 	}
 	var c *conv
 	var after int64
+	entered := false
+	defer func() {
+		if entered {
+			s.hub.leave(c.id)
+		}
+	}()
 	err := s.visit(ctx, p, ns, name, wp.Agent, check, func(tx *wtx, cv *conv) error {
 		c = cv
 		pt, err := s.member(ctx, tx, c, wp.Agent)
@@ -229,18 +235,22 @@ func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp Wai
 		}
 		after = pt.ReadSeq
 		if wp.After != nil {
+			if *wp.After > c.LastSeq {
+				return errorf(CodeInvalid, "after %d is past the last message (#%d)", *wp.After, c.LastSeq)
+			}
 			after = *wp.After
 		}
+		// Take the slot before recording the wait, so a refused wait
+		// changes nothing.
+		if !s.hub.enter(c.id, s.opts.MaxWaiters) {
+			return errorf(CodeTooManyWaiters, "conversation %q already has %d waiters; retry later", name, s.opts.MaxWaiters)
+		}
+		entered = true
 		return s.touch(ctx, tx, c, wp.Agent, PresenceWaiting)
 	})
 	if err != nil {
 		return Digest{}, err
 	}
-
-	if !s.hub.enter(c.id, s.opts.MaxWaiters) {
-		return Digest{}, errorf(CodeTooManyWaiters, "conversation %q already has %d waiters; retry later", name, s.opts.MaxWaiters)
-	}
-	defer s.hub.leave(c.id)
 
 	timeout := wp.Timeout
 	if c.End == EndTimebox && c.EndsAt != nil {
