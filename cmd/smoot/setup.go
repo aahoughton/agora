@@ -237,9 +237,13 @@ func installSmootPath(flagPath string) (string, error) {
 		return "", err
 	}
 	// mise keeps each version in its own directory, so a path there breaks
-	// on the next upgrade; its shim stays put.
-	if strings.Contains(filepath.ToSlash(path), "/mise/installs/") {
-		return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path with the mise shim (usually ~/.local/share/mise/shims/smoot)", path)
+	// on the next upgrade; its shim, in the same data directory, stays put.
+	if root, _, ok := strings.Cut(filepath.ToSlash(path), "/mise/installs/"); ok {
+		shim := filepath.FromSlash(root + "/mise/shims/smoot")
+		if _, err := os.Stat(shim); err != nil {
+			return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path with the mise shim for smoot", path)
+		}
+		return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path %s", path, shellWord(shim))
 	}
 	info, err := os.Stat(path)
 	if err != nil {
