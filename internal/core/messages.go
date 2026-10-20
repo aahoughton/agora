@@ -293,70 +293,62 @@ type ReadResult struct {
 func (s *Service) Read(ctx context.Context, p Principal, ns, name string, rp ReadParams) (ReadResult, error) {
 	// Reading as an agent moves its read position, so it takes the right to
 	// participate; reading without one is a plain read.
-	action := ActionRead
 	if rp.Agent != "" {
-		action = ActionParticipate
+		return s.readAs(ctx, p, ns, name, rp)
 	}
-	if err := s.authorize(ctx, p, ns, action); err != nil {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
 		return ReadResult{}, err
 	}
-	if rp.Agent != "" {
-		if err := checkName("agent", rp.Agent); err != nil {
+	if err := rp.check(); err != nil {
+		return ReadResult{}, err
+	}
+	c, err := s.loadConvRead(ctx, ns, name)
+	if err != nil {
+		return ReadResult{}, err
+	}
+	var after int64
+	if rp.After != nil {
+		after = *rp.After
+	}
+	if rp.Tail > 0 {
+		tailAfter, err := s.tailStart(ctx, s.db, c, rp.Tail, "")
+		if err != nil {
 			return ReadResult{}, err
 		}
+		after = max(after, tailAfter)
 	}
+	out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
+	out, _ = capBytes(out, 0, rp.MaxBytes)
+	markMessages(p, out.Messages)
+	return out, err
+}
+
+// check validates rp and fills in its default limit.
+func (rp *ReadParams) check() error {
 	switch {
 	case rp.Limit == 0:
 		rp.Limit = DefaultReadLimit
 	case rp.Limit < 0 || rp.Limit > MaxReadLimit:
-		return ReadResult{}, errorf(CodeInvalid, "limit must be between 1 and %d", MaxReadLimit)
+		return errorf(CodeInvalid, "limit must be between 1 and %d", MaxReadLimit)
 	}
 	if rp.After != nil && *rp.After < 0 {
-		return ReadResult{}, errorf(CodeInvalid, "after must not be negative")
+		return errorf(CodeInvalid, "after must not be negative")
 	}
 	switch {
 	case rp.Tail < 0 || rp.Tail > MaxReadLimit:
-		return ReadResult{}, errorf(CodeInvalid, "tail must be between 1 and %d", MaxReadLimit)
+		return errorf(CodeInvalid, "tail must be between 1 and %d", MaxReadLimit)
 	case rp.Tail > 0 && rp.After != nil:
-		return ReadResult{}, errorf(CodeInvalid, "use tail or after, not both")
+		return errorf(CodeInvalid, "use tail or after, not both")
 	case rp.Tail > 0:
 		rp.Limit = rp.Tail
 	}
+	return nil
+}
 
-	if rp.Agent == "" {
-		c, err := s.loadConvRead(ctx, ns, name)
-		if err != nil {
-			return ReadResult{}, err
-		}
-		var after int64
-		if rp.After != nil {
-			after = *rp.After
-		}
-		if rp.Tail > 0 {
-			tailAfter, err := s.tailStart(ctx, s.db, c, rp.Tail, "")
-			if err != nil {
-				return ReadResult{}, err
-			}
-			after = max(after, tailAfter)
-		}
-		out, _, err := s.page(ctx, s.db, c, after, rp.Limit, "")
-		out, _ = capBytes(out, 0, rp.MaxBytes)
-		markMessages(p, out.Messages)
-		return out, err
-	}
-
+// readAs is Read as an agent, which moves its read position.
+func (s *Service) readAs(ctx context.Context, p Principal, ns, name string, rp ReadParams) (ReadResult, error) {
 	var out ReadResult
-	if err := s.settle(ctx, ns, name); err != nil {
-		return ReadResult{}, err
-	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, rp.Agent); err != nil {
-			return err
-		}
+	err := s.visit(ctx, p, ns, name, rp.Agent, rp.check, func(tx *wtx, c *conv) error {
 		pt, err := s.member(ctx, tx, c, rp.Agent)
 		if err != nil {
 			return err

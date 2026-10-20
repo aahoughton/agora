@@ -44,8 +44,10 @@ type Options struct {
 	Wording *wording.Wording
 	// WriteLimit caps the writes (start, join, say, observe, conclude,
 	// leave, close, presence and admin changes) each account may make per
-	// minute; 0 is no limit. The anonymous principal (auth mode none) is
-	// never limited.
+	// minute; 0 is no limit. An agent's reads and waits, which move its
+	// read position and presence, draw on a second allowance of the same
+	// size, so posting never stops an agent from catching up. The anonymous
+	// principal (auth mode none) is never limited.
 	WriteLimit int
 	// RecheckEvery is how often a blocked Wait or Follow re-checks that
 	// its caller is still allowed, so revoking a credential or a
@@ -62,6 +64,8 @@ type Service struct {
 	opts   Options
 	hub    hub
 	writes *ratelimit.Limiter
+	// visits limits an agent's reads and waits (see Options.WriteLimit).
+	visits *ratelimit.Limiter
 	// writer admits one write transaction at a time, so this process's
 	// writes queue here (in order, and cancelable) instead of spinning on
 	// SQLite's lock.
@@ -105,6 +109,7 @@ func New(db *sql.DB, opts Options) *Service {
 	}
 	if opts.WriteLimit > 0 {
 		s.writes = ratelimit.New(opts.WriteLimit, time.Minute, 0, opts.Now)
+		s.visits = ratelimit.New(opts.WriteLimit, time.Minute, 0, opts.Now)
 	}
 	return s
 }
@@ -125,11 +130,20 @@ func (s *Service) authorizeIn(ctx context.Context, q querier, p Principal, ns st
 
 // limitWrite takes one write from p's allowance.
 func (s *Service) limitWrite(p Principal) error {
-	if s.writes == nil || p.IsAnonymous() {
+	return limit(s.writes, p, "writes")
+}
+
+// limitVisit takes one agent read or wait from p's allowance.
+func (s *Service) limitVisit(p Principal) error {
+	return limit(s.visits, p, "reads and waits")
+}
+
+func limit(l *ratelimit.Limiter, p Principal, what string) error {
+	if l == nil || p.IsAnonymous() {
 		return nil
 	}
-	if ok, wait := s.writes.Allow(strconv.FormatInt(p.AccountID, 10)); !ok {
-		return RateLimited("writes", wait)
+	if ok, wait := l.Allow(strconv.FormatInt(p.AccountID, 10)); !ok {
+		return RateLimited(what, wait)
 	}
 	return nil
 }

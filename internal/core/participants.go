@@ -199,10 +199,20 @@ func (s *Service) checkOwner(ctx context.Context, q querier, c *conv, p Principa
 // validation, and settles a due timebox; then, in a write transaction, it
 // loads the conversation and checks that p may act as agent there.
 func (s *Service) act(ctx context.Context, p Principal, ns, name, agent string, check func() error, fn func(tx *wtx, c *conv) error) error {
+	return s.actLimited(ctx, p, ns, name, agent, s.limitWrite, check, fn)
+}
+
+// visit is act for an agent's reads and waits, which draw on their own
+// allowance.
+func (s *Service) visit(ctx context.Context, p Principal, ns, name, agent string, check func() error, fn func(tx *wtx, c *conv) error) error {
+	return s.actLimited(ctx, p, ns, name, agent, s.limitVisit, check, fn)
+}
+
+func (s *Service) actLimited(ctx context.Context, p Principal, ns, name, agent string, limit func(Principal) error, check func() error, fn func(tx *wtx, c *conv) error) error {
 	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
 		return err
 	}
-	if err := s.limitWrite(p); err != nil {
+	if err := limit(p); err != nil {
 		return err
 	}
 	if err := checkName("agent", agent); err != nil {

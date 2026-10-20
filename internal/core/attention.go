@@ -210,33 +210,19 @@ type WaitParams struct {
 // concludes, or Timeout passes, then returns a Digest. A timeout is a normal
 // result with TimedOut set. While blocked the agent's presence is `waiting`.
 func (s *Service) Wait(ctx context.Context, p Principal, ns, name string, wp WaitParams) (Digest, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return Digest{}, err
-	}
-	if err := checkName("agent", wp.Agent); err != nil {
-		return Digest{}, err
-	}
-	if wp.Timeout < 0 {
-		return Digest{}, errorf(CodeInvalid, "timeout must not be negative")
-	}
-	if wp.After != nil && *wp.After < 0 {
-		return Digest{}, errorf(CodeInvalid, "after must not be negative")
-	}
-
-	if err := s.settle(ctx, ns, name); err != nil {
-		return Digest{}, err
+	check := func() error {
+		if wp.Timeout < 0 {
+			return errorf(CodeInvalid, "timeout must not be negative")
+		}
+		if wp.After != nil && *wp.After < 0 {
+			return errorf(CodeInvalid, "after must not be negative")
+		}
+		return nil
 	}
 	var c *conv
 	var after int64
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		var err error
-		c, err = s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, wp.Agent); err != nil {
-			return err
-		}
+	err := s.visit(ctx, p, ns, name, wp.Agent, check, func(tx *wtx, cv *conv) error {
+		c = cv
 		pt, err := s.member(ctx, tx, c, wp.Agent)
 		if err != nil {
 			return err

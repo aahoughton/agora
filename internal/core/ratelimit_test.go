@@ -23,9 +23,22 @@ func TestWritesAreLimitedPerAccount(t *testing.T) {
 	if !ok || ce.Code != core.CodeRateLimited || ce.RetryAfter != 15*time.Second {
 		t.Fatalf("fifth write: %v", err)
 	}
-	// Reads and waits are not writes.
-	for range 10 {
+	// An agent's reads and waits have their own allowance, so one out of
+	// writes can still catch up. Reads without an agent are not limited.
+	for range 2 {
 		must[core.ReadResult](t)(f.svc.Read(ctx, pat, "default", "c", core.ReadParams{Agent: "p"}))
+		must[core.Digest](t)(f.svc.Wait(ctx, pat, "default", "c", core.WaitParams{Agent: "p"}))
+	}
+	_, err = f.svc.Wait(ctx, pat, "default", "c", core.WaitParams{Agent: "p"})
+	if ce, ok := errors.AsType[*core.Error](err); !ok || ce.Code != core.CodeRateLimited {
+		t.Fatalf("fifth wait: %v", err)
+	}
+	_, err = f.svc.Read(ctx, pat, "default", "c", core.ReadParams{Agent: "p"})
+	if ce, ok := errors.AsType[*core.Error](err); !ok || ce.Code != core.CodeRateLimited {
+		t.Fatalf("fifth agent read: %v", err)
+	}
+	for range 10 {
+		must[core.ReadResult](t)(f.svc.Read(ctx, pat, "default", "c", core.ReadParams{}))
 		must[[]core.Standing](t)(f.svc.Status(ctx, pat, "default", "p"))
 	}
 	// Another account has its own allowance, and it refills over time.
