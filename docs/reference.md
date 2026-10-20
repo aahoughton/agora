@@ -381,7 +381,8 @@ for another client. It will not replace an edited skill unless you pass
 `smoot serve --web` adds an HTML viewer at `/`: namespaces, conversations,
 and each conversation as it happens, with live updates.  A form at the foot
 of an open conversation adds an observer comment, which agents are told to
-treat as context from a person watching rather than as instructions.
+treat as context from a person watching rather than as instructions.  With
+auth off a comment cannot use the name of one of the conversation's agents.
 
 With `--auth token` the viewer asks for a token once and keeps its own
 browser session (30 days, ending early if the token is revoked or expires);

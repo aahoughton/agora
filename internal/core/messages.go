@@ -253,6 +253,16 @@ func (s *Service) Observe(ctx context.Context, p Principal, ns, name string, op 
 		if err := openOrError(c); err != nil {
 			return err
 		}
+		if p.IsAnonymous() {
+			// Only auth mode none lets an observer pick its name.
+			pt, err := s.participant(ctx, tx, c.id, op.Name)
+			if err != nil {
+				return err
+			}
+			if pt != nil {
+				return errorf(CodeNameActive, "%q is a participant in this conversation; comment under another name", op.Name)
+			}
+		}
 		out, err = s.appendMsg(ctx, tx, c, KindObserver, op.Name, op.Body, nil)
 		return err
 	})
