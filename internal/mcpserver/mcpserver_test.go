@@ -802,3 +802,35 @@ func TestSearchTool(t *testing.T) {
 		t.Fatalf("since the next day = %q", out)
 	}
 }
+
+type anonymousAuth struct{}
+
+func (anonymousAuth) Authenticate(*http.Request) (core.Principal, error) {
+	return core.Anonymous(), nil
+}
+
+// TestAnonymousSessionsShareOnlyTheServerCap: with auth off every client is
+// the anonymous principal, so the per-account cap would let a few clients
+// that never close their sessions lock out the rest; only the server-wide
+// cap applies.
+func TestAnonymousSessionsShareOnlyTheServerCap(t *testing.T) {
+	h := mcpserver.Handler(newService(t), anonymousAuth{}, mcpserver.Options{MaxSessionsPerAccount: 1, MaxSessions: 3})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	open := func() error {
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(t.Context(),
+			&mcp.StreamableClientTransport{Endpoint: srv.URL}, nil)
+		if err == nil {
+			t.Cleanup(func() { _ = cs.Close() })
+		}
+		return err
+	}
+	for i := range 3 {
+		if err := open(); err != nil {
+			t.Fatalf("session %d: %v", i+1, err)
+		}
+	}
+	if err := open(); err == nil {
+		t.Fatal("a session past the server cap was allowed")
+	}
+}

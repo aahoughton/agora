@@ -139,6 +139,10 @@ login page and its cookie is cleared.  Behind a
 reverse proxy, list the proxy in `--trusted-proxies` so the limit counts the
 real client addresses from `X-Forwarded-For`.
 
+An account may hold 64 open MCP sessions and the server 1024; a session
+closes after two hours idle.  With auth off every client shares one
+anonymous account, so only the server's count applies.
+
 ### Host checks
 
 Browsers cannot post to the server from another site, and the server answers

@@ -48,7 +48,7 @@ type Options struct {
 	// MaxSessionsPerAccount and MaxSessions cap the open MCP sessions of one
 	// account and of the whole server; defaults DefaultMaxSessionsPerAccount
 	// and DefaultMaxSessions. The anonymous principal (auth mode none)
-	// counts as one account.
+	// stands for every client, so only the server-wide cap applies to it.
 	MaxSessionsPerAccount int
 	MaxSessions           int
 	// Authenticator, if set, authenticates each tool call from its HTTP
