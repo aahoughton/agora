@@ -174,10 +174,13 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	var viewer http.Handler
 	if cfg.Web {
 		// Browsers sign in with a session cookie; the API and MCP take
-		// bearer tokens only.
+		// bearer tokens only. A rejected cookie is not counted as a failed
+		// sign-in: the server issued it, it cannot be guessed, and a tab
+		// left open on an ended session keeps sending it. Tokens pasted at
+		// the login page are counted there.
 		viewerAuth := authn
 		if cfg.Auth == config.AuthToken {
-			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Failures: failures, Activity: activity}
+			viewerAuth = auth.Limited{Next: auth.Session{Service: svc}, Activity: activity}
 		}
 		viewer, err = web.Handler(svc, viewerAuth, web.Options{
 			ThemeDir: cfg.ThemeDir, Logger: logger, Version: version,
@@ -194,6 +197,11 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", cfg.Addr)
 	if err != nil {
+		return err
+	}
+	hosts, err := allowedHosts(cfg, ln.Addr())
+	if err != nil {
+		_ = ln.Close()
 		return err
 	}
 	if cfg.Auth == config.AuthNone {
@@ -214,7 +222,7 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 	srv := &http.Server{
 		Handler: server.New(server.Deps{
 			Service: svc, Authenticator: authn, Logger: logger, MCPMaxWait: cfg.MCPMaxWait, Version: version, AuthMode: string(cfg.Auth),
-			AllowedHosts: allowedHosts(cfg, ln.Addr()), Web: viewer, Activity: activity, PublicURL: cfg.PublicURL,
+			AllowedHosts: hosts, Web: viewer, Activity: activity, PublicURL: cfg.PublicURL,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -240,18 +248,26 @@ func serve(ctx context.Context, cfg config.Serve, logger *slog.Logger, ready cha
 
 // allowedHosts resolves the Host allowlist: explicit configuration wins;
 // otherwise a loopback listener answers only loopback names and any other
-// listener answers any host.
-func allowedHosts(cfg config.Serve, addr net.Addr) []string {
+// listener answers any host. It refuses that last case with auth off,
+// where a web page could reach the open server by rebinding a name.
+func allowedHosts(cfg config.Serve, addr net.Addr) ([]string, error) {
 	switch {
 	case cfg.AnyHost:
-		return nil
+		return nil, nil
 	case len(cfg.AllowedHosts) > 0:
-		return cfg.AllowedHosts
+		return cfg.AllowedHosts, nil
 	}
-	if tcp, ok := addr.(*net.TCPAddr); ok && tcp.IP.IsLoopback() {
-		return server.LoopbackHosts
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return nil, nil
 	}
-	return nil
+	if tcp.IP.IsLoopback() {
+		return server.LoopbackHosts, nil
+	}
+	if cfg.Auth == config.AuthNone {
+		return nil, fmt.Errorf("listening on %s with auth off needs --allowed-hosts: list the names clients use, or * for any", addr)
+	}
+	return nil, nil
 }
 
 // staleScratch is how old a scratch directory left by a load or backup must

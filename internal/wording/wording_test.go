@@ -16,7 +16,7 @@ func TestEmbeddedWordingLoads(t *testing.T) {
 			t.Errorf("%s is empty", k)
 		}
 	}
-	if got := w.Instructions("http://h:1", "team"); !strings.Contains(got, "--namespace team --url http://h:1") {
+	if got := w.Instructions("http://h:1", "team"); !strings.Contains(got, "--namespace team --url 'http://h:1'") {
 		t.Fatalf("instructions recipe: %s", got)
 	}
 	if got := w.Instructions("", "team"); strings.Contains(got, "--url") {

@@ -417,6 +417,9 @@ func (v *viewer) fail(w http.ResponseWriter, err error, data Page) {
 func (v *viewer) principal(w http.ResponseWriter, r *http.Request) (core.Principal, string, bool) {
 	p, err := v.authn.Authenticate(r)
 	if err != nil {
+		if _, cerr := r.Cookie(auth.SessionCookie); cerr == nil && core.CodeOf(err) == core.CodeUnauthorized {
+			v.clearSession(w)
+		}
 		switch {
 		case v.opts.Login && core.CodeOf(err) == core.CodeUnauthorized && strings.HasSuffix(r.URL.Path, "/events"):
 			http.Error(w, "sign in", http.StatusUnauthorized)
@@ -913,9 +916,14 @@ func (v *viewer) logout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	v.clearSession(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// clearSession tells the browser to drop its session cookie.
+func (v *viewer) clearSession(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: auth.SessionCookie, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: v.opts.SecureCookies,
 	})
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

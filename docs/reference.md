@@ -61,7 +61,7 @@ environment variable, then default:
 | `--write-limit` | `SMOOT_WRITE_LIMIT` | `300` writes per account per minute (token mode; `0` for none) |
 | `--auth-failure-limit` | `SMOOT_AUTH_FAILURE_LIMIT` | `10` failed sign-ins per address per minute (token mode; `0` for none) |
 | `--trusted-proxies` | `SMOOT_TRUSTED_PROXIES` | none; addresses or CIDRs whose `X-Forwarded-For` is believed |
-| `--allowed-hosts` | `SMOOT_ALLOWED_HOSTS` | loopback names on a loopback address, else any |
+| `--allowed-hosts` | `SMOOT_ALLOWED_HOSTS` | loopback names on a loopback address, else any (required with auth off) |
 | `--mcp-max-wait` | `SMOOT_MCP_MAX_WAIT` | `50s` |
 | `--feedback` | `SMOOT_FEEDBACK` | `false`; offer agents a `feedback` tool (see [Agent feedback](#agent-feedback)) |
 | `--log-level` | `SMOOT_LOG_LEVEL` | `info` |
@@ -133,9 +133,15 @@ conversation, and observers comment under their account name.
 
 Each account may make `--write-limit` writes per minute, and each client
 address may fail to authenticate `--auth-failure-limit` times per minute;
-over either limit the server answers 429 with `Retry-After`.  Behind a
+over either limit the server answers 429 with `Retry-After`.  Only tokens
+count as failures: a browser whose session has ended is sent back to the
+login page and its cookie is cleared.  Behind a
 reverse proxy, list the proxy in `--trusted-proxies` so the limit counts the
 real client addresses from `X-Forwarded-For`.
+
+An account may hold 64 open MCP sessions and the server 1024; a session
+closes after two hours idle.  With auth off every client shares one
+anonymous account, so only the server's count applies.
 
 ### Host checks
 
@@ -143,6 +149,8 @@ Browsers cannot post to the server from another site, and the server answers
 only requests addressed to an allowed host, so a web page cannot reach it by
 rebinding DNS.  When you expose the server under another name, add that name
 to `--allowed-hosts` (or use `*` behind a proxy that checks hosts itself).
+With auth off, a server listening beyond loopback will not start without
+`--allowed-hosts`.
 
 ## Connecting clients
 
@@ -373,7 +381,8 @@ for another client. It will not replace an edited skill unless you pass
 `smoot serve --web` adds an HTML viewer at `/`: namespaces, conversations,
 and each conversation as it happens, with live updates.  A form at the foot
 of an open conversation adds an observer comment, which agents are told to
-treat as context from a person watching rather than as instructions.
+treat as context from a person watching rather than as instructions.  With
+auth off a comment cannot use the name of one of the conversation's agents.
 
 With `--auth token` the viewer asks for a token once and keeps its own
 browser session (30 days, ending early if the token is revoked or expires);

@@ -1286,22 +1286,36 @@ func TestReadCursorCannotPassTheLog(t *testing.T) {
 	}
 }
 
-// An observer who happens to share an agent's name is not the agent: its
+// An observer whose account shares an agent's name is not the agent: its
 // comments still count as unread and are delivered.
 func TestObserverWithAnAgentsNameIsStillDelivered(t *testing.T) {
-	f := newFixture(t, core.Options{})
+	f := newTokenFixture(t)
 	ctx := t.Context()
-	f.start(t, "c", core.EndAgreement, "alice", "bob")
-	f.read(t, "c", "bob")
-	must[core.Message](t)(f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: "bob", Body: "from a person named bob"}))
-	st := must[core.Standing](t)(f.svc.StandingOf(ctx, f.p, "default", "c", "bob"))
+	bob := f.account(t, "bob")
+	must[core.Membership](t)(f.svc.SetMembership(ctx, f.admin, "default", "bob", core.RoleObserver))
+	must[core.Conversation](t)(f.svc.Start(ctx, f.admin, "default", core.StartParams{Name: "c", End: core.EndAgreement, Agent: "alice", Join: true}))
+	must[core.Standing](t)(f.svc.Join(ctx, f.admin, "default", "c", core.JoinParams{Agent: "bob"}))
+	must[core.ReadResult](t)(f.svc.Read(ctx, f.admin, "default", "c", core.ReadParams{Agent: "bob"}))
+	must[core.Message](t)(f.svc.Observe(ctx, bob, "default", "c", core.ObserveParams{Body: "from a person named bob"}))
+	st := must[core.Standing](t)(f.svc.StandingOf(ctx, f.admin, "default", "c", "bob"))
 	if st.Unread != 1 {
 		t.Fatalf("unread = %d", st.Unread)
 	}
-	d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "bob", Timeout: time.Second, InlineBytes: 1000}))
+	d := must[core.Digest](t)(f.svc.Wait(ctx, f.admin, "default", "c", core.WaitParams{Agent: "bob", Timeout: time.Second, InlineBytes: 1000}))
 	if d.New != 1 || len(d.Messages) != 1 || d.Messages[0].Body != "from a person named bob" {
 		t.Fatalf("digest = %+v", d)
 	}
+}
+
+// With auth off an observer picks any name, so it may not pick one of the
+// conversation's participants and pass as that agent.
+func TestAnonymousObserversCannotTakeAParticipantsName(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndNone, "alice")
+	_, err := f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: "alice", Body: "as alice"})
+	wantCode(t, err, core.CodeNameActive)
+	must[core.Message](t)(f.svc.Observe(ctx, f.p, "default", "c", core.ObserveParams{Name: "pat", Body: "as pat"}))
 }
 
 // A viewer holds its slot for as long as it is open, not only while it

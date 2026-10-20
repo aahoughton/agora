@@ -98,10 +98,10 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cw.capture() // a handler that wrote nothing still ends its start
 }
 
-// admit refuses a new session past the per-account or total cap, after
-// dropping entries for sessions the SDK has closed. An admitted session
-// holds its place until record, so concurrent starts cannot pass a cap
-// together.
+// admit refuses a new session past the total cap, or past the per-account
+// cap for any principal but the anonymous one, after dropping entries for
+// sessions the SDK has closed. An admitted session holds its place until
+// record, so concurrent starts cannot pass a cap together.
 func (g *guard) admit(p core.Principal) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -117,7 +117,7 @@ func (g *guard) admit(p core.Principal) error {
 	}
 	all += len(g.owners)
 	switch {
-	case mine >= g.perAccount:
+	case mine >= g.perAccount && !p.IsAnonymous():
 		return fmt.Errorf("this account has %d open MCP sessions, the most allowed; end idle ones (they close after %s idle)", mine, g.ttl)
 	case all >= g.total:
 		return fmt.Errorf("the server has %d open MCP sessions, the most allowed; retry later", all)

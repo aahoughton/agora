@@ -68,9 +68,16 @@ const (
 	AuthToken AuthMode = "token"
 )
 
-// urlSafe are the characters a public URL may use: none a shell treats
-// specially, since agents are given it in a command.
+// urlSafe are the characters a public URL may use. Agents are given it in
+// a shell command, single-quoted (brackets, for IPv6 hosts, are glob
+// characters), and none of these ends a quote.
 const urlSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/%[]"
+
+// ShellSafeURL reports whether s uses only urlSafe characters, so it can
+// go single-quoted in a command given to an agent.
+func ShellSafeURL(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return !strings.ContainsRune(urlSafe, r) })
+}
 
 // Serve holds the settings for `smoot serve`.
 type Serve struct {
@@ -143,7 +150,7 @@ HTML viewer. Each flag also reads the environment variable it names.
 	feedback := fs.Bool("feedback", false, "offer agents a feedback tool for notes on smoot itself, read with smoot admin feedback (env "+EnvFeedback+"=true)")
 	auth := fs.String("auth", "", "auth mode: none or token (env "+EnvAuth+", default none)")
 	fs.StringVar(&cfg.ThemeDir, "theme-dir", "", "directory of theme files overriding the default HTML theme (env "+EnvThemeDir+")")
-	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any)")
+	allowed := fs.String("allowed-hosts", "", "comma-separated Host names to answer, or * for any (env "+EnvAllowedHosts+", default: loopback names on a loopback address, else any; required beyond loopback with auth off)")
 	publicURL := fs.String("public-url", "", "the URL browsers and agents reach the server at, e.g. https://smoot.example; MCP instructions quote it, and https marks session cookies Secure (env "+EnvPublicURL+")")
 	writeLimit := fs.String("write-limit", "", "writes per minute each account may make with --auth token; 0 for no limit (env "+EnvWriteLimit+", default "+strconv.Itoa(DefaultWriteLimit)+")")
 	failLimit := fs.String("auth-failure-limit", "", "failed sign-ins per minute per client address with --auth token; 0 for no limit (env "+EnvAuthFailureLimit+", default "+strconv.Itoa(DefaultAuthFailureLimit)+")")
@@ -213,7 +220,7 @@ HTML viewer. Each flag also reads the environment variable it names.
 		u, err := url.Parse(cfg.PublicURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
 			u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
-			strings.ContainsFunc(cfg.PublicURL, func(r rune) bool { return !strings.ContainsRune(urlSafe, r) }) {
+			!ShellSafeURL(cfg.PublicURL) {
 			return Serve{}, fmt.Errorf("serve: invalid public-url %q: want http(s)://host[:port][/path]", cfg.PublicURL)
 		}
 	}

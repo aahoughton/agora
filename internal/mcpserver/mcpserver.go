@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/aahoughton/smoot/internal/auth"
+	"github.com/aahoughton/smoot/internal/config"
 	"github.com/aahoughton/smoot/internal/core"
 	"github.com/aahoughton/smoot/internal/wording"
 )
@@ -48,7 +49,7 @@ type Options struct {
 	// MaxSessionsPerAccount and MaxSessions cap the open MCP sessions of one
 	// account and of the whole server; defaults DefaultMaxSessionsPerAccount
 	// and DefaultMaxSessions. The anonymous principal (auth mode none)
-	// counts as one account.
+	// stands for every client, so only the server-wide cap applies to it.
 	MaxSessionsPerAccount int
 	MaxSessions           int
 	// Authenticator, if set, authenticates each tool call from its HTTP
@@ -124,13 +125,18 @@ const (
 )
 
 // baseURL is the server URL as the client reached it, for the shell-wait
-// recipe in the instructions.
+// recipe in the instructions, or "" if the Host holds characters that
+// could end the recipe's quotes.
 func baseURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return scheme + "://" + r.Host
+	u := scheme + "://" + r.Host
+	if !config.ShellSafeURL(u) {
+		return ""
+	}
+	return u
 }
 
 type tools struct {

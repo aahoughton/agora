@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aahoughton/smoot/internal/auth"
 	"github.com/aahoughton/smoot/internal/config"
 	"github.com/aahoughton/smoot/internal/core"
 	"github.com/aahoughton/smoot/internal/server"
@@ -225,20 +226,85 @@ func TestAllowedHostsResolution(t *testing.T) {
 	loop := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8787}
 	wild := &net.TCPAddr{IP: net.IPv4zero, Port: 8787}
 	tests := []struct {
-		name string
-		cfg  config.Serve
-		addr net.Addr
-		want []string
+		name    string
+		cfg     config.Serve
+		addr    net.Addr
+		want    []string
+		refused bool
 	}{
-		{"loopback default", config.Serve{}, loop, server.LoopbackHosts},
-		{"wildcard default", config.Serve{}, wild, nil},
-		{"explicit wins", config.Serve{AllowedHosts: []string{"smoot.lan"}}, wild, []string{"smoot.lan"}},
-		{"star wins on loopback", config.Serve{AnyHost: true}, loop, nil},
+		{"loopback default", config.Serve{Auth: config.AuthNone}, loop, server.LoopbackHosts, false},
+		{"wildcard default with tokens", config.Serve{Auth: config.AuthToken}, wild, nil, false},
+		// Anyone's browser could reach an open server by rebinding a name.
+		{"wildcard default with auth off", config.Serve{Auth: config.AuthNone}, wild, nil, true},
+		{"explicit wins", config.Serve{Auth: config.AuthNone, AllowedHosts: []string{"smoot.lan"}}, wild, []string{"smoot.lan"}, false},
+		{"star wins on loopback", config.Serve{AnyHost: true}, loop, nil, false},
+		{"star allows any host with auth off", config.Serve{Auth: config.AuthNone, AnyHost: true}, wild, nil, false},
 	}
 	for _, tt := range tests {
-		if got := allowedHosts(tt.cfg, tt.addr); !slices.Equal(got, tt.want) {
-			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		got, err := allowedHosts(tt.cfg, tt.addr)
+		if (err != nil) != tt.refused || !slices.Equal(got, tt.want) {
+			t.Errorf("%s: got %v, %v", tt.name, got, err)
 		}
+	}
+}
+
+// TestEndedBrowserSessionsAreNotFailedSignIns: a tab left open on an ended
+// session keeps refreshing with its cookie. It is sent to sign in each
+// time, and uses none of its address's allowance for bad tokens.
+func TestEndedBrowserSessionsAreNotFailedSignIns(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	dbPath := filepath.Join(t.TempDir(), "smoot.db")
+	db, err := store.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.New(db, core.Options{Policy: core.RolePolicy()}).Bootstrap(ctx, "root"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Serve{DB: dbPath, Addr: "127.0.0.1:0", Auth: config.AuthToken, Web: true, AuthFailureLimit: 2}
+	ready, done := make(chan string, 1), make(chan error, 1)
+	go func() { done <- serve(ctx, cfg, slog.New(slog.DiscardHandler), ready) }()
+	var addr string
+	select {
+	case addr = <-ready:
+	case err := <-done:
+		t.Fatalf("serve exited early: %v", err)
+	}
+	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	get := func(path string, set func(*http.Request)) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		set(req)
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	for range 5 {
+		code := get("/n/default", func(r *http.Request) {
+			r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: core.SessionPrefix + "ended"})
+			r.Header.Set("Authorization", "Basic dXNlcjpwYXNz") // as from a proxy in front
+		})
+		if code != http.StatusSeeOther {
+			t.Fatalf("ended session = %d, want a redirect to sign in", code)
+		}
+	}
+	if code := get("/v1/namespaces", func(r *http.Request) { r.Header.Set("Authorization", "Bearer smoot_wrong") }); code != http.StatusUnauthorized {
+		t.Fatalf("first bad token after ended sessions = %d", code)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 
