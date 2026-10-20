@@ -17,8 +17,9 @@ const (
 	// EndNone: the conversation never concludes on its own. Nobody is
 	// expected to stay; the creator may close it.
 	EndNone EndCondition = "none"
-	// EndAgreement: concludes when no participant is still active and at
-	// least one has concluded.
+	// EndAgreement: once no participant is still active, concludes when
+	// every conclusion agrees to the same message or commit, or every one
+	// is BLOCKED; otherwise everyone who concluded is active again.
 	EndAgreement EndCondition = "agreement"
 	// EndCoordinator: concludes when the creator closes it.
 	EndCoordinator EndCondition = "coordinator"
