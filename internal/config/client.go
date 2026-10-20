@@ -165,11 +165,14 @@ func ReadTokenFile(path string) (string, error) {
 		return "", fmt.Errorf("token file: %w", err)
 	}
 	if len(b) > maxTokenFile {
-		return "", fmt.Errorf("token file %s must hold one token", path)
+		return "", fmt.Errorf("token file %s is over %d bytes; it must hold one token", path, maxTokenFile)
 	}
 	tok := strings.TrimSpace(string(b))
-	if tok == "" || strings.ContainsAny(tok, " \t\r\n") {
-		return "", fmt.Errorf("token file %s must hold one token", path)
+	if tok == "" {
+		return "", fmt.Errorf("token file %s is empty", path)
+	}
+	if strings.ContainsAny(tok, " \t\r\n") {
+		return "", fmt.Errorf("token file %s holds more than one word; it must hold one token", path)
 	}
 	return tok, nil
 }
