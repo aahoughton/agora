@@ -175,6 +175,15 @@ func ReadTokenFile(path string) (string, error) {
 	return tok, nil
 }
 
+// CheckName reports whether name is a valid agent or namespace name; kind
+// names it in the error.
+func CheckName(kind, name string) error {
+	if !nameRE.MatchString(name) {
+		return fmt.Errorf("invalid %s name %q", kind, name)
+	}
+	return nil
+}
+
 // AgentFlag registers --agent on fs. Call the returned function after
 // fs.Parse to resolve flag > env; the agent name is required.
 func AgentFlag(fs *flag.FlagSet) func(Getenv) (string, error) {
@@ -184,8 +193,8 @@ func AgentFlag(fs *flag.FlagSet) func(Getenv) (string, error) {
 		if agent == "" {
 			return "", fmt.Errorf("an agent name is required: pass --agent or set %s", EnvAgent)
 		}
-		if !nameRE.MatchString(agent) {
-			return "", fmt.Errorf("invalid agent name %q", agent)
+		if err := CheckName("agent", agent); err != nil {
+			return "", err
 		}
 		return agent, nil
 	}

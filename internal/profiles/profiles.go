@@ -27,8 +27,10 @@ var files embed.FS
 type Profile struct {
 	Name, Description, SkillsDir, ConfigDir, HomeEnv, HookContract string
 	ApprovalsNote                                                  string
-	installs                                                       map[string]recipe
-	order                                                          []string
+	// NoTokenFile, when set, says why the profile has no token-file setup.
+	NoTokenFile string
+	installs    map[string]recipe
+	order       []string
 }
 
 type recipe struct {
@@ -102,6 +104,8 @@ func parseProfile(raw string) (*Profile, error) {
 			p.HookContract = s.Body
 		case "approvals_note":
 			p.ApprovalsNote = s.Body
+		case "no_token_file":
+			p.NoTokenFile = s.Body
 		case "install_mcp", "install_stop_hook", "install_approvals":
 			meta, value, ok := strings.Cut(s.Body, "\n")
 			if !ok {
@@ -190,11 +194,15 @@ func (p *Profile) ResolveOperation(op Operation, getenv func(string) string) (Op
 }
 
 // Setup contains template inputs and selected optional sections. TokenEnv is
-// an environment variable name; no token value is accepted.
+// an environment variable name and TokenFile a path; no token value is
+// accepted. TokenFile requires SmootPath, the absolute path of the smoot
+// binary that the client launches as a stdio bridge.
 type Setup struct {
 	MCPURL       string
 	MaxWait      time.Duration
 	TokenEnv     string
+	TokenFile    string
+	SmootPath    string
 	HookCommand  string
 	ApproveTools bool
 	ToolNames    []string
@@ -202,7 +210,7 @@ type Setup struct {
 
 // Operations renders and resolves the selected sections in profile order.
 func (p *Profile) Operations(setup Setup, getenv func(string) string) ([]Operation, error) {
-	mcp, err := p.MCPOperation(setup.MCPURL, setup.MaxWait, setup.TokenEnv)
+	mcp, err := p.MCPOperation(setup)
 	if err != nil {
 		return nil, err
 	}
@@ -284,17 +292,31 @@ func (p *Profile) Resolve(path string, getenv func(string) string) (string, erro
 	return filepath.Join(root, filepath.FromSlash(rest)), nil
 }
 
-// MCPOperation renders setup without ever accepting a token value.
-func (p *Profile) MCPOperation(mcpURL string, maxWait time.Duration, tokenEnv string) (Operation, error) {
-	u, err := url.Parse(mcpURL)
+// MCPOperation renders the MCP entry for setup's URL, wait and token setup.
+func (p *Profile) MCPOperation(setup Setup) (Operation, error) {
+	if setup.TokenEnv != "" && setup.TokenFile != "" {
+		return Operation{}, errors.New("choose a token variable or a token file, not both")
+	}
+	if setup.TokenFile != "" {
+		if p.NoTokenFile != "" {
+			return Operation{}, fmt.Errorf("%s has no token file setup: %s", p.Name, p.NoTokenFile)
+		}
+		if !filepath.IsAbs(setup.TokenFile) || !filepath.IsAbs(setup.SmootPath) {
+			return Operation{}, errors.New("token file setup needs absolute token file and smoot paths")
+		}
+	}
+	u, err := url.Parse(setup.MCPURL)
 	if err != nil {
 		return Operation{}, err
 	}
 	ns := u.Query().Get("namespace")
 	u.RawQuery = ""
 	u.Path = strings.TrimSuffix(u.Path, "/mcp")
-	data := map[string]any{"MCPURLString": quoteString(mcpURL), "BaseURLString": quoteString(u.String()), "NamespaceString": quoteString(ns), "TimeoutMS": int64(0), "TimeoutSeconds": int64(0), "TokenEnv": tokenEnv, "TokenEnvString": quoteString(tokenEnv)}
-	if need := maxWait + 10*time.Second; need > 60*time.Second {
+	data := map[string]any{
+		"MCPURLString": quoteString(setup.MCPURL), "BaseURLString": quoteString(u.String()), "NamespaceString": quoteString(ns), "TimeoutMS": int64(0), "TimeoutSeconds": int64(0),
+		"TokenEnv": setup.TokenEnv, "TokenEnvString": quoteString(setup.TokenEnv), "TokenFile": setup.TokenFile, "TokenFileString": quoteString(setup.TokenFile), "SmootPathString": quoteString(setup.SmootPath),
+	}
+	if need := setup.MaxWait + 10*time.Second; need > 60*time.Second {
 		data["TimeoutMS"] = need.Milliseconds()
 		data["TimeoutSeconds"] = int64((need + time.Second - 1) / time.Second)
 	}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/fs"
 	"net/url"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -23,9 +25,9 @@ func clientUsage() string {
 
 Set up an agent client (%s) to use smoot.
 
-  config NAME [--stop-hook] [--with-token] [--approve-tools]
+  config NAME [--stop-hook [--agent NAME]] [--with-token | --with-token-file [--token-file PATH] [--smoot-path PATH]] [--approve-tools]
                                              print the client setup
-  install NAME [--stop-hook] [--with-token] [--approve-tools] [--dry-run] [--force]
+  install NAME [same flags as config] [--dry-run] [--force]
                                              install config and skills
   skills (NAME | --dir DIR) [--force]         install smoot's skills where it reads them
 `, strings.Join(profiles.Names(), ", "))
@@ -70,6 +72,10 @@ config prints the setup; install writes config and skills.
 --max-wait must match the server's --mcp-max-wait so the client allows
 waits that long. --stop-hook includes a Stop hook that keeps a session
 from ending while it is expected in a conversation.
+--with-token-file sets the client up to launch smoot as a stdio bridge
+that reads the token from a file, for apps that do not see your shell's
+environment. The config names the token file and the smoot binary by
+absolute path.
 
 `, action, clientNames())
 		fs.PrintDefaults()
@@ -78,6 +84,10 @@ from ending while it is expected in a conversation.
 	maxWait := fs.Duration("max-wait", config.DefaultMCPMaxWait, "the server's --mcp-max-wait")
 	stopHook := fs.Bool("stop-hook", false, "include a Stop hook")
 	withToken := fs.Bool("with-token", false, "set the client up to send the token in "+config.EnvToken+", for a server with --auth token (the token itself is never printed)")
+	withTokenFile := fs.Bool("with-token-file", false, "set the client up to read the token from a file through the stdio bridge")
+	tokenFile := fs.String("token-file", "", "with --with-token-file, the token file (env "+config.EnvTokenFile+", default $XDG_CONFIG_HOME/smoot/token or ~/.config/smoot/token)")
+	smootPath := fs.String("smoot-path", "", "with --with-token-file, the smoot binary the client launches (default: smoot on PATH)")
+	hookAgent := fs.String("agent", "", "with --stop-hook, the agent name the hook checks, for clients without "+config.EnvAgent+" in their environment")
 	approveTools := fs.Bool("approve-tools", false, "pre-approve smoot's tools using the profile's approval setup")
 	var dryRun, force bool
 	if install {
@@ -105,13 +115,47 @@ from ending while it is expected in a conversation.
 	}
 	base := strings.TrimRight(cc.URL, "/")
 	mcpURL := base + "/mcp?namespace=" + url.QueryEscape(cc.Namespace)
-	tokenEnv := ""
-	if *withToken {
-		tokenEnv = config.EnvToken
+	if *withToken && *withTokenFile {
+		return flagError(stderr, errors.New("give --with-token or --with-token-file, not both"))
 	}
-	setup := profiles.Setup{MCPURL: mcpURL, MaxWait: *maxWait, TokenEnv: tokenEnv, ApproveTools: *approveTools}
+	if !*withTokenFile && (*tokenFile != "" || *smootPath != "") {
+		return flagError(stderr, errors.New("--token-file and --smoot-path need --with-token-file"))
+	}
+	if *hookAgent != "" && !*stopHook {
+		return flagError(stderr, errors.New("--agent needs --stop-hook"))
+	}
+	if *hookAgent != "" {
+		if err := config.CheckName("agent", *hookAgent); err != nil {
+			return flagError(stderr, err)
+		}
+	}
+	setup := profiles.Setup{MCPURL: mcpURL, MaxWait: *maxWait, ApproveTools: *approveTools}
+	if *withToken {
+		setup.TokenEnv = config.EnvToken
+	}
+	if *withTokenFile {
+		if p.NoTokenFile != "" {
+			return flagError(stderr, fmt.Errorf("%s has no token file setup: %s", name, p.NoTokenFile))
+		}
+		if setup.TokenFile, err = installTokenFile(*tokenFile, getenv); err != nil {
+			return flagError(stderr, err)
+		}
+		if setup.SmootPath, err = installSmootPath(*smootPath); err != nil {
+			return flagError(stderr, err)
+		}
+	}
 	if *stopHook {
-		setup.HookCommand = "smoot hook stop --url " + shellWord(base) + " --namespace " + shellWord(cc.Namespace)
+		program := "smoot"
+		if setup.SmootPath != "" {
+			program = shellWord(setup.SmootPath)
+		}
+		setup.HookCommand = program + " hook stop --url " + shellWord(base) + " --namespace " + shellWord(cc.Namespace)
+		if setup.TokenFile != "" {
+			setup.HookCommand += " --token-file " + shellWord(setup.TokenFile)
+		}
+		if *hookAgent != "" {
+			setup.HookCommand += " --agent " + shellWord(*hookAgent)
+		}
 	}
 	if *approveTools {
 		setup.ToolNames = wording.Default().Tools()
@@ -140,10 +184,16 @@ from ending while it is expected in a conversation.
 		for _, option := range []struct {
 			flag    string
 			enabled bool
-		}{{"--with-token", *withToken}, {"--stop-hook", *stopHook}, {"--approve-tools", *approveTools}} {
+		}{{"--with-token", *withToken}, {"--with-token-file", *withTokenFile}, {"--stop-hook", *stopHook}, {"--approve-tools", *approveTools}} {
 			if option.enabled {
 				preview = append(preview, option.flag)
 			}
+		}
+		if *withTokenFile {
+			preview = append(preview, "--token-file", setup.TokenFile, "--smoot-path", setup.SmootPath)
+		}
+		if *hookAgent != "" {
+			preview = append(preview, "--agent", *hookAgent)
 		}
 		for i, arg := range preview {
 			preview[i] = shellWord(arg)
@@ -152,6 +202,55 @@ from ending while it is expected in a conversation.
 	}
 
 	return exitOK
+}
+
+// installTokenFile returns the absolute path of the token file a client
+// should read, refusing one that a client would refuse.
+func installTokenFile(flagFile string, getenv config.Getenv) (string, error) {
+	path, err := config.TokenFile(flagFile, getenv)
+	if err != nil {
+		return "", err
+	}
+	if path == "" {
+		return "", errors.New("no default token file without HOME: pass --token-file")
+	}
+	if path, err = filepath.Abs(path); err != nil {
+		return "", err
+	}
+	if _, err := config.ReadTokenFile(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// installSmootPath returns the absolute path of the smoot binary a client
+// should launch. Apps started outside a shell get a minimal PATH, so the
+// config cannot rely on finding smoot by name.
+func installSmootPath(flagPath string) (string, error) {
+	path := flagPath
+	if path == "" {
+		var err error
+		if path, err = exec.LookPath("smoot"); err != nil {
+			return "", errors.New("smoot is not on PATH: pass --smoot-path")
+		}
+	}
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	// mise keeps each version in its own directory, so a path there breaks
+	// on the next upgrade; its shim stays put.
+	if strings.Contains(filepath.ToSlash(path), "/mise/installs/") {
+		return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path with the mise shim (usually ~/.local/share/mise/shims/smoot)", path)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return "", fmt.Errorf("%s is not an executable file", path)
+	}
+	return path, nil
 }
 
 // shellWord quotes s for a POSIX shell unless it is made only of

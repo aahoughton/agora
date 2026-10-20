@@ -225,3 +225,87 @@ func TestClientInstallSymlinkGuidance(t *testing.T) {
 		t.Fatalf("invalid manual command: %+v", r)
 	}
 }
+
+func TestClientInstallTokenFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("PI_CODING_AGENT_DIR", "")
+	tokenFile := filepath.Join(home, ".config", "smoot", "token")
+	if err := os.MkdirAll(filepath.Dir(tokenFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tokenFile, []byte("synthetic-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "bin")
+	smoot := filepath.Join(bin, "smoot")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(smoot, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	base := []string{"client", "install", "codex", "--url", "http://127.0.0.1:9100", "--namespace", "team"}
+
+	r := runCLI(t.Context(), "", append(base, "--with-token-file", "--stop-hook", "--agent", "codex-desk")...)
+	if r.code != exitOK {
+		t.Fatalf("install: %+v", r)
+	}
+	config, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooks, err := os.ReadFile(filepath.Join(home, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`command = "` + smoot + `"`, `"--token-file", "` + tokenFile + `"`} {
+		if !strings.Contains(string(config), want) {
+			t.Fatalf("config lacks %q:\n%s", want, config)
+		}
+	}
+	if want := smoot + " hook stop --url http://127.0.0.1:9100 --namespace team --token-file " + tokenFile + " --agent codex-desk"; !strings.Contains(string(hooks), want) {
+		t.Fatalf("hook lacks %q:\n%s", want, hooks)
+	}
+	for _, raw := range [][]byte{config, hooks} {
+		if strings.Contains(string(raw), "synthetic-token") {
+			t.Fatal("token value written to a config")
+		}
+	}
+
+	misePath := filepath.Join(t.TempDir(), "mise", "installs", "smoot", "1", "bin", "smoot")
+	shared := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(shared, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"both token setups", []string{"codex", "--with-token", "--with-token-file"}, "not both"},
+		{"token file without mode", []string{"codex", "--token-file", tokenFile}, "need --with-token-file"},
+		{"smoot path without mode", []string{"codex", "--smoot-path", smoot}, "need --with-token-file"},
+		{"agent without hook", []string{"codex", "--agent", "a"}, "--agent needs --stop-hook"},
+		{"bad agent", []string{"codex", "--stop-hook", "--agent", "bad name"}, "invalid agent name"},
+		{"pi", []string{"pi", "--with-token-file"}, "no token file setup"},
+		{"mise version path", []string{"codex", "--with-token-file", "--token-file", tokenFile, "--smoot-path", misePath}, "mise shim"},
+		{"missing token file", []string{"codex", "--with-token-file", "--token-file", filepath.Join(home, "nope")}, "no such file"},
+		{"shared token file", []string{"codex", "--with-token-file", "--token-file", shared}, "chmod 600"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			args := append([]string{"client", "install"}, tt.args...)
+			r := runCLI(t.Context(), "", args...)
+			if r.code == exitOK || !strings.Contains(r.stderr, tt.want) {
+				t.Fatalf("%v = %+v, want an error containing %q", tt.args, r, tt.want)
+			}
+			if entries, err := os.ReadDir(home); err != nil || len(entries) != 0 {
+				t.Fatalf("wrote files: %v, %v", entries, err)
+			}
+		})
+	}
+}

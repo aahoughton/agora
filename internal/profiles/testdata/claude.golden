@@ -23,7 +23,16 @@ claude mcp add-json --scope user smoot '{
 }'
 # Set SMOOT_TOKEN in the environment Claude Code runs in; it expands the header reference when connecting.
 
+## client config with a token file, server waits up to 4m0s
+claude mcp add-json --scope user smoot '{
+  "type": "stdio",
+  "command": "/home/u/bin/smoot",
+  "args": ["mcp", "--url", "http://127.0.0.1:8787", "--namespace", "default", "--token-file", "/home/u/.config/smoot/token"],
+  "timeout": 250000
+}'
+# Claude Code launches smoot as a stdio bridge that reads the token from /home/u/.config/smoot/token.
+
 ## stop hook
 # add to @/settings.json at hooks.Stop:
 {"hooks": [{"type": "command", "command": "smoot hook stop"}]}
-# Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.
+# Keeps a session in its expected smoot conversations. Does nothing without an agent name, from --agent or SMOOT_AGENT in the client's environment. A server with tokens also needs SMOOT_TOKEN there or --token-file.

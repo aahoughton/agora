@@ -108,11 +108,22 @@ func isolatedHome(t *testing.T) string {
 	return home
 }
 
+// operations renders p's setup with token "" (none), "SMOOT_TOKEN" (the
+// variable) or "file" (a token file through the stdio bridge).
 func operations(t *testing.T, p *Profile, url, token string) ([]Operation, string) {
 	t.Helper()
-	setup := Setup{MCPURL: url, MaxWait: 4 * time.Minute, TokenEnv: token, ApproveTools: p.Name == "claude" || p.Name == "antigravity", ToolNames: wording.Default().Tools()}
+	setup := Setup{MCPURL: url, MaxWait: 4 * time.Minute, ApproveTools: p.Name == "claude" || p.Name == "antigravity", ToolNames: wording.Default().Tools()}
+	program, hookArgs := "smoot", ""
+	switch token {
+	case "file":
+		setup.TokenFile, setup.SmootPath = "/home/u/.config/smoot/token", "/home/u/bin/smoot"
+		program, hookArgs = setup.SmootPath, " --token-file /home/u/.config/smoot/token --agent codex-desk"
+	case "":
+	default:
+		setup.TokenEnv = token
+	}
 	if p.HookContract != "" {
-		setup.HookCommand = "smoot hook stop --url http://127.0.0.1:8790 --namespace team"
+		setup.HookCommand = program + " hook stop --url http://127.0.0.1:8790 --namespace team" + hookArgs
 	}
 	ops, err := p.Operations(setup, os.Getenv)
 	if err != nil {
@@ -148,10 +159,13 @@ func tree(t *testing.T, dir string) map[string]string {
 func TestInstallProfiles(t *testing.T) {
 	clientFixture(t)
 	for _, name := range Names() {
-		for _, token := range []string{"", "SMOOT_TOKEN"} {
+		for _, token := range []string{"", "SMOOT_TOKEN", "file"} {
 			t.Run(name+"/"+token, func(t *testing.T) {
-				home := isolatedHome(t)
 				p, _ := Get(name)
+				if token == "file" && p.NoTokenFile != "" {
+					t.Skip("no token file setup")
+				}
+				home := isolatedHome(t)
 				ops, dir := operations(t, p, "http://127.0.0.1:8790/mcp?namespace=team", token)
 				install := func(dry bool) string {
 					t.Helper()
@@ -191,10 +205,7 @@ func TestInstallProfiles(t *testing.T) {
 					rel, _ := filepath.Rel(home, op.File)
 					fmt.Fprintf(&config, "## %s\n%s\n", rel, first[rel])
 				}
-				suffix := ""
-				if token != "" {
-					suffix = "-token"
-				}
+				suffix := map[string]string{"": "", "SMOOT_TOKEN": "-token", "file": "-token-file"}[token]
 				golden(t, name+"-installed"+suffix, config.String())
 				for _, skill := range []string{"smoot", "convene"} {
 					if _, err := os.Stat(filepath.Join(dir, skill, "SKILL.md")); err != nil {

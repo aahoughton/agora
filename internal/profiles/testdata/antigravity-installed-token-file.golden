@@ -1,0 +1,33 @@
+## .gemini/config/mcp_config.json
+{"mcpServers": {"smoot": {"args": [
+	"mcp",
+	"--url",
+	"http://127.0.0.1:8790",
+	"--namespace",
+	"team",
+	"--token-file",
+	"/home/u/.config/smoot/token"
+], "command": "/home/u/bin/smoot", "timeoutSeconds": 250}}}
+
+## .gemini/config/hooks.json
+{"smoot": {"Stop": [{
+	"command": "/home/u/bin/smoot hook stop --url http://127.0.0.1:8790 --namespace team --token-file /home/u/.config/smoot/token --agent codex-desk --client antigravity",
+	"type":    "command"
+}]}}
+
+## .gemini/antigravity-cli/settings.json
+{"permissions": {"allow": [
+	"mcp(smoot/close)",
+	"mcp(smoot/conclude)",
+	"mcp(smoot/feedback)",
+	"mcp(smoot/join)",
+	"mcp(smoot/leave)",
+	"mcp(smoot/list)",
+	"mcp(smoot/presence)",
+	"mcp(smoot/read)",
+	"mcp(smoot/say)",
+	"mcp(smoot/search)",
+	"mcp(smoot/start)",
+	"mcp(smoot/status)",
+	"mcp(smoot/wait)"
+]}}

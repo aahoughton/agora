@@ -16,9 +16,14 @@ CODEX_HOME
 claude
 
 ## install_mcp
-{"file":"@/config.toml","op":"toml-table","path":["mcp_servers","smoot"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Codex runs in for bearer-token authentication.{{end}}"}
+{"file":"@/config.toml","op":"toml-table","path":["mcp_servers","smoot"],"note":"{{if .TokenEnv}}Set {{.TokenEnv}} in the environment Codex runs in for bearer-token authentication.{{end}}{{if .TokenFile}}Codex launches smoot as a stdio bridge that reads the token from {{.TokenFile}}.{{end}}"}
 [mcp_servers.smoot]
+{{- if .TokenFile}}
+command = {{.SmootPathString}}
+args = ["mcp", "--url", {{.BaseURLString}}, "--namespace", {{.NamespaceString}}, "--token-file", {{.TokenFileString}}]
+{{- else}}
 url = {{.MCPURLString}}
+{{- end}}
 {{- if .TokenEnv}}
 bearer_token_env_var = {{.TokenEnvString}}
 {{- end}}
@@ -28,7 +33,7 @@ tool_timeout_sec = {{.TimeoutSeconds}}
 {{- end}}
 
 ## install_stop_hook
-{"file":"@/hooks.json","op":"json-append","path":["hooks","Stop"],"identity":"smoot hook stop","note":"Keeps a session in its expected smoot conversations. Does nothing unless SMOOT_AGENT is set in the client's environment; set SMOOT_TOKEN there too for a server with tokens.\nTrust this hook with /hooks in the Codex CLI."}
+{"file":"@/hooks.json","op":"json-append","path":["hooks","Stop"],"identity":"smoot hook stop","note":"Keeps a session in its expected smoot conversations. Does nothing without an agent name, from --agent or SMOOT_AGENT in the client's environment. A server with tokens also needs SMOOT_TOKEN there or --token-file.\nTrust this hook with /hooks in the Codex CLI."}
 {"hooks": [{"type": "command", "command": {{.CommandString}}, "statusMessage": "smoot: checking conversations"}]}
 
 ## approvals_note

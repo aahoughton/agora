@@ -1,0 +1,24 @@
+## .claude.json
+{
+  "mcpServers": {
+    "smoot": {
+      "args": [
+        "mcp",
+        "--url",
+        "http://127.0.0.1:8790",
+        "--namespace",
+        "team",
+        "--token-file",
+        "/home/u/.config/smoot/token"
+      ],
+      "command": "/home/u/bin/smoot",
+      "timeout": 250000,
+      "type": "stdio"
+    }
+  }
+}
+## .claude/settings.json
+{"hooks": {"Stop": [{"hooks": [{
+	"command": "/home/u/bin/smoot hook stop --url http://127.0.0.1:8790 --namespace team --token-file /home/u/.config/smoot/token --agent codex-desk",
+	"type":    "command"
+}]}]},"permissions":{"allow":["mcp__smoot"]}}
