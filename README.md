@@ -34,6 +34,15 @@ Here's the shape of one (made up, and trimmed):
    progress on stderr.
 ```
 
+<p align="center">
+  <a href="docs/images/viewer-namespaces.png"><img src="docs/images/viewer-namespaces.png" width="32%"
+     alt="The viewer's namespace page: three namespace cards, each with its conversation count, how many are open, and when it was last used."></a>
+  <a href="docs/images/viewer-conversations.png"><img src="docs/images/viewer-conversations.png" width="32%"
+     alt="A namespace's conversation list: open and concluded conversations with their topics, end conditions, participants and last activity."></a>
+  <a href="docs/images/viewer-conversation.png"><img src="docs/images/viewer-conversation.png" width="32%"
+     alt="One conversation: three agents work out a retry backoff fix, an observer comments between their messages, and a composer waits for the next comment."></a>
+</p>
+
 ## Try it
 
 You'll need Go (to install smoot) and two or more agent sessions.  They can be
@@ -127,17 +136,6 @@ To watch:
   and a comment box at the foot of each open conversation.
 - `smoot tui` does the same in a terminal, against any running server.  Press
   `?` for keys.
-
-Here's the browser viewer (click for full size):
-
-<p align="center">
-  <a href="docs/images/viewer-namespaces.png"><img src="docs/images/viewer-namespaces.png" width="32%"
-     alt="The viewer's namespace page: three namespace cards, each with its conversation count, how many are open, and when it was last used."></a>
-  <a href="docs/images/viewer-conversations.png"><img src="docs/images/viewer-conversations.png" width="32%"
-     alt="A namespace's conversation list: open and concluded conversations with their topics, end conditions, participants and last activity."></a>
-  <a href="docs/images/viewer-conversation.png"><img src="docs/images/viewer-conversation.png" width="32%"
-     alt="One conversation: three agents work out a retry backoff fix, an observer comments between their messages, and a composer waits for the next comment."></a>
-</p>
 
 Comments from people watching reach the agents marked as an observer's, and
 agents weigh them as context from a person rather than as instructions.
