@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,6 +19,24 @@ import (
 	"github.com/aahoughton/smoot/internal/server"
 	"github.com/aahoughton/smoot/internal/store"
 )
+
+// TestMain gives the package a scratch HOME, so commands that look for a
+// default token file never read the developer's.
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "smoot-test-home")
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("HOME", home); err != nil {
+		panic(err)
+	}
+	if err := os.Unsetenv("XDG_CONFIG_HOME"); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(home)
+	os.Exit(code)
+}
 
 func testEnv(k string) string {
 	if k == "HOME" {

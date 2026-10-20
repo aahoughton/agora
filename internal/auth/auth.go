@@ -35,7 +35,7 @@ func (b Bearer) Authenticate(r *http.Request) (core.Principal, error) {
 	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 		return core.Principal{}, &core.Error{
 			Code:    core.CodeUnauthorized,
-			Message: "send Authorization: Bearer <token> (smoot clients read --token or SMOOT_TOKEN)",
+			Message: "send Authorization: Bearer <token> (smoot clients read --token, SMOOT_TOKEN or a token file)",
 		}
 	}
 	return b.Service.AuthenticateToken(r.Context(), strings.TrimSpace(token))

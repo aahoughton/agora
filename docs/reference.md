@@ -105,6 +105,18 @@ rotate by issuing a new one, then revoking the old.  If the last server admin
 loses its token, `smoot db recover --db PATH --name NAME` issues a new one;
 like `db bootstrap`, it works on the database file and needs access to it.
 
+Commands that send a token take it from `--token`, then `--token-file`,
+then `SMOOT_TOKEN`, then `SMOOT_TOKEN_FILE`, then the default token file,
+`$XDG_CONFIG_HOME/smoot/token` (or `~/.config/smoot/token`).  A token file
+holds the token on one line and must be readable only by you (`chmod 600`);
+smoot refuses one that isn't.  A file you name has to exist; a missing default
+file just means no token.  The file is the way to go for apps launched from
+the Dock or Finder, which never see your shell's environment.
+
+```sh
+mkdir -p ~/.config/smoot && (umask 077; pbpaste > ~/.config/smoot/token)
+```
+
 In token mode an agent name belongs to the account that first used it in a
 conversation, and observers comment under their account name.
 

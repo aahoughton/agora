@@ -3,6 +3,8 @@ package config
 import (
 	"flag"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,7 +50,7 @@ func TestClientFlagsOnlyWhatIsAsked(t *testing.T) {
 	fs := flag.NewFlagSet("x", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	resolve := ClientFlags(fs, 0)
-	for _, name := range []string{"namespace", "token"} {
+	for _, name := range []string{"namespace", "token", "token-file"} {
 		if fs.Lookup(name) != nil {
 			t.Errorf("--%s is registered", name)
 		}
@@ -92,5 +94,89 @@ func TestAgentFlag(t *testing.T) {
 		if err != nil || got != tt.want {
 			t.Fatalf("args %v: got %q, %v", tt.args, got, err)
 		}
+	}
+}
+
+func TestResolveToken(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string, mode os.FileMode) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	good := write("good", "file-token\n", 0o600)
+	other := write("other", "other-token", 0o600)
+	shared := write("shared", "t", 0o644)
+	empty := write("empty", " \n", 0o600)
+	two := write("two", "a b\n", 0o600)
+	huge := write("huge", strings.Repeat("x", 4097), 0o600)
+	xdg := filepath.Join(dir, "xdg")
+	if err := os.MkdirAll(filepath.Join(xdg, "smoot"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write("xdg/smoot/token", "default-token", 0o600)
+	missing := filepath.Join(dir, "missing")
+
+	tests := []struct {
+		name      string
+		flagToken string
+		flagFile  string
+		env       map[string]string
+		want      string
+		wantErr   string
+	}{
+		{"nothing", "", "", nil, "", ""},
+		{"flag token", "t", "", map[string]string{EnvToken: "env", EnvTokenFile: other}, "t", ""},
+		{"flag file beats env token", "", good, map[string]string{EnvToken: "env"}, "file-token", ""},
+		{"both flags", "t", good, nil, "", "not both"},
+		{"env token beats env file", "", "", map[string]string{EnvToken: "env", EnvTokenFile: good}, "env", ""},
+		{"env file", "", "", map[string]string{EnvTokenFile: good}, "file-token", ""},
+		{"env file beats default", "", "", map[string]string{EnvTokenFile: other, "XDG_CONFIG_HOME": xdg}, "other-token", ""},
+		{"default under XDG_CONFIG_HOME", "", "", map[string]string{"XDG_CONFIG_HOME": xdg, "HOME": missing}, "default-token", ""},
+		{"default missing is no token", "", "", map[string]string{"HOME": missing}, "", ""},
+		{"relative XDG_CONFIG_HOME is ignored", "", "", map[string]string{"XDG_CONFIG_HOME": "rel", "HOME": missing}, "", ""},
+		{"too long", "", huge, nil, "", "one token"},
+		{"named file missing", "", missing, nil, "", "no such file"},
+		{"env file missing", "", "", map[string]string{EnvTokenFile: missing}, "", "no such file"},
+		{"readable by others", "", shared, nil, "", "chmod 600"},
+		{"empty", "", empty, nil, "", "one token"},
+		{"two words", "", two, nil, "", "one token"},
+		{"directory", "", xdg, nil, "", "not a regular file"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveToken(tt.flagToken, tt.flagFile, env(tt.env))
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v", err)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("got %q, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestClientFlagsTokenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	resolve := ClientFlags(fs, WithToken)
+	if err := fs.Parse([]string{"--token-file", path}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolve(env(map[string]string{EnvToken: "env"}))
+	if err != nil || got.Token != "file-token" {
+		t.Fatalf("got %+v, %v", got, err)
 	}
 }
