@@ -603,10 +603,10 @@ func TestClientsSendTheToken(t *testing.T) {
 	with := map[string]string{"SMOOT_TOKEN": token}
 
 	r := runCLIInput(t.Context(), url, "", with, "whoami")
-	if r.code != exitOK || !strings.Contains(r.stdout, "auth token") || !strings.Contains(r.stdout, "account: root (server admin)") {
+	if r.code != exitOK || !strings.Contains(r.stdout, "auth token") || !strings.Contains(r.stdout, "token:   from SMOOT_TOKEN\n") || !strings.Contains(r.stdout, "account: root (server admin)") {
 		t.Fatalf("whoami = %+v", r)
 	}
-	if r := runCLIInput(t.Context(), url, "", nil, "whoami"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") {
+	if r := runCLIInput(t.Context(), url, "", nil, "whoami"); r.code != exitError || !strings.Contains(r.stderr, "unauthorized") || !strings.Contains(r.stderr, "token:   none\n") {
 		t.Fatalf("whoami without a token = %+v", r)
 	}
 	if r := runCLIInput(t.Context(), url, "", with, "status", "--agent", "a"); r.code != exitOK {
@@ -621,7 +621,7 @@ func TestClientsSendTheToken(t *testing.T) {
 func TestWhoamiWithAuthOff(t *testing.T) {
 	url, _ := setup(t)
 	r := runCLI(t.Context(), url, "whoami")
-	if r.code != exitOK || !strings.Contains(r.stdout, "account: none (auth is off") {
+	if r.code != exitOK || !strings.Contains(r.stdout, "token:   none\n") || !strings.Contains(r.stdout, "account: none (auth is off") {
 		t.Fatalf("whoami = %+v", r)
 	}
 }

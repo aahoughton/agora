@@ -21,8 +21,8 @@ func TestClientFlags(t *testing.T) {
 		{"env", nil, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://h:1", Namespace: "team"}, ""},
 		{"flag beats env", []string{"--url", "http://f:2", "--namespace", "f"}, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://f:2", Namespace: "f"}, ""},
 		{"bad namespace", []string{"--namespace", "../x"}, nil, Client{}, "invalid namespace"},
-		{"token", []string{"--token", "t"}, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "t"}, ""},
-		{"token from env", nil, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "env"}, ""},
+		{"token", []string{"--token", "t"}, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "t", TokenSource: "--token"}, ""},
+		{"token from env", nil, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "env", TokenSource: EnvToken}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestResolveToken(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveToken(tt.flagToken, tt.flagFile, env(tt.env))
+			got, _, err := ResolveToken(tt.flagToken, tt.flagFile, env(tt.env))
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v", err)
@@ -191,7 +191,7 @@ func TestClientFlagsTokenFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := resolve(env(map[string]string{EnvToken: "env"}))
-	if err != nil || got.Token != "file-token" {
+	if err != nil || got.Token != "file-token" || got.TokenSource != "--token-file "+path {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
