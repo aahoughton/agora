@@ -113,10 +113,18 @@ smoot refuses one that isn't.  A file you name has to exist; a missing default
 file just means no token.  The file is the way to go for apps launched from
 the Dock or Finder, which never see your shell's environment.
 
+With the token on the clipboard:
+
 ```sh
 (umask 077; mkdir -p ~/.config/smoot && pbpaste > ~/.config/smoot/token)
 chmod 600 ~/.config/smoot/token   # umask covers a new file; this covers an existing one
 ```
+
+If you set `XDG_CONFIG_HOME`, use `$XDG_CONFIG_HOME/smoot` instead of
+`~/.config/smoot`, or smoot won't look there.  `smoot whoami` prints a
+`token:` line naming where the token came from, or `none`, even when
+the server refuses it, so it's a quick check that the file is where smoot
+expects it.
 
 In token mode an agent name belongs to the account that first used it in a
 conversation, and observers comment under their account name.
@@ -212,23 +220,53 @@ PATH. The installer receives only the variable name for templates, never
 the token value.
 
 Desktop apps launched from the Dock or Finder don't see your shell's
-environment, so `SMOOT_TOKEN` won't reach them.  For those, put the token in
-a [token file](#tokens-and-roles) and use `--with-token-file` instead:
+environment, so `SMOOT_TOKEN` won't reach them.  That covers the Claude Code
+side of the Claude app and the Codex side of the ChatGPT app.  For those, put
+the token in a [token file](#tokens-and-roles) and use `--with-token-file`.
+Setting up a second Mac against a shared server goes like this:
 
-```sh
-smoot client install claude --with-token-file --stop-hook --agent claude-desk
-smoot client install codex --with-token-file --stop-hook --agent codex-desk
-```
+1. On the server, create an account, make it a `member` of the namespace,
+   and issue it a token (see [Tokens and roles](#tokens-and-roles)).  The
+   server has to listen on an address the second Mac can reach (`--addr`,
+   which defaults to loopback only), and answer the name it uses
+   (`--allowed-hosts`; see [Host checks](#host-checks)).
+2. On the second Mac, install smoot and write the token file.
+3. Check the token against the server:
+   `smoot whoami --url http://server:8787 --token-file ~/.config/smoot/token`
+   should name the account and its role in the namespace.
+4. Install each client with the server's URL and namespace.  Without
+   `--url` (or `SMOOT_URL`), the config points at `127.0.0.1:8787`, which
+   is only right on the server itself:
+
+   ```sh
+   smoot client install claude --url http://server:8787 --namespace home \
+     --with-token-file --stop-hook --agent claude-desk
+   smoot client install codex --url http://server:8787 --namespace home \
+     --with-token-file --stop-hook --agent codex-desk
+   ```
+
+5. Quit the app and open it again, then check that smoot's tools show up.
 
 The client then launches `smoot mcp` as a stdio bridge with `--token-file`,
 and the Stop hook gets `--token-file` too.  Both name the token file
 (`--token-file`, `SMOOT_TOKEN_FILE` or the default) and the smoot binary by
 absolute path, since those apps get a minimal PATH.  The binary is
 `--smoot-path`, or `smoot` on your PATH.  A path inside mise's installs
-directory changes with every upgrade, so install refuses it; pass the mise
-shim (usually `~/.local/share/mise/shims/smoot`) instead.  Install checks the
-token file the same way the client will and refuses one that isn't there or
-that others can read.  Pi has no stdio entry and rejects `--with-token-file`.
+directory changes with every upgrade, so install refuses it and names the
+mise shim to pass instead.  Install checks the token file the same way the
+client will and refuses one that isn't there or that others can read.  Pi
+has no stdio entry and rejects `--with-token-file`.
+
+A client picks up config and environment changes only when it starts.  Some
+keep a background process running after you close their windows, and a new
+session in that process still has the old setup.  If the tools don't appear,
+or a token you just fixed still fails, quit the client completely (and
+restart its background service, if it has one) before trying again.
+
+The `smoot wait` command in the server's instructions runs in the agent's own
+shell, which for a desktop app may not find `smoot` on PATH.  With the token
+at the default path it works once `smoot` resolves; otherwise the agent
+needs the absolute path and `--token-file`, the same ones its config uses.
 
 `--approve-tools` opts into pre-approving smoot's tools for Claude or
 Antigravity. It appends missing permission strings and preserves existing
@@ -274,7 +312,11 @@ profiles then include the longer timeout; the Pi profile does not set one.
 Claude Code, Codex or Antigravity, pointed at the same `--url` and
 `--namespace` as the MCP entry. `client config` prints it instead. Add
 `--agent NAME` to write the agent name into the hook, for a client that
-always uses one name and can't set `SMOOT_AGENT`. While the
+always uses one name and can't set `SMOOT_AGENT`.  The hook checks only that
+name, so the agent has to join conversations as exactly that name (tell it
+to, in the prompt).  Every session of that client checks the same name, and
+two of them can't take part in one conversation under it; give a client a
+fixed name only when you run one session of it at a time. While the
 session's agent (`SMOOT_AGENT` or `--agent`) is expected
 in an open conversation, the hook tells the client to continue instead of
 ending the turn, with the agent's status lines as the reason.  It keeps

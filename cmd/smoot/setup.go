@@ -207,14 +207,12 @@ absolute path.
 // installTokenFile returns the absolute path of the token file a client
 // should read, refusing one that a client would refuse.
 func installTokenFile(flagFile string, getenv config.Getenv) (string, error) {
-	path, err := config.TokenFile(flagFile, getenv)
-	if err != nil {
-		return "", err
-	}
+	path := config.TokenFile(flagFile, getenv)
 	if path == "" {
 		return "", errors.New("no default token file without HOME: pass --token-file")
 	}
-	if path, err = filepath.Abs(path); err != nil {
+	path, err := filepath.Abs(path)
+	if err != nil {
 		return "", err
 	}
 	if _, err := config.ReadTokenFile(path); err != nil {
@@ -239,9 +237,13 @@ func installSmootPath(flagPath string) (string, error) {
 		return "", err
 	}
 	// mise keeps each version in its own directory, so a path there breaks
-	// on the next upgrade; its shim stays put.
-	if strings.Contains(filepath.ToSlash(path), "/mise/installs/") {
-		return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path with the mise shim (usually ~/.local/share/mise/shims/smoot)", path)
+	// on the next upgrade; its shim, in the same data directory, stays put.
+	if root, _, ok := strings.Cut(filepath.ToSlash(path), "/mise/installs/"); ok {
+		shim := filepath.FromSlash(root + "/mise/shims/smoot")
+		if _, err := os.Stat(shim); err != nil {
+			return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path with the mise shim for smoot", path)
+		}
+		return "", fmt.Errorf("%s changes with every mise upgrade: pass --smoot-path %s", path, shellWord(shim))
 	}
 	info, err := os.Stat(path)
 	if err != nil {

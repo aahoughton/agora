@@ -429,12 +429,18 @@ belongs to, with its role in each namespace.
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	token := "none"
+	if cc.TokenSource != "" {
+		token = "from " + cc.TokenSource
+	}
 	w, err := cl.Whoami(ctx)
 	if err != nil {
-		fmt.Fprintln(stderr, "smoot whoami:", err)
+		// The token's source matters most when the server refuses it.
+		fmt.Fprintf(stderr, "smoot whoami: %v\ntoken:   %s\n", err, token)
 		return exitError
 	}
 	fmt.Fprintf(stdout, "server:  %s (version %s, auth %s)\n", cl.URL(), w.Version, w.AuthMode)
+	fmt.Fprintf(stdout, "token:   %s\n", token)
 	switch {
 	case w.Account == nil:
 		fmt.Fprintln(stdout, "account: none (auth is off; everyone has full access)")

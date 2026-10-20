@@ -21,8 +21,8 @@ func TestClientFlags(t *testing.T) {
 		{"env", nil, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://h:1", Namespace: "team"}, ""},
 		{"flag beats env", []string{"--url", "http://f:2", "--namespace", "f"}, map[string]string{EnvURL: "http://h:1", EnvNamespace: "team"}, Client{URL: "http://f:2", Namespace: "f"}, ""},
 		{"bad namespace", []string{"--namespace", "../x"}, nil, Client{}, "invalid namespace"},
-		{"token", []string{"--token", "t"}, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "t"}, ""},
-		{"token from env", nil, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "env"}, ""},
+		{"token", []string{"--token", "t"}, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "t", TokenSource: "--token"}, ""},
+		{"token from env", nil, map[string]string{EnvToken: "env"}, Client{URL: DefaultURL, Namespace: "default", Token: "env", TokenSource: EnvToken}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,6 +121,15 @@ func TestResolveToken(t *testing.T) {
 	}
 	write("xdg/smoot/token", "default-token", 0o600)
 	missing := filepath.Join(dir, "missing")
+	home, badHome := filepath.Join(dir, "home"), filepath.Join(dir, "bad-home")
+	for _, h := range []string{home, badHome} {
+		if err := os.MkdirAll(filepath.Join(h, ".config", "smoot"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("home/.config/smoot/token", "home-token\n", 0o600)
+	write("bad-home/.config/smoot/token", "bad-token\n", 0o644)
+	exact := write("exact", strings.Repeat("x", 4096), 0o600)
 
 	tests := []struct {
 		name      string
@@ -139,18 +148,24 @@ func TestResolveToken(t *testing.T) {
 		{"env file beats default", "", "", map[string]string{EnvTokenFile: other, "XDG_CONFIG_HOME": xdg}, "other-token", ""},
 		{"default under XDG_CONFIG_HOME", "", "", map[string]string{"XDG_CONFIG_HOME": xdg, "HOME": missing}, "default-token", ""},
 		{"default missing is no token", "", "", map[string]string{"HOME": missing}, "", ""},
+		{"default under HOME", "", "", map[string]string{"HOME": home}, "home-token", ""},
+		{"relative XDG_CONFIG_HOME falls back to HOME", "", "", map[string]string{"XDG_CONFIG_HOME": "rel", "HOME": home}, "home-token", ""},
+		{"bad default file", "", "", map[string]string{"HOME": badHome}, "", "chmod 600"},
+		{"env token skips a bad default file", "", "", map[string]string{EnvToken: "env", "HOME": badHome}, "env", ""},
+		{"flag token skips a bad env file", "t", "", map[string]string{EnvTokenFile: shared}, "t", ""},
 		{"relative XDG_CONFIG_HOME is ignored", "", "", map[string]string{"XDG_CONFIG_HOME": "rel", "HOME": missing}, "", ""},
-		{"too long", "", huge, nil, "", "one token"},
+		{"too long", "", huge, nil, "", "over 4096 bytes"},
+		{"exactly the limit", "", exact, nil, strings.Repeat("x", 4096), ""},
 		{"named file missing", "", missing, nil, "", "no such file"},
 		{"env file missing", "", "", map[string]string{EnvTokenFile: missing}, "", "no such file"},
 		{"readable by others", "", shared, nil, "", "chmod 600"},
-		{"empty", "", empty, nil, "", "one token"},
-		{"two words", "", two, nil, "", "one token"},
+		{"empty", "", empty, nil, "", "is empty"},
+		{"two words", "", two, nil, "", "more than one word"},
 		{"directory", "", xdg, nil, "", "not a regular file"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveToken(tt.flagToken, tt.flagFile, env(tt.env))
+			got, _, err := ResolveToken(tt.flagToken, tt.flagFile, env(tt.env))
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v", err)
@@ -176,7 +191,7 @@ func TestClientFlagsTokenFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := resolve(env(map[string]string{EnvToken: "env"}))
-	if err != nil || got.Token != "file-token" {
+	if err != nil || got.Token != "file-token" || got.TokenSource != "--token-file "+path {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }

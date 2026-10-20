@@ -21,8 +21,13 @@ import (
 )
 
 // TestMain gives the package a scratch HOME, so commands that look for a
-// default token file never read the developer's.
+// default token file never read the developer's. Started through a link
+// named smoot, the test binary runs as the CLI instead, so tests can launch
+// the commands an installed client config names.
 func TestMain(m *testing.M) {
+	if filepath.Base(os.Args[0]) == "smoot" {
+		os.Exit(run(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv))
+	}
 	home, err := os.MkdirTemp("", "smoot-test-home")
 	if err != nil {
 		panic(err)

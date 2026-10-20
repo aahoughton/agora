@@ -33,6 +33,8 @@ type Client struct {
 	Namespace string
 	// Token is the bearer token for a server in auth mode token.
 	Token string
+	// TokenSource says where Token came from, as ResolveToken reports it.
+	TokenSource string
 }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -73,7 +75,7 @@ func ClientFlags(fs *flag.FlagSet, with ClientFlag) func(Getenv) (Client, error)
 		}
 		if tok != nil {
 			var err error
-			if c.Token, err = ResolveToken(*tok, *tokFile, getenv); err != nil {
+			if c.Token, c.TokenSource, err = ResolveToken(*tok, *tokFile, getenv); err != nil {
 				return Client{}, err
 			}
 		}
@@ -86,61 +88,65 @@ const maxTokenFile = 4096
 
 const defaultTokenFileHelp = "$XDG_CONFIG_HOME/smoot/token or ~/.config/smoot/token"
 
-// ResolveToken returns the bearer token, taking the first that is set of
-// flagToken, flagFile, EnvToken, EnvTokenFile and the default token file.
-// Flags beat the environment, so a client config that names a token file
-// still works where SMOOT_TOKEN is exported; giving both flags is an error.
-// A token file that was named must exist; a missing default file means no
-// token. Any token file read must be readable only by its owner.
-func ResolveToken(flagToken, flagFile string, getenv Getenv) (string, error) {
-	if flagToken != "" && flagFile != "" {
-		return "", errors.New("give --token or --token-file, not both")
+// ResolveToken returns the bearer token and where it came from, taking the
+// first that is set of flagToken, flagFile, EnvToken, EnvTokenFile and the
+// default token file. Flags beat the environment, so a client config that
+// names a token file still works where SMOOT_TOKEN is exported; giving both
+// flags is an error. A token file that was named must exist; a missing
+// default file means no token. Any token file read must be readable only by
+// its owner. The source is empty when there is no token.
+func ResolveToken(flagToken, flagFile string, getenv Getenv) (token, source string, err error) {
+	fromFile := func(path, how string) (string, string, error) {
+		tok, err := ReadTokenFile(path)
+		if err != nil {
+			return "", "", err
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+		return tok, how + " " + path, nil
 	}
-	if flagToken != "" {
-		return flagToken, nil
+	switch {
+	case flagToken != "" && flagFile != "":
+		return "", "", errors.New("give --token or --token-file, not both")
+	case flagToken != "":
+		return flagToken, "--token", nil
+	case flagFile != "":
+		return fromFile(flagFile, "--token-file")
+	case getenv(EnvToken) != "":
+		return getenv(EnvToken), EnvToken, nil
+	case getenv(EnvTokenFile) != "":
+		return fromFile(getenv(EnvTokenFile), EnvTokenFile)
 	}
-	if flagFile != "" {
-		return ReadTokenFile(flagFile)
+	path := DefaultTokenFile(getenv)
+	if path == "" {
+		return "", "", nil
 	}
-	if t := getenv(EnvToken); t != "" {
-		return t, nil
-	}
-	if f := getenv(EnvTokenFile); f != "" {
-		return ReadTokenFile(f)
-	}
-	path, err := DefaultTokenFile(getenv)
-	if err != nil || path == "" {
-		return "", err
-	}
-	tok, err := ReadTokenFile(path)
+	token, source, err = fromFile(path, "default file")
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
+		return "", "", nil
 	}
-	return tok, err
+	return token, source, err
 }
 
 // TokenFile returns the token file a client would read without --token or
 // SMOOT_TOKEN: flagFile, else EnvTokenFile, else the default. It is empty
 // when there is no default because HOME is unset.
-func TokenFile(flagFile string, getenv Getenv) (string, error) {
-	if f := firstNonEmpty(flagFile, getenv(EnvTokenFile)); f != "" {
-		return f, nil
-	}
-	return DefaultTokenFile(getenv)
+func TokenFile(flagFile string, getenv Getenv) string {
+	return firstNonEmpty(flagFile, getenv(EnvTokenFile), DefaultTokenFile(getenv))
 }
 
 // DefaultTokenFile returns $XDG_CONFIG_HOME/smoot/token, falling back to
 // $HOME/.config/smoot/token, or "" when neither is set. A relative
-// XDG_CONFIG_HOME is ignored, as the XDG spec says; the default is optional,
-// so it never fails a command that needs no token.
-func DefaultTokenFile(getenv Getenv) (string, error) {
+// XDG_CONFIG_HOME is ignored, as the XDG spec says.
+func DefaultTokenFile(getenv Getenv) string {
 	if dir := getenv("XDG_CONFIG_HOME"); filepath.IsAbs(dir) {
-		return filepath.Join(dir, "smoot", "token"), nil
+		return filepath.Join(dir, "smoot", "token")
 	}
 	if home := getenv("HOME"); home != "" {
-		return filepath.Join(home, ".config", "smoot", "token"), nil
+		return filepath.Join(home, ".config", "smoot", "token")
 	}
-	return "", nil
+	return ""
 }
 
 // ReadTokenFile reads a token from path, refusing a file that group or
@@ -169,11 +175,14 @@ func ReadTokenFile(path string) (string, error) {
 		return "", fmt.Errorf("token file: %w", err)
 	}
 	if len(b) > maxTokenFile {
-		return "", fmt.Errorf("token file %s must hold one token", path)
+		return "", fmt.Errorf("token file %s is over %d bytes; it must hold one token", path, maxTokenFile)
 	}
 	tok := strings.TrimSpace(string(b))
-	if tok == "" || strings.ContainsAny(tok, " \t\r\n") {
-		return "", fmt.Errorf("token file %s must hold one token", path)
+	if tok == "" {
+		return "", fmt.Errorf("token file %s is empty", path)
+	}
+	if strings.ContainsAny(tok, " \t\r\n") {
+		return "", fmt.Errorf("token file %s holds more than one word; it must hold one token", path)
 	}
 	return tok, nil
 }

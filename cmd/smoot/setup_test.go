@@ -275,7 +275,15 @@ func TestClientInstallTokenFile(t *testing.T) {
 		}
 	}
 
-	misePath := filepath.Join(t.TempDir(), "mise", "installs", "smoot", "1", "bin", "smoot")
+	miseRoot := t.TempDir()
+	misePath := filepath.Join(miseRoot, "mise", "installs", "smoot", "1", "bin", "smoot")
+	miseShim := filepath.Join(miseRoot, "mise", "shims", "smoot")
+	if err := os.MkdirAll(filepath.Dir(miseShim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(miseShim, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	shared := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(shared, []byte("t"), 0o644); err != nil {
 		t.Fatal(err)
@@ -291,7 +299,7 @@ func TestClientInstallTokenFile(t *testing.T) {
 		{"agent without hook", []string{"codex", "--agent", "a"}, "--agent needs --stop-hook"},
 		{"bad agent", []string{"codex", "--stop-hook", "--agent", "bad name"}, "invalid agent name"},
 		{"pi", []string{"pi", "--with-token-file"}, "no token file setup"},
-		{"mise version path", []string{"codex", "--with-token-file", "--token-file", tokenFile, "--smoot-path", misePath}, "mise shim"},
+		{"mise version path", []string{"codex", "--with-token-file", "--token-file", tokenFile, "--smoot-path", misePath}, "pass --smoot-path " + miseShim},
 		{"missing token file", []string{"codex", "--with-token-file", "--token-file", filepath.Join(home, "nope")}, "no such file"},
 		{"shared token file", []string{"codex", "--with-token-file", "--token-file", shared}, "chmod 600"},
 	} {
