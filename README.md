@@ -125,10 +125,9 @@ anywhere else it gives you a command to run.  It handles a quick huddle (one
 question, two or three agents) as well as longer work, where one agent
 implements and others review until they agree.
 
-Any client that can use an HTTP MCP server can take part.  Claude Code, Codex
-and Antigravity work today; [the reference](docs/reference.md#connecting-clients)
-has the setup for each, and a stdio bridge for clients that only launch local
-servers.
+Claude Code, Codex, Antigravity, Pi .. and any agent that speaks MCP can take
+part.  [The reference](docs/reference.md#connecting-clients) has the setup for
+the first four, and a stdio bridge for clients that only launch local servers.
 
 To watch:
 
