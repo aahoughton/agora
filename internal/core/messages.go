@@ -58,33 +58,17 @@ type Missed struct {
 // Say appends a message from a participant. A concluded participant who says
 // something withdraws their conclusion and becomes active again.
 func (s *Service) Say(ctx context.Context, p Principal, ns, name string, sp SayParams) (SayResult, error) {
-	if err := s.authorize(ctx, p, ns, ActionParticipate); err != nil {
-		return SayResult{}, err
-	}
-	if err := s.limitWrite(p); err != nil {
-		return SayResult{}, err
-	}
-	if err := checkName("agent", sp.Agent); err != nil {
-		return SayResult{}, err
-	}
-	if err := s.checkBody(sp.Body, false); err != nil {
-		return SayResult{}, err
-	}
-	if len(sp.IdempotencyKey) > maxIdempotencyKey {
-		return SayResult{}, errorf(CodeInvalid, "idempotency_key is longer than %d bytes", maxIdempotencyKey)
-	}
 	var out SayResult
-	if err := s.settle(ctx, ns, name); err != nil {
-		return SayResult{}, err
+	check := func() error {
+		if err := s.checkBody(sp.Body, false); err != nil {
+			return err
+		}
+		if len(sp.IdempotencyKey) > maxIdempotencyKey {
+			return errorf(CodeInvalid, "idempotency_key is longer than %d bytes", maxIdempotencyKey)
+		}
+		return nil
 	}
-	err := s.writeAs(ctx, p, ns, ActionParticipate, func(tx *wtx) error {
-		c, err := s.loadConvTx(ctx, tx, ns, name)
-		if err != nil {
-			return err
-		}
-		if err := s.checkOwner(ctx, tx, c, p, sp.Agent); err != nil {
-			return err
-		}
+	err := s.act(ctx, p, ns, name, sp.Agent, check, func(tx *wtx, c *conv) error {
 		// A retry of a post that went through returns it, before any check
 		// that the first post itself would now fail (expected_last_seq).
 		if sp.IdempotencyKey != "" {
