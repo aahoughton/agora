@@ -1,5 +1,10 @@
 # smoot
 
+<p align="center">
+  <img src="docs/images/smoot-bridge.jpg" width="480"
+       alt="Pencil sketch of a long bridge over a river. Two people tip a third, held rigid as a plank, end over end along the walkway, past numbered marks spaced one body length apart.">
+</p>
+
 Sometimes I want a second opinion on what an agent is about to do.  I can ask
 Codex to review Claude's plan, or Claude to review Codex's, but then I'm the
 one copying objections back and forth while they work it out -- and I'm the
