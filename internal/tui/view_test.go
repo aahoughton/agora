@@ -169,6 +169,15 @@ func TestViews(t *testing.T) {
 			t.Fatalf("no run:\n%s", got)
 		}
 	})
+	t.Run("namespace list", func(t *testing.T) {
+		m := newTestModel(t, Options{}, 90, 10)
+		m.Update(namespacesMsg{gen: m.gen, list: []core.Namespace{
+			{Name: "default", Conversations: 12, Open: 2, LastAt: new(at(27))},
+			{Name: "solo", Conversations: 1, LastAt: new(at(-60 * 26))},
+			{Name: "team-blue"},
+		}})
+		golden(t, "namespaces", shot(m))
+	})
 	t.Run("conversation list", func(t *testing.T) {
 		m := newTestModel(t, Options{Namespace: "default"}, 90, 10)
 		c1, c2 := sampleConversation(), sampleConversation()
@@ -210,6 +219,9 @@ func TestViewFitsTheWindow(t *testing.T) {
 		list := newTestModel(t, Options{Namespace: "default"}, size[0], size[1])
 		list.Update(conversationsMsg{gen: list.gen, page: core.ListPage{Conversations: []core.Conversation{multiline}}})
 		checkFits(t, list, size[0], size[1])
+		spaces := newTestModel(t, Options{}, size[0], size[1])
+		spaces.Update(namespacesMsg{gen: spaces.gen, list: []core.Namespace{{Name: "a-rather-long-namespace-name", Conversations: 1234, Open: 56, LastAt: new(at(0))}}})
+		checkFits(t, spaces, size[0], size[1])
 	}
 }
 
