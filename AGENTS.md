@@ -106,6 +106,7 @@ as Go packages are pinned with `tool` directives in `go.mod` and run with
 | Lint | `mise run lint` |
 | Format | `mise run fmt` |
 | Everything CI runs | `mise run check` |
+| Release | push a `vX.Y.Z` tag on main; the release workflow publishes it |
 
 Install the git hooks once per clone with `mise exec -- lefthook install`. The
 pre-commit hook runs gitleaks on staged changes, checks formatting, and lints.
