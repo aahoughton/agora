@@ -1087,10 +1087,20 @@ components:
 
     Namespace:
       type: object
-      required: [name, created_at]
+      required: [name, created_at, conversations, open]
       properties:
         name: { type: string }
         created_at: { type: string, format: date-time }
+        conversations:
+          type: integer
+          description: Every conversation, archived ones included.
+        open:
+          type: integer
+          description: Open conversations that are not archived.
+        last_at:
+          type: string
+          format: date-time
+          description: The latest message in any conversation; absent when there are none.
 
     Conversation:
       type: object

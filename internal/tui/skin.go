@@ -21,6 +21,7 @@ import (
 var textKeys = []string{
 	"brand",
 	"namespaces_title", "namespaces_empty",
+	"namespace_conversations", "namespace_open", "namespace_unused",
 	"conversations_title", "conversations_empty", "archived", "people",
 	"status_open", "status_concluded",
 	"ends_agreement", "ends_coordinator", "ends_timebox_open", "ends_timebox_done", "ends_none",

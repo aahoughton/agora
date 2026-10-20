@@ -15,20 +15,26 @@
 
 ## POST /v1/namespaces -> Created
 {
+  "conversations": 0,
   "created_at": "2030-01-02T03:04:05Z",
-  "name": "team"
+  "name": "team",
+  "open": 0
 }
 
 ## GET /v1/namespaces -> OK
 {
   "namespaces": [
     {
+      "conversations": 0,
       "created_at": "<real time>",
-      "name": "default"
+      "name": "default",
+      "open": 0
     },
     {
+      "conversations": 0,
       "created_at": "2030-01-02T03:04:05Z",
-      "name": "team"
+      "name": "team",
+      "open": 0
     }
   ]
 }

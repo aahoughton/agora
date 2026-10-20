@@ -245,6 +245,21 @@ func (r renderer) participants(c core.Conversation, width int) []string {
 	return out
 }
 
+// namespaceRow is one line of the namespace list.
+func (r renderer) namespaceRow(n core.Namespace, width int) string {
+	meta := r.sk.say("namespace_unused", nil)
+	if n.Conversations > 0 {
+		meta = r.sk.say("namespace_conversations", map[string]any{"N": n.Conversations})
+		if n.Open > 0 {
+			meta += " " + r.st.g.sep + " " + r.sk.say("namespace_open", map[string]any{"N": n.Open})
+		}
+		if n.LastAt != nil {
+			meta += " " + r.st.g.sep + " " + r.ago(*n.LastAt)
+		}
+	}
+	return r.withMeta(r.st.fg.Bold(true).Render(n.Name), meta, width)
+}
+
 // conversationRow is one line of the conversation list.
 func (r renderer) conversationRow(c core.Conversation, width int) string {
 	name := r.st.fg.Bold(true)
@@ -259,6 +274,12 @@ func (r renderer) conversationRow(c core.Conversation, width int) string {
 	if c.Topic != "" {
 		line += "  " + r.st.muted.Render(oneLine(c.Topic))
 	}
+	return r.withMeta(line, meta, width)
+}
+
+// withMeta right-aligns meta after line, or leaves it out when the line
+// would have fewer than 20 cells.
+func (r renderer) withMeta(line, meta string, width int) string {
 	metaW := ansi.StringWidth(meta)
 	if width-metaW-2 < 20 {
 		return ansi.Truncate(line, width, r.st.g.more)

@@ -1065,14 +1065,20 @@ func (m *Model) listView() []string {
 	for _, c := range m.conversations {
 		byName[c.Name] = c
 	}
+	nsByName := map[string]core.Namespace{}
+	for _, n := range m.namespaces {
+		nsByName[n.Name] = n
+	}
 	for i, n := range names {
 		mark := "  "
 		if i == m.cursor {
 			mark = m.st.accent.Render(m.st.g.cursor + " ")
 		}
-		row := m.st.fg.Bold(true).Render(n)
+		var row string
 		if m.screen == screenConversations {
 			row = r.conversationRow(byName[n], m.width-2)
+		} else {
+			row = r.namespaceRow(nsByName[n], m.width-2)
 		}
 		rows = append(rows, mark+row)
 	}

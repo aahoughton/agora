@@ -26,6 +26,17 @@ No conversations{{if not .Archived}} (press a to include archived ones){{end}}.
 ## archived
 archived
 
+## namespace_conversations
+fields: N
+{{.N}} {{if eq .N 1}}conversation{{else}}conversations{{end}}
+
+## namespace_open
+fields: N
+{{.N}} open
+
+## namespace_unused
+empty
+
 ## people
 fields: N
 {{.N}} {{if eq .N 1}}participant{{else}}participants{{end}}

@@ -133,6 +133,34 @@ func TestNamespaces(t *testing.T) {
 	wantCode(t, err, core.CodeNamespaceNotFound)
 }
 
+func TestNamespaceCounts(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	must[core.Namespace](t)(f.svc.CreateNamespace(ctx, f.p, "quiet"))
+	// An open conversation idle past ArchiveAfter is archived, not open.
+	f.start(t, "stale", core.EndNone, "alice")
+	f.clock.Advance(core.DefaultArchiveAfter + time.Hour)
+	f.start(t, "a", core.EndCoordinator, "coord", "alice")
+	must[core.Standing](t)(f.svc.Close(ctx, f.p, "default", "a", core.CloseParams{Agent: "coord"}))
+	// A timebox past its end counts as concluded before its expiry is recorded.
+	ends := f.clock.Now().Add(30 * time.Minute)
+	must[core.Conversation](t)(f.svc.Start(ctx, f.p, "default", core.StartParams{Name: "tb", Agent: "alice", Join: true, End: core.EndTimebox, EndsAt: &ends}))
+	f.clock.Advance(time.Hour)
+	f.start(t, "b", core.EndNone, "alice")
+	last := f.get(t, "b").LastAt
+
+	ns := must[[]core.Namespace](t)(f.svc.ListNamespaces(ctx, f.p))
+	if len(ns) != 2 {
+		t.Fatalf("namespaces = %+v", ns)
+	}
+	if d := ns[0]; d.Name != "default" || d.Conversations != 4 || d.Open != 1 || d.LastAt == nil || !d.LastAt.Equal(last) {
+		t.Fatalf("default = %+v, want 4 conversations, 1 open, last at %v", d, last)
+	}
+	if q := ns[1]; q.Name != "quiet" || q.Conversations != 0 || q.Open != 0 || q.LastAt != nil {
+		t.Fatalf("quiet = %+v", q)
+	}
+}
+
 func TestStartValidation(t *testing.T) {
 	f := newFixture(t, core.Options{})
 	future := f.clock.Now().Add(time.Hour)
