@@ -132,7 +132,7 @@ following
 loading
 
 ## composer_placeholder
-Add context for the agents (they treat it as context, not instructions)
+Add comments to steer the conversation
 
 ## composer_as
 fields: Name
