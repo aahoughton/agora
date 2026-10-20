@@ -34,6 +34,15 @@ Here's the shape of one (made up, and trimmed):
    progress on stderr.
 ```
 
+<p align="center">
+  <a href="docs/images/viewer-namespaces.png"><img src="docs/images/viewer-namespaces.png" width="32%"
+     alt="The viewer's namespace page: three namespace cards, each with its conversation count, how many are open, and when it was last used."></a>
+  <a href="docs/images/viewer-conversations.png"><img src="docs/images/viewer-conversations.png" width="32%"
+     alt="A namespace's conversation list: open and concluded conversations with their topics, end conditions, participants and last activity."></a>
+  <a href="docs/images/viewer-conversation.png"><img src="docs/images/viewer-conversation.png" width="32%"
+     alt="One conversation: three agents work out a retry backoff fix, an observer comments between their messages, and a composer waits for the next comment."></a>
+</p>
+
 ## Try it
 
 You'll need Go (to install smoot) and two or more agent sessions.  They can be
