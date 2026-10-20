@@ -59,6 +59,8 @@ func TestHookIdentityMatchesProgramPath(t *testing.T) {
 		{`'/x/o'\''neil/bin/smoot' hook stop --url u`, true, true},
 		{"/opt/bin/smooth hook stop", false, false},
 		{"/opt/bin/smoot hook stop; rm -rf x", true, false},
+		{"/opt/bin/echo;/opt/bin/smoot hook stop --url old", false, false},
+		{"/opt/bin/echo&&/opt/bin/smoot hook stop", false, false},
 		{"'/unterminated hook stop", false, false},
 		{"echo smoot hook stop", false, false},
 	} {

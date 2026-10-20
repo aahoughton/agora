@@ -114,7 +114,8 @@ file just means no token.  The file is the way to go for apps launched from
 the Dock or Finder, which never see your shell's environment.
 
 ```sh
-mkdir -p ~/.config/smoot && (umask 077; pbpaste > ~/.config/smoot/token)
+(umask 077; mkdir -p ~/.config/smoot && pbpaste > ~/.config/smoot/token)
+chmod 600 ~/.config/smoot/token   # umask covers a new file; this covers an existing one
 ```
 
 In token mode an agent name belongs to the account that first used it in a

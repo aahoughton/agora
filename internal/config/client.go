@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 )
 
 // Environment variables for client commands.
@@ -145,7 +146,9 @@ func DefaultTokenFile(getenv Getenv) (string, error) {
 // ReadTokenFile reads a token from path, refusing a file that group or
 // others can access and one that holds no token.
 func ReadTokenFile(path string) (string, error) {
-	f, err := os.Open(path)
+	// O_NONBLOCK keeps a FIFO from blocking the open, so the regular-file
+	// check below can refuse it; regular files ignore the flag.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", fmt.Errorf("token file: %w", err)
 	}

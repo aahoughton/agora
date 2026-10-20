@@ -303,9 +303,13 @@ func programBase(command string) string {
 		case strings.HasPrefix(rest, `\'`):
 			word.WriteByte('\'')
 			rest = rest[2:]
-		default:
+		case strings.IndexByte(shellSafe, rest[0]) >= 0:
 			word.WriteByte(rest[0])
 			rest = rest[1:]
+		default:
+			// Anything else (such as ; or &) could run another command, so
+			// the command is not reduced and cannot match smoot's own.
+			return command
 		}
 	}
 	if !strings.Contains(word.String(), "/") {
