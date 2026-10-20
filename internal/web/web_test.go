@@ -332,10 +332,14 @@ func TestGoldenPages(t *testing.T) {
 	e.seed()
 	runs := newEnv(t, web.Options{})
 	runs.seedRuns()
+	if _, err := e.svc.CreateNamespace(t.Context(), core.Anonymous(), "team-blue"); err != nil {
+		t.Fatal(err)
+	}
 	for name, page := range map[string]struct {
 		e    *env
 		path string
 	}{
+		"namespaces":        {e, "/"},
 		"conversations":     {e, "/n/default"},
 		"conversation":      {e, "/n/default/c/cache"},
 		"conversation-runs": {runs, "/n/default/c/runs"},

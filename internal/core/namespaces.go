@@ -11,17 +11,30 @@ import (
 type Namespace struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
+	// Conversations counts every conversation, archived ones included. Open
+	// counts open conversations that are not archived, as a listing shows them.
+	Conversations int `json:"conversations"`
+	Open          int `json:"open"`
+	// LastAt is the latest message in any conversation, nil when there are none.
+	LastAt *time.Time `json:"last_at,omitempty"`
 }
 
 // ListNamespaces returns the namespaces the principal can read.
 func (s *Service) ListNamespaces(ctx context.Context, p Principal) ([]Namespace, error) {
+	// Open leaves out a timebox whose end has passed, as ListConversations does.
+	now := ms(s.now())
 	all, err := collect(ctx, s.db, func(rows *sql.Rows) (Namespace, error) {
 		var n Namespace
 		var created int64
-		err := rows.Scan(&n.Name, &created)
+		var last sql.NullInt64
+		err := rows.Scan(&n.Name, &created, &n.Conversations, &n.Open, &last)
 		n.CreatedAt = fromMS(created)
+		n.LastAt = fromNullMS(last)
 		return n, err
-	}, `SELECT name, created_at FROM namespaces ORDER BY name`)
+	}, `SELECT n.name, n.created_at, COUNT(c.id), COUNT(c.id) FILTER (WHERE c.status = 'open' AND c.last_at >= ?
+			AND NOT (c.end_condition = 'timebox' AND c.ends_at <= ?)), MAX(c.last_at)
+		FROM namespaces n LEFT JOIN conversations c ON c.namespace_id = n.id
+		GROUP BY n.id ORDER BY n.name`, now-s.opts.ArchiveAfter.Milliseconds(), now)
 	if err != nil {
 		return nil, err
 	}

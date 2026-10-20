@@ -77,7 +77,9 @@ server delivered, not what the model attended to; a read with `tail` or
 `after` moves it past the messages it skips.
 
 The record types have the same fields as the JSON API (see
-`/v1/openapi.yaml`), named in Go style: `Message` has `.Seq`, `.Kind` (`say`,
+`/v1/openapi.yaml`), named in Go style: `Namespace` has `.Name`,
+`.CreatedAt`, `.Conversations` (all, archived ones included), `.Open` (open
+and not archived) and `.LastAt` (nil when it has no conversations); `Message` has `.Seq`, `.Kind` (`say`,
 `conclude`, `observer`, `system`), `.Author`, `.Body`, `.ReplyTo` (nil or a
 seq) and `.CreatedAt`; `Conversation` has `.Name`, `.Topic`, `.End`,
 `.EndsAt`, `.Status`, `.CreatedBy`, `.LastSeq`, `.LastAt`, `.Archived`,
