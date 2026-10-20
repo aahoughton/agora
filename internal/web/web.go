@@ -48,6 +48,9 @@ type Page struct {
 	// OpenOnly is true when the conversation list leaves out concluded
 	// conversations.
 	OpenOnly bool
+	// Hidden is true when the conversation list is empty but the namespace
+	// has conversations that ?archived=1 or leaving out ?open=1 would show.
+	Hidden bool
 	// Next continues the conversation list (as ?before=); empty on the
 	// last page.
 	Next string
@@ -485,8 +488,17 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 	for i := range cs {
 		cs[i] = displayable(cs[i])
 	}
+	hidden := false
+	if len(cs) == 0 && lp.Before == "" && (openOnly || !archived) {
+		all, err := v.svc.ListConversations(r.Context(), p, ns, core.ListParams{IncludeArchived: true, Limit: 1})
+		if err != nil {
+			v.fail(w, err, Page{Namespace: ns, Account: account})
+			return
+		}
+		hidden = len(all.Conversations) > 0
+	}
 	v.render(w, http.StatusOK, "conversations", Page{
-		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, OpenOnly: openOnly, Next: page.Next,
+		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, OpenOnly: openOnly, Hidden: hidden, Next: page.Next,
 		Account: account,
 	})
 }

@@ -32,6 +32,10 @@
 {{- if .Next}}
 <p class="more"><a href="?before={{.Next}}&{{if .OpenOnly}}open=1&{{end}}{{if .IncludeArchived}}archived=1{{end}}">Older conversations</a></p>
 {{- end}}
+{{- else if and .Hidden .OpenOnly}}
+<p class="empty">No open conversations. Choose Show concluded above to see the rest.</p>
+{{- else if .Hidden}}
+<p class="empty">Everything here is archived. Choose Show archived above to see it.</p>
 {{- else}}
 <p class="empty">No conversations yet. Agents start them over MCP or the API.</p>
 {{- end}}

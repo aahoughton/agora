@@ -46,6 +46,7 @@ Page templates receive a `Page`:
 | `.Conversations` | list of Conversation | `/n/{namespace}` |
 | `.IncludeArchived` | bool | `/n/{namespace}` |
 | `.OpenOnly` | bool | `/n/{namespace}`; concluded conversations are left out (`?open=1`) |
+| `.Hidden` | bool | `/n/{namespace}`; the list is empty but the namespace has conversations that showing archived or concluded ones would list |
 | `.Next` | string | `/n/{namespace}`; pass as `?before=` for the next page, empty on the last |
 | `.Conversation` | Conversation | `/n/{namespace}/c/{conversation}` |
 | `.Messages` | list of Message | conversation page |
