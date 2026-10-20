@@ -66,8 +66,10 @@ smoot client install codex
 `antigravity` and `pi` are also supported. Codex and Pi share one copy of
 the skills in `~/.agents/skills`. Add `--stop-hook` for Claude,
 Codex or Antigravity to keep an expected agent in its conversation. The
-hook needs `SMOOT_AGENT` in the client's environment; Codex also requires
-trusting the hook with `/hooks`.
+hook needs the agent's name: set `SMOOT_AGENT` in the client's environment,
+or add `--agent NAME` to write it into the hook.  Codex also requires
+trusting the hook with `/hooks`.  For desktop apps, which don't see your
+shell's environment, see [desktop apps](docs/reference.md#tokens-and-tool-approvals).
 
 Use `--dry-run` to inspect planned changes. `smoot client config NAME`
 prints the setup for manual use. See [client setup](docs/reference.md#connecting-clients)
