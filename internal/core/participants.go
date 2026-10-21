@@ -262,14 +262,25 @@ func (s *Service) addParticipant(ctx context.Context, tx *wtx, c *conv, agent st
 	return err
 }
 
+// presenceUnlessConcluded is the SQL value for a presence of working set as
+// a side effect of a call, which a concluded participant does not take: its
+// reads and waits are not work.
+const presenceUnlessConcluded = `CASE WHEN state = 'concluded' THEN presence ELSE ? END`
+
 func (s *Service) setState(ctx context.Context, tx *wtx, c *conv, agent, state, presence string) error {
 	_, err := tx.ExecContext(ctx, `UPDATE participants SET state = ?, presence = ?, last_seen_at = ?
 		WHERE conversation_id = ? AND agent = ?`, state, presence, ms(s.now()), c.id, agent)
 	return err
 }
 
+// touch records that the agent called in and what it is doing. A concluded
+// agent does not become working this way.
 func (s *Service) touch(ctx context.Context, q querier, c *conv, agent, presence string) error {
-	_, err := q.ExecContext(ctx, `UPDATE participants SET presence = ?, last_seen_at = ?
+	value := "?"
+	if presence == PresenceWorking {
+		value = presenceUnlessConcluded
+	}
+	_, err := q.ExecContext(ctx, `UPDATE participants SET presence = `+value+`, last_seen_at = ?
 		WHERE conversation_id = ? AND agent = ?`, presence, ms(s.now()), c.id, agent)
 	return err
 }
@@ -506,6 +517,11 @@ func (s *Service) Conclude(ctx context.Context, p Principal, ns, name string, cp
 			return err
 		}
 		if err := s.setState(ctx, tx, c, cp.Agent, StateConcluded, PresenceWaiting); err != nil {
+			return err
+		}
+		// A note describes work in progress, which concluding ends.
+		if _, err := tx.ExecContext(ctx, `UPDATE participants SET note = '', check_back_by = NULL
+			WHERE conversation_id = ? AND agent = ?`, c.id, cp.Agent); err != nil {
 			return err
 		}
 		if err := s.checkAgreement(ctx, tx, c); err != nil {

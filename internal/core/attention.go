@@ -349,7 +349,7 @@ func (s *Service) inline(ctx context.Context, p Principal, ns, name, agent strin
 		if res.More || size > budget || len(res.Messages) == 0 {
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?), presence = ?, last_seen_at = ?
+		if _, err := tx.ExecContext(ctx, `UPDATE participants SET read_seq = max(read_seq, ?), presence = `+presenceUnlessConcluded+`, last_seen_at = ?
 			WHERE conversation_id = ? AND agent = ?`, covered, PresenceWorking, ms(s.now()), c.id, agent); err != nil {
 			return err
 		}

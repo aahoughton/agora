@@ -3,6 +3,7 @@ package core_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aahoughton/smoot/internal/core"
 )
@@ -110,5 +111,50 @@ func TestConcludedAdviceInAnAgreement(t *testing.T) {
 		if st.Expected || !strings.Contains(st.Line, tc.want) {
 			t.Errorf("%s: %s", tc.end, st.Line)
 		}
+	}
+}
+
+// Once an agent concludes, its presence and note stop describing work, and
+// the waits and reads that follow do not make it look busy again.
+func TestConcludedPresenceAfterAgreement(t *testing.T) {
+	f := newFixture(t, core.Options{})
+	ctx := t.Context()
+	f.start(t, "c", core.EndAgreement, "a", "b")
+	back := f.clock.Now().Add(30 * time.Minute)
+	must[core.Participant](t)(f.svc.SetPresence(ctx, f.p, "default", "c", core.PresenceParams{
+		Agent: "a", Presence: core.PresenceWorking, Note: "reading the diff", CheckBackBy: &back,
+	}))
+	f.read(t, "c", "a")
+	f.read(t, "c", "b")
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "a", Body: "AGREED: #1"}))
+
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "c", core.ConcludeParams{Agent: "b", Body: "AGREED: #1"}))
+	// Both keep waiting after they conclude. The first wait delivers the
+	// closing lines inline; the next returns at once because the
+	// conversation has concluded.
+	for _, a := range []string{"a", "b"} {
+		if d := must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: a, Timeout: time.Second, InlineBytes: 1000})); len(d.Messages) == 0 {
+			t.Fatalf("%s: nothing inlined", a)
+		}
+		must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: a, Timeout: time.Second}))
+		f.read(t, "c", a)
+	}
+
+	c := f.get(t, "c")
+	if c.Status != core.StatusConcluded {
+		t.Fatalf("status %s", c.Status)
+	}
+	for _, a := range []string{"a", "b"} {
+		p := participant(t, c, a)
+		if p.State != core.StateConcluded || p.Presence != core.PresenceWaiting || p.Note != "" || p.CheckBackBy != nil {
+			t.Errorf("%s: %+v", a, p)
+		}
+	}
+
+	// A concluded agent that went away is waiting again once it waits.
+	must[core.Participant](t)(f.svc.SetPresence(ctx, f.p, "default", "c", core.PresenceParams{Agent: "a", Presence: core.PresenceAway}))
+	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a", Timeout: time.Second}))
+	if p := participant(t, f.get(t, "c"), "a"); p.Presence != core.PresenceWaiting {
+		t.Errorf("a after away and a wait: %s", p.Presence)
 	}
 }
