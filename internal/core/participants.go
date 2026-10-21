@@ -262,8 +262,9 @@ func (s *Service) addParticipant(ctx context.Context, tx *wtx, c *conv, agent st
 	return err
 }
 
-// presenceUnlessConcluded is the SQL value for a presence set as a side
-// effect of a call, which a concluded participant keeps.
+// presenceUnlessConcluded is the SQL value for a presence of working set as
+// a side effect of a call, which a concluded participant does not take: its
+// reads and waits are not work.
 const presenceUnlessConcluded = `CASE WHEN state = 'concluded' THEN presence ELSE ? END`
 
 func (s *Service) setState(ctx context.Context, tx *wtx, c *conv, agent, state, presence string) error {
@@ -273,9 +274,13 @@ func (s *Service) setState(ctx context.Context, tx *wtx, c *conv, agent, state, 
 }
 
 // touch records that the agent called in and what it is doing. A concluded
-// agent's presence is left alone: its reads and waits are not work.
+// agent does not become working this way.
 func (s *Service) touch(ctx context.Context, q querier, c *conv, agent, presence string) error {
-	_, err := q.ExecContext(ctx, `UPDATE participants SET presence = `+presenceUnlessConcluded+`, last_seen_at = ?
+	value := "?"
+	if presence == PresenceWorking {
+		value = presenceUnlessConcluded
+	}
+	_, err := q.ExecContext(ctx, `UPDATE participants SET presence = `+value+`, last_seen_at = ?
 		WHERE conversation_id = ? AND agent = ?`, presence, ms(s.now()), c.id, agent)
 	return err
 }

@@ -150,4 +150,11 @@ func TestConcludedPresenceAfterAgreement(t *testing.T) {
 			t.Errorf("%s: %+v", a, p)
 		}
 	}
+
+	// A concluded agent that went away is waiting again once it waits.
+	must[core.Participant](t)(f.svc.SetPresence(ctx, f.p, "default", "c", core.PresenceParams{Agent: "a", Presence: core.PresenceAway}))
+	must[core.Digest](t)(f.svc.Wait(ctx, f.p, "default", "c", core.WaitParams{Agent: "a", Timeout: time.Second}))
+	if p := participant(t, f.get(t, "c"), "a"); p.Presence != core.PresenceWaiting {
+		t.Errorf("a after away and a wait: %s", p.Presence)
+	}
 }
