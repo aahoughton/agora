@@ -5,7 +5,7 @@
     <input type="search" name="q" placeholder="Search messages" aria-label="Search messages">
   </form>
   <a class="toggle" href="?{{if not .OpenOnly}}open=1&{{end}}{{if .IncludeArchived}}archived=1{{end}}">{{if .OpenOnly}}Show concluded{{else}}Open only{{end}}</a>
-  <a class="toggle" href="?{{if not .IncludeArchived}}archived=1&{{end}}{{if .OpenOnly}}open=1{{end}}">{{if .IncludeArchived}}Hide archived{{else}}Show archived{{end}}</a>
+  <a class="toggle" id="archived-toggle" href="?{{if not .IncludeArchived}}archived=1&{{end}}{{if .OpenOnly}}open=1{{end}}">{{if .IncludeArchived}}Hide archived{{else}}Show archived{{if .ArchivedCount}} ({{.ArchivedCount}}){{end}}{{end}}</a>
 </div>
 <div id="conversations" data-refresh="5">
 {{- if .Conversations}}

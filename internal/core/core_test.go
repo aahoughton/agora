@@ -648,6 +648,31 @@ func TestListArchivesQuietConversations(t *testing.T) {
 	}
 }
 
+// CountArchived counts the conversations that including archived ones adds
+// to a listing with the same status.
+func TestCountArchived(t *testing.T) {
+	f := newFixture(t, core.Options{ArchiveAfter: 24 * time.Hour})
+	ctx := t.Context()
+	f.start(t, "old-open", core.EndNone, "alice")
+	f.start(t, "old-done", core.EndAgreement, "alice")
+	must[core.Standing](t)(f.svc.Conclude(ctx, f.p, "default", "old-done", core.ConcludeParams{Agent: "alice", Body: "AGREED: abc1234"}))
+	f.clock.Advance(48 * time.Hour)
+	f.start(t, "new", core.EndNone, "alice")
+
+	for status, want := range map[core.Status]int{"": 2, core.StatusOpen: 1, core.StatusConcluded: 1} {
+		got := must[int](t)(f.svc.CountArchived(ctx, f.p, "default", status))
+		shown := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: status}))
+		all := must[core.ListPage](t)(f.svc.ListConversations(ctx, f.p, "default", core.ListParams{Status: status, IncludeArchived: true}))
+		if got != want || got != len(all.Conversations)-len(shown.Conversations) {
+			t.Errorf("status %q: %d, want %d", status, got, want)
+		}
+	}
+	_, err := f.svc.CountArchived(ctx, f.p, "default", "gone")
+	wantCode(t, err, core.CodeInvalid)
+	_, err = f.svc.CountArchived(ctx, f.p, "nope", "")
+	wantCode(t, err, core.CodeNamespaceNotFound)
+}
+
 func TestListFiltersByStatus(t *testing.T) {
 	f := newFixture(t, core.Options{})
 	ctx := t.Context()
