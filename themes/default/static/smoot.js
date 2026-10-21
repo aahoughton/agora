@@ -223,7 +223,8 @@
 })();
 
 // The conversation list reloads itself every data-refresh seconds while the
-// tab is visible, so new conversations and activity show up. A page of
+// tab is visible, so new conversations and activity show up, along with the
+// archived count on its toggle. A page of
 // older conversations (?before=) stays as it is.
 (function () {
   "use strict";
@@ -238,8 +239,11 @@
     fetch(location.href, { credentials: "same-origin" }).then(function (res) {
       if (!res.ok) return;
       return res.text().then(function (html) {
-        var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("conversations");
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var fresh = doc.getElementById("conversations");
         if (fresh && fresh.innerHTML !== box.innerHTML) box.innerHTML = fresh.innerHTML;
+        var toggle = document.getElementById("archived-toggle"), freshToggle = doc.getElementById("archived-toggle");
+        if (toggle && freshToggle) toggle.textContent = freshToggle.textContent;
       });
     }).catch(function () {}).finally(function () { busy = false; });
   };

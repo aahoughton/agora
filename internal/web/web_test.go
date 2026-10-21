@@ -708,6 +708,16 @@ func TestEmptyConversationListSaysWhatIsHidden(t *testing.T) {
 	if got := empty("/n/default"); !strings.HasPrefix(got, "Everything here is archived") {
 		t.Errorf("all archived = %q", got)
 	}
+	// The toggle counts what it would add under the current filter.
+	for path, want := range map[string]string{
+		"/n/default":            ">Show archived (1)</a>",
+		"/n/default?open=1":     ">Show archived</a>",
+		"/n/default?archived=1": ">Hide archived</a>",
+	} {
+		if _, body := e.get(path); !strings.Contains(body, want) {
+			t.Errorf("%s: no %q", path, want)
+		}
+	}
 }
 
 func TestEarlierMessages(t *testing.T) {

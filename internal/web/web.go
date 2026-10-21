@@ -48,6 +48,9 @@ type Page struct {
 	// OpenOnly is true when the conversation list leaves out concluded
 	// conversations.
 	OpenOnly bool
+	// ArchivedCount is how many conversations Show archived would add to
+	// the list; 0 when archived ones are already shown.
+	ArchivedCount int
 	// Hidden is true when the conversation list is empty but the namespace
 	// has conversations that ?archived=1 or leaving out ?open=1 would show.
 	Hidden bool
@@ -488,6 +491,14 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 	for i := range cs {
 		cs[i] = displayable(cs[i])
 	}
+	archivedCount := 0
+	if !archived {
+		archivedCount, err = v.svc.CountArchived(r.Context(), p, ns, lp.Status)
+		if err != nil {
+			v.fail(w, err, Page{Namespace: ns, Account: account})
+			return
+		}
+	}
 	hidden := false
 	if len(cs) == 0 && lp.Before == "" && (openOnly || !archived) {
 		all, err := v.svc.ListConversations(r.Context(), p, ns, core.ListParams{IncludeArchived: true, Limit: 1})
@@ -498,7 +509,7 @@ func (v *viewer) namespace(w http.ResponseWriter, r *http.Request) {
 		hidden = len(all.Conversations) > 0
 	}
 	v.render(w, http.StatusOK, "conversations", Page{
-		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, OpenOnly: openOnly, Hidden: hidden, Next: page.Next,
+		Title: ns, Namespace: ns, Conversations: cs, IncludeArchived: archived, ArchivedCount: archivedCount, OpenOnly: openOnly, Hidden: hidden, Next: page.Next,
 		Account: account,
 	})
 }

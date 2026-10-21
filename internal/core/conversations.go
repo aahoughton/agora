@@ -404,6 +404,58 @@ func parseListCursor(s string) (listCursor, error) {
 	return c, nil
 }
 
+// listFilter returns the WHERE terms and arguments that keep a namespace's
+// conversations with the given status, as ListParams.Status describes.
+func (s *Service) listFilter(nsID int64, status Status) ([]string, []any, error) {
+	now := ms(s.now())
+	where := []string{"c.namespace_id = ?"}
+	args := []any{nsID}
+	// A timebox whose end has passed is concluded even before its expiry
+	// is recorded.
+	const due = "(c.end_condition = 'timebox' AND c.ends_at <= ?)"
+	switch status {
+	case "":
+	case StatusOpen:
+		where = append(where, "c.status = 'open' AND NOT "+due)
+		args = append(args, now)
+	case StatusConcluded:
+		where = append(where, "(c.status = 'concluded' OR "+due+")")
+		args = append(args, now)
+	default:
+		return nil, nil, errorf(CodeInvalid, "status must be open or concluded, or empty for both")
+	}
+	return where, args, nil
+}
+
+// archiveCutoff is the last_at, in milliseconds, before which a
+// conversation is archived.
+func (s *Service) archiveCutoff() int64 {
+	return ms(s.now()) - s.opts.ArchiveAfter.Milliseconds()
+}
+
+// CountArchived counts a namespace's archived conversations with the given
+// status (empty for both): the ones ListParams.IncludeArchived adds to a
+// listing.
+func (s *Service) CountArchived(ctx context.Context, p Principal, ns string, status Status) (int, error) {
+	if err := s.authorize(ctx, p, ns, ActionRead); err != nil {
+		return 0, err
+	}
+	nsID, err := namespaceID(ctx, s.db, ns)
+	if err != nil {
+		return 0, err
+	}
+	where, args, err := s.listFilter(nsID, status)
+	if err != nil {
+		return 0, err
+	}
+	where = append(where, "c.last_at < ?")
+	args = append(args, s.archiveCutoff())
+	var n int
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM conversations c
+		WHERE `+strings.Join(where, " AND "), args...).Scan(&n)
+	return n, err
+}
+
 // ListConversations returns a page of a namespace's conversations, most
 // recently active first.
 func (s *Service) ListConversations(ctx context.Context, p Principal, ns string, lp ListParams) (ListPage, error) {
@@ -421,26 +473,13 @@ func (s *Service) ListConversations(ctx context.Context, p Principal, ns string,
 	if err != nil {
 		return ListPage{}, err
 	}
-	now := ms(s.now())
-	where := []string{"c.namespace_id = ?"}
-	args := []any{nsID}
-	// A timebox whose end has passed is concluded even before its expiry
-	// is recorded.
-	const due = "(c.end_condition = 'timebox' AND c.ends_at <= ?)"
-	switch lp.Status {
-	case "":
-	case StatusOpen:
-		where = append(where, "c.status = 'open' AND NOT "+due)
-		args = append(args, now)
-	case StatusConcluded:
-		where = append(where, "(c.status = 'concluded' OR "+due+")")
-		args = append(args, now)
-	default:
-		return ListPage{}, errorf(CodeInvalid, "status must be open or concluded, or empty for both")
+	where, args, err := s.listFilter(nsID, lp.Status)
+	if err != nil {
+		return ListPage{}, err
 	}
 	if !lp.IncludeArchived {
 		where = append(where, "c.last_at >= ?")
-		args = append(args, now-s.opts.ArchiveAfter.Milliseconds())
+		args = append(args, s.archiveCutoff())
 	}
 	if lp.Before != "" {
 		cur, err := parseListCursor(lp.Before)

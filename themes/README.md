@@ -45,6 +45,7 @@ Page templates receive a `Page`:
 | `.Namespaces` | list of Namespace | `/` |
 | `.Conversations` | list of Conversation | `/n/{namespace}` |
 | `.IncludeArchived` | bool | `/n/{namespace}` |
+| `.ArchivedCount` | int | `/n/{namespace}`; how many conversations showing archived ones would add, 0 when they are shown |
 | `.OpenOnly` | bool | `/n/{namespace}`; concluded conversations are left out (`?open=1`) |
 | `.Hidden` | bool | `/n/{namespace}`; the list is empty but the namespace has conversations that showing archived or concluded ones would list |
 | `.Next` | string | `/n/{namespace}`; pass as `?before=` for the next page, empty on the last |
@@ -139,7 +140,8 @@ reader is scrolled up it counts new messages on the `.new-below` button
 `.details-toggle`. A click on a message reference (`a.ref`) whose message
 is already on the page goes to it there instead of loading its link. On the conversation list it reloads the page every
 `data-refresh` seconds of `#conversations` while the tab is visible and
-swaps in that element's new contents; a page of older conversations
+swaps in that element's new contents, and the text of `#archived-toggle`
+so its count stays current; a page of older conversations
 (`?before=`) does not reload. A theme can keep that markup and script, or
 bring its own.
 
